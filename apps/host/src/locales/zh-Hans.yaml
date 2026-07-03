@@ -1,0 +1,147 @@
+# Test entry
+hello: 你好世界！
+
+# Page titles
+page-title:
+  home: 首页
+  song: 歌曲数据
+  songs: 歌曲一览
+  timeline: 时间轴
+  gallery: 段位歌单
+  about: 关于本站
+  bug-report: 报告问题
+  source-code: 项目源代码
+
+# General UIs
+ui:
+  ok: 确定
+  cancel: 取消
+  close: 关闭
+  search: 搜索
+  preview: 预览
+  download: 下载
+  goBack: 返回
+  all: 全部
+  default: 默认
+  sort-asc: 升序
+  sort-desc: 降序
+  showAll: 显示全部
+
+# Terminologies
+term:
+  category: 分类
+  title: 曲名
+  artist: 创作者
+  version: 版本
+  releaseDate: 追加日期
+  bpm: BPM
+  minBPM: 最低 BPM
+  maxBPM: 最高 BPM
+  sheets: 谱面
+  type: 类型
+  difficulty: 难度
+  level: 等级
+  minLevel: 最低等级
+  maxLevel: 最高等级
+  internalLevel: 谱面定数
+  minInternalLevel: 最低谱面定数
+  maxInternalLevel: 最高谱面定数
+  noteDesigner: 谱面制作者
+  totalNotes: 总计
+  region: 地区
+  comment: 备注
+  superFilter: 超级筛选器
+
+# Descriptions & Tooltips
+description:
+  pending: 等待中
+  loading: 正在加载数据…
+  newSong: 新歌曲！
+  unlockNeeded: 需要解禁的歌曲
+  unavailableInRegion: '{region} 未收录'
+  copied: 已复制到剪贴板！
+  invalidNoteCounts: 无效的 NOTE 数量
+  filterResultEmpty: 找不到符合当前筛选条件的谱面。
+  myListEmpty: 鼠标右击或长按谱面将谱面加入【我的歌单】后，就能在这里看到你选择的谱面。
+  drawPoolEmpty: 当前的谱面池是空的。
+  clearMyList: 清空【我的歌单】
+  pickOneFromFilter: 从筛选结果中选取一个！
+  noMoreSheetsToPick: 已经没有可选取的谱面。
+  superFilterPlaceholder: |
+    // 返回用于过滤结果的谓词函数
+    return (sheet) => true;
+  superFilterHint: // 我希望你知道自己在做什么 ...
+
+# Pages
+page:
+  index:
+    description: 在这里搜索你最喜欢的音乐游戏歌曲！
+  gallery:
+    selectList: 选择乐曲列表
+    loadExternalGalleryConfirmation: "你正在从{srcType}载入一个外部的乐曲列表：\n\n{src}\n\n要继续吗？"
+    externalGalleryDisclaimer: |
+      你正在观看由 {source} 载入的外部乐曲列表。{br}
+      请注意此乐曲列表之内容并非由本网站所制作或管理。
+    thisUrl: 这个网址
+    thisFile: 这个文件
+    yourLocalFile: 你的本地文件
+  songs:
+    sheetData: 谱面数据
+  about:
+    author: 作者
+    dataSource: 数据源
+    songInfo: 乐曲信息
+    sheetInfo: 谱面信息
+    sheetInfoOf: '{region} 谱面信息'
+    sheetInfoDescription: 在此特别感谢所有贡献谱面信息的玩家们！
+    openSource: 项目源代码
+    openSourceDescription: |
+      本项目以 <a
+        href="https://zh.wikipedia.org/wiki/MIT%E8%A8%B1%E5%8F%AF%E8%AD%89"
+        target="_blank"
+        class="text-decoration-none"
+      >MIT许可协议</a> 授权开源，你可以在这里找到完整的源代码。
+      如果你有兴趣，也可以一起来改善这个项目！ ⭐ :)
+    updateRecord: 更新记录
+    disclaimer: 版权声明
+  error:
+    error: 错误
+    notFound: 页面不存在
+    backToHome: 返回首页
+
+# Components
+sfc:
+  DataInfoBar:
+    updateTime: '数据更新日期：{time}'
+    loadFailed: 数据加载失败。
+  SheetFilter:
+    exactMatch: 完全匹配
+    useInternalLevel: 使用谱面定数
+    useRegionOverride: 使用地区信息覆写
+  ModeSelector:
+    gridMode: 格状检视
+    tableMode: 详细检视
+    chartMode: 汇总检视
+    filterMode: 筛选模式
+    myListMode: 我的歌单
+    copyFilterLink: 将当前筛选条件复制成链接
+    noFilterWarn: 请先指定至少一个筛选条件。
+    exportMyList: 汇出我的歌单到文件
+    myListEmptyWarn: "「我的歌单」是空的！\n没有可以汇出的项目。"
+    importMyList: 从文件汇入我的歌单
+    sheetsLoaded: '成功汇入 {n} 谱面。'
+  SheetDrawerPanel:
+    drawRandomSheet: 随机抽取谱面！
+    drawRandomSheetCombo: 随机抽取组曲！
+  FilterInfoBar:
+    sheetsCount: '{n} 谱面'
+    songsCount: '{n} 乐曲'
+  SheetDialog:
+    searchOnYouTube: 在 YouTube 上搜索
+    tryAgain: 再抽一次
+  SheetComboDialog:
+    drawResults: 抽选结果
+    noDuplicate: 不重复
+    changeDrawSize: 变更抽选数量
+    allowDuplicate: 允许重复
+    blindfoldMode: 盲抽模式

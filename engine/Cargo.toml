@@ -1,0 +1,37 @@
+[package]
+name = "maiscope-viewer"
+version = "0.1.0"
+edition = "2024"
+
+
+[lib]
+crate-type = ["cdylib", "rlib"] # What does this means ?
+
+[dependencies]
+bevy = { version = "0.18.1", default-features = false, features = [
+    "bevy_state",          # Required for state transition.
+    "bevy_asset",          # Required to load your charts and audio
+    "bevy_winit",          # Required for window creation
+    "bevy_core_pipeline",  # Required for basic rendering
+    "bevy_render",         # The core rendering framework
+    "bevy_sprite",         # Required for 2D rendering and cameras
+    "webgl2",              # REQUIRED on wasm: without it wgpu defaults to WebGPU,
+                           # which most browsers don't enable -> blank canvas.
+    "x11",                 # (Optional) Include if testing on Linux
+    "wayland",           # (Optional) Include if testing on Linux
+    "png",
+] }
+
+bevy_kira_audio = { version = "0.25.0", default-features = false, features = ["mp3", "wav", "ogg"] }
+bevy_prototype_lyon = "0.16.0"
+once_cell = "1.21.4"
+regex = "1.12.3"
+wasm-bindgen = "=0.2.122" # pinned to match installed wasm-bindgen CLI (schema must match exactly)
+
+
+[profile.release]
+opt-level = 'z'     # Optimize for size ('s' is also an option, 'z' is usually smaller)
+lto = true          # Enable Link Time Optimization (drops dead code across crates)
+codegen-units = 1   # Maximize optimization at the cost of slower compile times
+strip = true        # Strip symbols from the binary (huge size reduction)
+panic = 'abort'     # Remove stack-unwinding code (saves space, but you lose tracebacks on panics)

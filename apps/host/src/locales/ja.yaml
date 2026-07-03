@@ -1,0 +1,147 @@
+# Test entry
+hello: こんにちは世界！
+
+# Page titles
+page-title:
+  home: ホーム
+  song: 楽曲データ
+  songs: 楽曲一覧
+  timeline: タイムライン
+  gallery: 段位認定リスト
+  about: このサイトについて
+  bug-report: 問題を報告する
+  source-code: ソースコード
+
+# General UIs
+ui:
+  ok: OK
+  cancel: キャンセル
+  close: 閉じる
+  search: 検索
+  preview: プレビュー
+  download: ダウンロード
+  goBack: 戻る
+  all: すべて
+  default: デフォルト
+  sort-asc: 昇順
+  sort-desc: 降順
+  showAll: すべて表示する
+
+# Terminologies
+term:
+  category: カテゴリ
+  title: タイトル
+  artist: アーティスト
+  version: バージョン
+  releaseDate: 追加日
+  bpm: BPM
+  minBPM: 最小 BPM
+  maxBPM: 最大 BPM
+  sheets: 譜面
+  type: タイプ
+  difficulty: 難易度
+  level: レベル
+  minLevel: 最小レベル
+  maxLevel: 最大レベル
+  internalLevel: 譜面定数
+  minInternalLevel: 最小譜面定数
+  maxInternalLevel: 最大譜面定数
+  noteDesigner: 譜面制作者
+  totalNotes: ノーツ総数
+  region: 地区
+  comment: コメント
+  superFilter: スーパーフィルター
+
+# Descriptions & Tooltips
+description:
+  pending: 保留中
+  loading: データを読み込んでいます…
+  newSong: 新曲！
+  unlockNeeded: 解禁が必要な楽曲です
+  unavailableInRegion: '{region} 未追加'
+  copied: コピーしました！
+  invalidNoteCounts: 無効なノーツ数量
+  filterResultEmpty: フィルター条件を満たす譜面が見つかりません。
+  myListEmpty: 譜面を右クリックまたは長押しで「マイリスト」に追加すると、ここに選択した譜面が見られます。
+  drawPoolEmpty: 譜面プールは空です。
+  clearMyList: 「マイリスト」を空にする
+  pickOneFromFilter: フィルター結果から選択する！
+  noMoreSheetsToPick: 選ばれる譜面がありません。
+  # superFilterPlaceholder: |
+  #   // return a predicate function to filter the result
+  #   return (sheet) => true;
+  # superFilterHint: // I hope you know what you're doing ...
+
+# Pages
+page:
+  index:
+    description: 好きな音ゲー楽曲をここで探してみよう！
+  gallery:
+    selectList: 曲リスト選択
+    loadExternalGalleryConfirmation: "{srcType}から外部の曲リストを読み込んでいます：\n\n{src}\n\n続行しますか？"
+    externalGalleryDisclaimer: |
+      {source} から外部の曲リストを表示しています。{br}
+      コンテンツは、このサイトによって作成または管理されていません。
+    thisUrl: このリンク
+    thisFile: このファイル
+    yourLocalFile: あなたのローカルファイル
+  songs:
+    sheetData: 譜面データ
+  about:
+    author: 制作者
+    dataSource: 情報源
+    songInfo: 曲情報
+    sheetInfo: 譜面情報
+    sheetInfoOf: '{region} 譜面情報'
+    sheetInfoDescription: 譜面情報を提供してくれたプレイヤーの皆さん、本当にありがとうございます！
+    openSource: プロジェクトソースコード
+    openSourceDescription: |
+      このプロジェクトは <a
+        href="https://ja.wikipedia.org/wiki/MIT_License"
+        target="_blank"
+        class="text-decoration-none"
+      >MITライセンス</a> でオープンソース化しました。ここですべてのソースコードを見つけることができます。
+      興味があれば、このプロジェクトを一緒に改善しましょう！ ⭐ :)
+    updateRecord: 更新記録
+    disclaimer: 著作権表示
+  error:
+    error: エラー
+    notFound: 指定されたページが見つかりませんでした
+    backToHome: トップページへ戻る
+
+# Components
+sfc:
+  DataInfoBar:
+    updateTime: 'データ更新日：{time}'
+    loadFailed: データの読み込みに失敗しました。
+  SheetFilter:
+    exactMatch: 完全一致
+    useInternalLevel: 譜面定数を使用する
+    useRegionOverride: 地区の情報でオーバーライド
+  ModeSelector:
+    gridMode: グリッド表示
+    tableMode: 詳細表示
+    chartMode: まとめ表示
+    filterMode: フィルター
+    myListMode: マイリスト
+    copyFilterLink: フィルターをリンクにコピーする
+    noFilterWarn: まずはフィルターを一つ以上適用してください。
+    exportMyList: マイリストをエクスポートする
+    myListEmptyWarn: "「マイリスト」は空です。\nエクスポートするものがありません。"
+    importMyList: マイリストをインポートする
+    sheetsLoaded: '{n} 譜面をインポートしました。'
+  SheetDrawerPanel:
+    drawRandomSheet: 譜面を抽選する！
+    drawRandomSheetCombo: セットを抽選する！
+  FilterInfoBar:
+    sheetsCount: '{n} 譜面'
+    songsCount: '{n} 歌曲'
+  SheetDialog:
+    searchOnYouTube: YouTube で検索
+    tryAgain: もう一回
+  SheetComboDialog:
+    drawResults: 抽選結果
+    noDuplicate: 重複なし
+    changeDrawSize: 抽選数量変更
+    allowDuplicate: 重複を許可する
+    blindfoldMode: 目隠しモード

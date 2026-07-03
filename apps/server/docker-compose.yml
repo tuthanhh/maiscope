@@ -1,0 +1,26 @@
+# Local Postgres for the maiscope global backend (step 1).
+# Creds here MUST match apps/server/.env DATABASE_URL.
+#   docker compose up -d      # start
+#   docker compose down       # stop (keeps volume)
+#   docker compose down -v    # stop + wipe data
+services:
+  db:
+    image: postgres:17
+    container_name: maiscope-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: maiscope
+    ports:
+      - "5432:5432"
+    volumes:
+      - maiscope-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d maiscope"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  maiscope-pgdata:

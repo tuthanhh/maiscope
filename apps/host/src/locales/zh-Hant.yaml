@@ -1,0 +1,147 @@
+# Test entry
+hello: 哈囉世界！
+
+# Page titles
+page-title:
+  home: 首頁
+  song: 歌曲資料
+  songs: 歌曲一覽
+  timeline: 時間軸
+  gallery: 段位歌單
+  about: 關於本站
+  bug-report: 回報問題
+  source-code: 專案原始碼
+
+# General UIs
+ui:
+  ok: 確定
+  cancel: 取消
+  close: 關閉
+  search: 搜尋
+  preview: 預覽
+  download: 下載
+  goBack: 返回
+  all: 全部
+  default: 預設
+  sort-asc: 升序
+  sort-desc: 降序
+  showAll: 顯示全部
+
+# Terminologies
+term:
+  category: 分類
+  title: 曲名
+  artist: 創作者
+  version: 版本
+  releaseDate: 追加日期
+  bpm: BPM
+  minBPM: 最低 BPM
+  maxBPM: 最高 BPM
+  sheets: 譜面
+  type: 類型
+  difficulty: 難易度
+  level: 等級
+  minLevel: 最低等級
+  maxLevel: 最高等級
+  internalLevel: 譜面定數
+  minInternalLevel: 最低譜面定數
+  maxInternalLevel: 最高譜面定數
+  noteDesigner: 譜面製作者
+  totalNotes: 總計
+  region: 地區
+  comment: 備註
+  superFilter: 超級篩選器
+
+# Descriptions & Tooltips
+description:
+  pending: 等待中
+  loading: 資料載入中…
+  newSong: 新歌曲！
+  unlockNeeded: 需要解禁的歌曲
+  unavailableInRegion: '{region} 未收錄'
+  copied: 已複製到剪貼簿！
+  invalidNoteCounts: 無效的 NOTE 數量
+  filterResultEmpty: 找不到符合當前篩選條件的譜面。
+  myListEmpty: 右鍵點擊或長按譜面將譜面加入【我的歌單】後，就能在這裡看到你選擇的譜面。
+  drawPoolEmpty: 當前的譜面池是空的。
+  clearMyList: 清空【我的歌單】
+  pickOneFromFilter: 從篩選結果中選取一個！
+  noMoreSheetsToPick: 已經沒有可選取的譜面。
+  # superFilterPlaceholder: |
+  #   // return a predicate function to filter the result
+  #   return (sheet) => true;
+  # superFilterHint: // I hope you know what you're doing ...
+
+# Pages
+page:
+  index:
+    description: 在這裡搜尋你最喜歡的音樂遊戲歌曲！
+  gallery:
+    selectList: 選擇歌曲列表
+    loadExternalGalleryConfirmation: "你正在從{srcType}載入一個外部的歌曲列表：\n\n{src}\n\n要繼續嗎？"
+    externalGalleryDisclaimer: |
+      你正在觀看由 {source} 載入的外部歌曲列表。{br}
+      請注意此歌曲列表之內容並非由本網站所製作或管理。
+    thisUrl: 這個網址
+    thisFile: 這個檔案
+    yourLocalFile: 你的本地檔案
+  songs:
+    sheetData: 譜面資料
+  about:
+    author: 作者
+    dataSource: 資料來源
+    songInfo: 歌曲資訊
+    sheetInfo: 譜面資訊
+    sheetInfoOf: '{region} 譜面資訊'
+    sheetInfoDescription: 在此特別感謝所有貢獻譜面資訊的玩家們！
+    openSource: 專案原始碼
+    openSourceDescription: |
+      本專案以 <a
+        href="https://zh.wikipedia.org/wiki/MIT%E8%A8%B1%E5%8F%AF%E8%AD%89"
+        target="_blank"
+        class="text-decoration-none"
+      >MIT授權條款</a> 授權開源，你可以在這邊找到完整的原始碼。
+      如果你有興趣，也可以一起來改善這個專案！ ⭐ :)
+    updateRecord: 更新記錄
+    disclaimer: 版權聲明
+  error:
+    error: 錯誤
+    notFound: 頁面不存在
+    backToHome: 回首頁
+
+# Components
+sfc:
+  DataInfoBar:
+    updateTime: '資料更新日期：{time}'
+    loadFailed: 資料讀取失敗。
+  SheetFilter:
+    exactMatch: 完全一致
+    useInternalLevel: 使用譜面定數
+    useRegionOverride: 使用地區資訊覆寫
+  ModeSelector:
+    gridMode: 格狀檢視
+    tableMode: 詳細檢視
+    chartMode: 彙總檢視
+    filterMode: 篩選模式
+    myListMode: 我的歌單
+    copyFilterLink: 將當前篩選條件複製成連結
+    noFilterWarn: 請先指定至少一個篩選條件。
+    exportMyList: 匯出我的歌單到檔案
+    myListEmptyWarn: "「我的歌單」是空的！\n沒有可以匯出的項目。"
+    importMyList: 從檔案匯入我的歌單
+    sheetsLoaded: '成功匯入 {n} 譜面。'
+  SheetDrawerPanel:
+    drawRandomSheet: 隨機抽取譜面！
+    drawRandomSheetCombo: 隨機抽取組曲！
+  FilterInfoBar:
+    sheetsCount: '{n} 譜面'
+    songsCount: '{n} 歌曲'
+  SheetDialog:
+    searchOnYouTube: 在 YouTube 上搜尋
+    tryAgain: 再抽一次
+  SheetComboDialog:
+    drawResults: 抽選結果
+    noDuplicate: 不重複
+    changeDrawSize: 變更抽選數量
+    allowDuplicate: 允許重複
+    blindfoldMode: 盲抽模式

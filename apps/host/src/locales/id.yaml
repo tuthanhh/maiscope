@@ -1,0 +1,147 @@
+# Test entry
+hello: Halo dunia!
+
+# Page titles
+page-title:
+  home: Beranda
+  song: Data Lagu
+  songs: Daftar Lagu
+  timeline: Lini Masa
+  gallery: Daftar Set
+  about: Tentang Situs
+  bug-report: Lapor Masalah
+  source-code: Kode Sumber
+
+# General UIs
+ui:
+  ok: OK
+  cancel: Batal
+  close: Tutup
+  search: Cari
+  preview: Pratinjau
+  download: Unduh
+  goBack: Kembali
+  all: SEMUA
+  default: Standar
+  sort-asc: Urutan Menaik
+  sort-desc: Urutan Menurun
+  showAll: Tampilkan Semua
+
+# Terminologies
+term:
+  category: Kategori
+  title: Judul
+  artist: Artis
+  version: Versi
+  releaseDate: Tanggal Rilis
+  bpm: BPM
+  minBPM: BPM Minimal
+  maxBPM: BPM Maksimal
+  sheets: Lembar
+  type: Jenis
+  difficulty: Kesulitan
+  level: Level
+  minLevel: Level Minimal
+  maxLevel: Level Maksimal
+  internalLevel: Level Internal
+  minInternalLevel: Level Internal Minimal
+  maxInternalLevel: Level Internal Maksimal
+  noteDesigner: Perancang Note
+  totalNotes: TOTAL
+  region: Wilayah
+  comment: Komentar
+  superFilter: Filter Super
+
+# Descriptions & Tooltips
+description:
+  pending: Menunggu
+  loading: Memuat data…
+  newSong: Lagu baru!
+  unlockNeeded: Lagu ini harus dibuka
+  unavailableInRegion: 'Sedang tidak tersedia di {region}'
+  copied: Disalin ke papan klip!
+  invalidNoteCounts: Jumlah NOTE tidak valid
+  filterResultEmpty: Tidak dapat menemukan lembar yang memenuhi filter.
+  myListEmpty: Klik kanan atau tahan untuk menambah sebuah lembar ke MY LIST, lalu kamu bisa lihat lembar yang dipilih di sini.
+  drawPoolEmpty: Kolam undian saat ini kosong.
+  clearMyList: Kosongkan MY LIST
+  pickOneFromFilter: PILIH SALAH SATU DARI FILTER!
+  noMoreSheetsToPick: Tidak ada lagi lembaran yang harus dipilih.
+  superFilterPlaceholder: |
+    // mengembalikan fungsi predikat untuk memfilter hasil
+    return (sheet) => true;
+  superFilterHint: // Kuharap kau tahu apa yang kau lakukan ...
+
+# Pages
+page:
+  index:
+    description: Cari lagu permainan musik favorit Anda, sekarang semua tergabung dalam satu!
+  gallery:
+    selectList: Pilih Daftar Lagu
+    loadExternalGalleryConfirmation: "Anda akan memuat galeri eksternal dari {srcType}:\n\n{src}\n\nLanjutkan?"
+    externalGalleryDisclaimer: |
+      Anda sedang melihat galeri eksternal dari {source}.{br}
+      Konten tidak dibuat atau dikelola oleh situs ini.
+    thisUrl: URL ini
+    thisFile: File ini
+    # yourLocalFile: your local file
+  songs:
+    sheetData: Data Lembar
+  about:
+    author: Pembuat
+    dataSource: Sumber Data
+    songInfo: Info Lagu
+    sheetInfo: Info Lembar
+    sheetInfoOf: 'Info Lembar {region}'
+    sheetInfoDescription: Terima kasih untuk semua pemain yang berkontribusi ke dalam lembaran data ini!
+    openSource: Kode Sumber Proyek
+    openSourceDescription: |
+      Proyek ini dilisensi di bawah <a
+        href="https://id.wikipedia.org/wiki/Lisensi_MIT"
+        target="_blank"
+        class="text-decoration-none"
+      >Lisensi MIT</a>, dan kamu bisa cari kode sumber yang lengkap di sini.
+      Jika kamu berminat, kamu bisa bergabung dengan kami untuk mengembangkan proyek ini! ⭐ :)
+    updateRecord: Catatan Pembaruan
+    disclaimer: Pemberitahuan Hak Cipta
+  error:
+    error: Eror
+    notFound: Halaman Tidak Ditemukan
+    backToHome: Kembali ke Beranda
+
+# Components
+sfc:
+  DataInfoBar:
+    updateTime: 'Waktu Pembaruan Data: {time}'
+    loadFailed: Gagal ketika memuat data.
+  # SheetFilter:
+  #   exactMatch: Exact Match
+  #   useInternalLevel: Use Internal Level
+  #   useRegionOverride: Use Regional Info Override
+  ModeSelector:
+    gridMode: Berkotak
+    tableMode: Bergaris
+    # chartMode: Summary View
+    filterMode: Mode Filter
+    myListMode: MY LIST
+    copyFilterLink: Salin filter saat ini sebagai tautan
+    noFilterWarn: Tolong pilih minimal satu filter dulu.
+    exportMyList: Ekspor MY LIST ke file
+    myListEmptyWarn: "MY LIST sedang kosong!\nTidak ada apa-apa untuk diekspor."
+    importMyList: Impor MY LIST dari file
+    sheetsLoaded: '{n} lembar berhasil diimpor.'
+  SheetDrawerPanel:
+    drawRandomSheet: TARIK LEMBAR ACAK!
+    drawRandomSheetCombo: TARIK SET ACAK!
+  FilterInfoBar:
+    sheetsCount: '{n} lembar'
+    songsCount: '{n} lagu'
+  SheetDialog:
+    searchOnYouTube: Cari di YouTube
+    tryAgain: TARIK LAGI
+  SheetComboDialog:
+    drawResults: Hasil Undian
+    noDuplicate: Tidak Ada Duplikat
+    # changeDrawSize: Change Draw Size
+    allowDuplicate: Bolehkan Duplikat
+    blindfoldMode: Mode Blindfold

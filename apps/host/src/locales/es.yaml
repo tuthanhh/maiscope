@@ -1,0 +1,147 @@
+# Test entry
+hello: ¡Hola Mundo!
+
+# Page titles
+page-title:
+  home: Página principal
+  song: Datos de la canción
+  songs: Lista de canciones
+  timeline: Línea de tiempo
+  gallery: Lista de pistas
+  about: Acerca de
+  bug-report: Reporta un problema
+  source-code: Código fuente
+
+# General UIs
+ui:
+  ok: OK
+  cancel: Cancelar
+  close: Cerrar
+  search: Buscar
+  preview: Vista previa
+  download: Descargar
+  goBack: Atrás
+  all: TODAS
+  default: Predeterminado
+  sort-asc: Orden ascendente
+  sort-desc: Orden descendente
+  showAll: Mostrar todo
+
+# Terminologies
+term:
+  category: Categoría
+  title: Título
+  artist: Artista
+  version: Versión
+  releaseDate: Fecha de publicación
+  bpm: PPM
+  minBPM: PPM mínimas
+  maxBPM: PPM máximas
+  sheets: Mapas
+  type: Tipo
+  difficulty: Dificultad
+  level: Nivel
+  minLevel: Nivel mínimo
+  maxLevel: Nivel máximo
+  internalLevel: Nivel interno
+  minInternalLevel: Nivel mínimo interno
+  maxInternalLevel: Nivel máximo interno
+  noteDesigner: Diseñador del mapa
+  totalNotes: TOTAL
+  region: Región
+  comment: Comentario
+  superFilter: Superfiltro
+
+# Descriptions & Tooltips
+description:
+  pending: Pendiente
+  loading: Cargando datos…
+  newSong: ¡Nueva canción!
+  unlockNeeded: Hay que desbloquear esta canción
+  unavailableInRegion: 'No disponible en {region}'
+  copied: ¡Copiado al portapapeles!
+  invalidNoteCounts: Recuentos de NOTA no válidos
+  filterResultEmpty: No se encuentra ningún mapa que cumpla el filtro.
+  myListEmpty: Haga clic con el botón derecho del ratón o mantenga pulsada un mapa para añadirlo a MI LISTA y, a continuación, podrás ver aquí los mapas seleccionados.
+  drawPoolEmpty: El recipiente de extracción actual está vacío.
+  clearMyList: Borrar MI LISTA
+  pickOneFromFilter: ¡ELIGE UNO DEL FILTRO!
+  noMoreSheetsToPick: No hay más gráficos para seleccionar.
+  superFilterPlaceholder: |
+    // devuelve una función de predicado para filtrar el resultado
+    return (sheet) => true;
+  superFilterHint: // Espero que sepas lo que estás haciendo ...
+
+# Pages
+page:
+  index:
+    description: Busca canciones de tus juegos musicales favoritos, ¡ahora todo en uno!
+  gallery:
+    selectList: Seleccionar lista de canciones
+    # loadExternalGalleryConfirmation: "You are about to load an external gallery from {srcType}:\n\n{src}\n\nContinue?"
+    # externalGalleryDisclaimer: |
+    #   You are currently viewing an external gallery from {source}.{br}
+    #   The content is not created or managed by this site.
+    # thisUrl: this URL
+    # thisFile: this File
+    # yourLocalFile: your local file
+  songs:
+    sheetData: Datos de mapa
+  about:
+    author: Autor
+    dataSource: Origen de los datos
+    songInfo: Información de la canción
+    sheetInfo: Información del mapa
+    sheetInfoOf: 'Información del mapa de {region}'
+    sheetInfoDescription: ¡Muchas gracias a todos los jugadores que aportan los datos!
+    openSource: Código fuente del proyecto
+    openSourceDescription: |
+      Este proyecto está sujeto a la <a
+        href="https://es.wikipedia.org/wiki/Licencia_MIT"
+        target="_blank"
+        class="text-decoration-none"
+      >Licencia MIT</a>, y se puede encontrar el código fuente completo aquí.
+      Si te interesa, ¡también puedes unirte a nosotros para mejorar el proyecto! ⭐ :)
+    updateRecord: Registro de actualizaciones
+    disclaimer: Aviso de los derechos de autor
+  error:
+    error: Fallo
+    notFound: Página no encontrada
+    backToHome: Volver al inicio
+
+# Components
+sfc:
+  DataInfoBar:
+    updateTime: 'Tiempo de actualización de los datos: {time}'
+    loadFailed: Error al cargar los datos.
+  SheetFilter:
+    exactMatch: Concordancia exacta
+    useInternalLevel: Utilizar el nivel interno
+    useRegionOverride: Sobrescribir con información de región
+  ModeSelector:
+    gridMode: Vista en cuadrícula
+    tableMode: Vista detallada
+    chartMode: Vista resumida
+    filterMode: Modo filtrado
+    myListMode: MI LISTA
+    copyFilterLink: Copiar los filtros actuales como enlace
+    noFilterWarn: Seleccione primero al menos un filtro.
+    exportMyList: Exportar MI LISTA a un archivo
+    myListEmptyWarn: "¡MI LISTA está vacía!\nNo hay nada que exportar."
+    importMyList: Importar MI LISTA desde un archivo
+    sheetsLoaded: 'Importados {n} mapas con éxito.'
+  SheetDrawerPanel:
+    drawRandomSheet: ¡Sacar mapa al azar!
+    drawRandomSheetCombo: ¡Sacar conjunto de mapas al azar!
+  FilterInfoBar:
+    sheetsCount: '{n} mapas'
+    songsCount: '{n} canciones'
+  SheetDialog:
+    searchOnYouTube: Buscar en YouTube
+    tryAgain: INTENTAR DE NUEVO
+  SheetComboDialog:
+    drawResults: Resultados de la extracción
+    noDuplicate: Sin duplicados
+    changeDrawSize: Cambiar tamaño de dibujo
+    allowDuplicate: Permitir duplicado
+    blindfoldMode: Modo aleatorio

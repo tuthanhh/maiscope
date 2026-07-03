@@ -1,0 +1,125 @@
+// ─────────────────────────────────────────────────────────────
+// maiViz design tokens — two-tone monochrome, JetBrains Mono.
+// Ported from the React prototype's `c` palette. No accent color
+// anywhere; all hierarchy comes from 1px hairlines + contrast steps.
+// Components read these via var(--mv-*); .dark on <html> flips them.
+// ─────────────────────────────────────────────────────────────
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+:root {
+  // light (default)
+  --mv-bg: #fff;
+  --mv-panel: #fbfbfb;
+  --mv-panel2: #f4f4f4;
+  --mv-bd: #e4e4e4;
+  --mv-bd2: #eee;
+  --mv-fg: #111;
+  --mv-mut: #999;
+  --mv-inv: #fff;
+  --mv-invbg: #111;
+  --mv-ov: rgba(255, 255, 255, 0.7);
+  --mv-jacket-bg: #f0f0f0;
+
+  --mv-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+:root.dark {
+  --mv-bg: #000;
+  --mv-panel: #0a0a0a;
+  --mv-panel2: #0f0f0f;
+  --mv-bd: #222;
+  --mv-bd2: #161616;
+  --mv-fg: #ededed;
+  --mv-mut: #6a6a6a;
+  --mv-inv: #000;
+  --mv-invbg: #ededed;
+  --mv-ov: rgba(0, 0, 0, 0.72);
+  --mv-jacket-bg: #070707;
+}
+
+// Scope mono styling to the redesigned surfaces. While the app shell still
+// runs on Vuetify (removed in a later slice), this keeps the two worlds
+// from fighting over global element styles.
+.mv-root {
+  font-family: var(--mv-mono);
+  background: var(--mv-bg);
+  color: var(--mv-fg);
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  input,
+  textarea,
+  select,
+  button {
+    font-family: var(--mv-mono);
+  }
+
+  input,
+  textarea,
+  select {
+    outline: none;
+  }
+
+  select {
+    appearance: none;
+    -webkit-appearance: none;
+  }
+
+  ::placeholder {
+    color: var(--mv-mut);
+  }
+}
+
+// Tiny uppercase technical label — the recurring "minimal" signal.
+.mv-label {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--mv-mut);
+}
+
+// Invert = active. Shared transitions/motion (kept minimal by design).
+.mv-btn {
+  cursor: pointer;
+  transition: opacity 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+.mv-btn:hover {
+  opacity: 0.7;
+}
+
+@keyframes mv-fade {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes mv-approach {
+  0% {
+    transform: scale(0.25);
+    opacity: 0.15;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes mv-pulse {
+  0%,
+  100% {
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
