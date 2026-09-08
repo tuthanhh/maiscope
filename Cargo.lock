@@ -6628,6 +6628,7 @@ dependencies = [
  "sqlx",
  "tokio",
  "tower-http 0.7.0",
+ "unicode-normalization",
 ]
 
 [[package]]
