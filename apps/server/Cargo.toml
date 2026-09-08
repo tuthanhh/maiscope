@@ -12,3 +12,4 @@ reqwest = "0.13.4"
 sqlx = { version = "0.9.0", features = ["runtime-tokio", "postgres", "macros", "migrate", "chrono", "uuid", "json" ] }
 tower-http = { version = "0.7.0", features = ["cors"] }
 dotenvy = "0.15.7"
+sha2 = "0.10"

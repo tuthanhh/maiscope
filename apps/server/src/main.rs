@@ -5,6 +5,7 @@ use axum::{
     Json, Router,
     extract::{Path, Query, State},
     http::StatusCode,
+    response::IntoResponse,
     routing::get,
 };
 use serde::Deserialize;
@@ -78,6 +79,8 @@ async fn main() {
             "/api/v1",
             Router::new()
                 .route("/healthcheck", get(healthcheck))
+                .route("/sync/manifest", get(sync_manifest))
+                .route("/sync/delta", get(sync_delta))
                 .route("/catalog", get(catalog))
                 .route("/songs/{id}", get(get_song))
                 .route("/sheets/{sheet}", get(get_sheet))
@@ -197,19 +200,45 @@ async fn search_sheets(
     Ok(Json(types::SheetSearchResponse { sheets, total }))
 }
 
-// Query params for GET /catalog (contract §1). `since` (sync-tier revision
-// check) is not implemented yet — no §3 sync tier exists.
+// Query params for GET /catalog (contract §1).
 #[derive(Debug, Deserialize)]
 struct CatalogQuery {
     region: Option<String>,
 }
 
+fn catalog_hash(revision: i64, update_time: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(format!("{revision}:{update_time}").as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
 // GET /catalog — assembles the full Data shape (types/Data.ts) from the DB.
 // Byte-compatible with the old data.json so preprocessData is unchanged.
+// Supports ETag/If-None-Match (contract §1) sharing the sync tier's
+// catalogHash concept (see sync_manifest).
 async fn catalog(
     Query(CatalogQuery { region }): Query<CatalogQuery>,
+    headers: axum::http::HeaderMap,
     State(pool): State<Pool<Postgres>>,
-) -> Result<Json<Catalog>, (StatusCode, Json<Value>)> {
+) -> Result<axum::response::Response, (StatusCode, Json<Value>)> {
+    let meta = sqlx::query!(
+        r#"SELECT to_char(update_time, 'YYYY-MM-DD') AS "update_time!", revision AS "revision!"
+           FROM catalog_meta LIMIT 1"#
+    )
+    .fetch_one(&pool)
+    .await
+    .map_err(db_error)?;
+    let etag = format!("\"{}\"", catalog_hash(meta.revision, &meta.update_time));
+
+    if headers
+        .get(axum::http::header::IF_NONE_MATCH)
+        .and_then(|v| v.to_str().ok())
+        == Some(etag.as_str())
+    {
+        return Ok(StatusCode::NOT_MODIFIED.into_response());
+    }
+
     let song_rows = queries::fetch_all_songs(&pool).await.map_err(db_error)?;
     let mut sheets_by_song = queries::fetch_all_sheets(&pool, region.as_deref())
         .await
@@ -238,7 +267,7 @@ async fn catalog(
         update_time: queries::fetch_update_time(&pool).await.map_err(db_error)?,
     };
 
-    Ok(Json(catalog))
+    Ok(([(axum::http::header::ETAG, etag)], Json(catalog)).into_response())
 }
 
 // GET /songs/{id} — single Song with its sheets (types/Song.ts).
@@ -318,6 +347,133 @@ async fn get_chart(
     }
 }
 
+// GET /sync/manifest — cheap freshness probe (contract §3).
+async fn sync_manifest(
+    State(pool): State<Pool<Postgres>>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let row = sqlx::query!(
+        r#"SELECT to_char(update_time, 'YYYY-MM-DD') AS "update_time!", revision AS "revision!"
+           FROM catalog_meta LIMIT 1"#
+    )
+    .fetch_one(&pool)
+    .await
+    .map_err(db_error)?;
+
+    let song_count: i64 = sqlx::query_scalar!(r#"SELECT COUNT(*) AS "count!" FROM songs"#)
+        .fetch_one(&pool)
+        .await
+        .map_err(db_error)?;
+    let sheet_count: i64 = sqlx::query_scalar!(r#"SELECT COUNT(*) AS "count!" FROM sheets"#)
+        .fetch_one(&pool)
+        .await
+        .map_err(db_error)?;
+    let chart_count: i64 = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) AS "count!" FROM charts WHERE content IS NOT NULL"#
+    )
+    .fetch_one(&pool)
+    .await
+    .map_err(db_error)?;
+
+    Ok(Json(json!({
+        "updateTime": row.update_time,
+        "revision": row.revision,
+        "catalogHash": catalog_hash(row.revision, &row.update_time),
+        "counts": { "songs": song_count, "sheets": sheet_count, "charts": chart_count }
+    })))
+}
+
+// Query params for GET /sync/delta?since={revision} (contract §3).
+#[derive(Debug, Deserialize)]
+struct DeltaQuery {
+    since: i64,
+}
+
+// GET /sync/delta?since={revision} — rows changed since `revision`, or `409
+// snapshot_required` if `since` predates the last full ingest reload (contract
+// §3). Only bin/ingest's full reloads and (future) contribution-approve edits
+// bump revision, so `since` "too old to diff" is defined precisely against
+// `last_full_reload_revision`, not a vague staleness heuristic.
+async fn sync_delta(
+    Query(q): Query<DeltaQuery>,
+    State(pool): State<Pool<Postgres>>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let last_full_reload: i64 = sqlx::query_scalar!(
+        r#"SELECT last_full_reload_revision AS "v!" FROM catalog_meta LIMIT 1"#
+    )
+    .fetch_one(&pool)
+    .await
+    .map_err(db_error)?;
+
+    if q.since < last_full_reload {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(json!({ "error": "snapshot_required" })),
+        ));
+    }
+
+    // A song counts as "changed" if it changed itself OR any of its sheets
+    // did — a sheet-only edit (e.g. a future targeted contribution-approve)
+    // must still surface the song, since the response nests sheets under it.
+    let changed_song_ids: Vec<i64> = sqlx::query_scalar!(
+        r#"SELECT DISTINCT so.id AS "id!" FROM songs so
+           LEFT JOIN sheets s ON s.song_id_fk = so.id
+           WHERE so.revision > $1 OR s.revision > $1"#,
+        q.since
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(db_error)?;
+
+    let mut songs = Vec::with_capacity(changed_song_ids.len());
+    for song_pk in changed_song_ids {
+        let song_row = sqlx::query_as!(
+            types::SongRow,
+            r#"SELECT id, song_id, category, title, artist, bpm, image_name, version,
+                      to_char(release_date, 'YYYY-MM-DD') AS release_date, is_new, is_locked, comment
+               FROM songs WHERE id = $1"#,
+            song_pk
+        )
+        .fetch_one(&pool)
+        .await
+        .map_err(db_error)?;
+        let sheet_rows = queries::fetch_sheets_for_song(&pool, song_pk)
+            .await
+            .map_err(db_error)?;
+        let sheets = sheet_rows
+            .into_iter()
+            .map(|r| NestedSheet { sheet: r.into_meta() })
+            .collect();
+        songs.push(Song { meta: song_row.into_meta(), sheets });
+    }
+
+    let current_revision: i64 = sqlx::query_scalar!(r#"SELECT revision AS "v!" FROM catalog_meta LIMIT 1"#)
+        .fetch_one(&pool)
+        .await
+        .map_err(db_error)?;
+
+    let deleted_song_ids: Vec<String> = sqlx::query_scalar!(
+        r#"SELECT song_id AS "v!" FROM deleted_songs WHERE revision > $1"#,
+        q.since
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(db_error)?;
+    let deleted_sheet_exprs: Vec<String> = sqlx::query_scalar!(
+        r#"SELECT sheet_expr AS "v!" FROM deleted_sheets WHERE revision > $1"#,
+        q.since
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(db_error)?;
+
+    Ok(Json(json!({
+        "revision": current_revision,
+        "songs": songs,
+        "charts": [], // chart-meta delta tracking deferred — see api-contract.md §3
+        "tombstones": { "songIds": deleted_song_ids, "sheetExprs": deleted_sheet_exprs }
+    })))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -345,15 +501,21 @@ mod tests {
             .await?;
         // No sheet_regions row for "kr" — sheet_a should be filtered out.
 
-        let result = catalog(
+        let response = catalog(
             AxumQuery(CatalogQuery { region: Some("kr".to_string()) }),
+            axum::http::HeaderMap::new(),
             AxumState(pool),
         )
         .await
         .unwrap();
 
-        assert_eq!(result.0.songs.len(), 1);
-        assert_eq!(result.0.songs[0].sheets.len(), 0);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(json["songs"].as_array().unwrap().len(), 1);
+        assert_eq!(json["songs"][0]["sheets"].as_array().unwrap().len(), 0);
         Ok(())
     }
 

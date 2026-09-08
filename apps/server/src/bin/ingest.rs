@@ -168,6 +168,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
 async fn ingest(pool: &PgPool, data: &RawData) -> Result<(), Box<dyn Error>> {
     let mut tx = pool.begin().await?;
 
+    // Every full reload gets a fresh revision, and marks itself as the point
+    // GET /sync/delta can't diff across (see the sync-tier plan). Read the
+    // previous revision from the about-to-be-truncated catalog_meta first.
+    let previous_revision: i64 = sqlx::query_scalar("SELECT revision FROM catalog_meta LIMIT 1")
+        .fetch_optional(&mut *tx)
+        .await?
+        .unwrap_or(0);
+    let new_revision = previous_revision + 1;
+
     // Wipe canonical tables; CASCADE clears sheets + sub-tables via FKs.
     sqlx::query(
         "TRUNCATE catalog_meta, categories, versions, types, difficulties, regions, songs \
@@ -181,10 +190,14 @@ async fn ingest(pool: &PgPool, data: &RawData) -> Result<(), Box<dyn Error>> {
         .and_then(|d| d.and_hms_opt(0, 0, 0))
         .map(|ndt| ndt.and_utc())
         .unwrap_or_else(Utc::now);
-    sqlx::query("INSERT INTO catalog_meta (id, update_time) VALUES (true, $1)")
-        .bind(update_time)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query(
+        "INSERT INTO catalog_meta (id, update_time, revision, last_full_reload_revision) \
+         VALUES (true, $1, $2, $2)",
+    )
+    .bind(update_time)
+    .bind(new_revision)
+    .execute(&mut *tx)
+    .await?;
 
     // Ordered lookup tables — ordinal = array index.
     for (i, c) in data.categories.iter().enumerate() {
@@ -247,8 +260,8 @@ async fn ingest(pool: &PgPool, data: &RawData) -> Result<(), Box<dyn Error>> {
         let song_pk: i64 = sqlx::query_scalar(
             "INSERT INTO songs \
              (song_id, song_no, category, title, artist, bpm, image_name, version, \
-              release_date, is_new, is_locked, comment, source_index) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id",
+              release_date, is_new, is_locked, comment, source_index, revision) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id",
         )
         .bind(&song.song_id)
         .bind(si as i32 + 1) // song_no; client recomputes anyway
@@ -263,6 +276,7 @@ async fn ingest(pool: &PgPool, data: &RawData) -> Result<(), Box<dyn Error>> {
         .bind(song.is_locked)
         .bind(&song.comment)
         .bind(si as i32)
+        .bind(new_revision)
         .fetch_one(&mut *tx)
         .await?;
 
@@ -271,8 +285,8 @@ async fn ingest(pool: &PgPool, data: &RawData) -> Result<(), Box<dyn Error>> {
             let sheet_pk: i64 = sqlx::query_scalar(
                 "INSERT INTO sheets \
                  (song_id_fk, sheet_expr, type, difficulty, level, level_value, \
-                  internal_level, internal_level_value, note_designer, is_special, source_index) \
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id",
+                  internal_level, internal_level_value, note_designer, is_special, source_index, revision) \
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id",
             )
             .bind(song_pk)
             .bind(&expr)
@@ -285,6 +299,7 @@ async fn ingest(pool: &PgPool, data: &RawData) -> Result<(), Box<dyn Error>> {
             .bind(&sheet.note_designer)
             .bind(sheet.is_special)
             .bind(shi as i32)
+            .bind(new_revision)
             .fetch_one(&mut *tx)
             .await?;
 

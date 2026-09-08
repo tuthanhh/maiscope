@@ -191,12 +191,19 @@ Rows changed since `revision`. `tombstones` carry deletions.
 {
   "revision": 0,
   "songs":  [ /* changed Song (with sheets) */ ],
-  "charts": [ /* changed chart meta, see §2 (no chart body) */ ],
+  "charts": [], // always empty for now — chart-meta delta tracking is a follow-up
   "tombstones": { "songIds": ["..."], "sheetExprs": ["..."] }
 }
 ```
 If `since` is too old to diff, respond `409` with
 `{ "error": "snapshot_required" }` → client refetches `GET /catalog`.
+
+> Precisely: `since` is "too old" when it predates the revision of the last
+> full `bin/ingest` reload (`ingest` fully truncates and reloads canonical
+> tables, so there is no stable row identity to diff across that boundary).
+> A `song` is included whenever it or any of its sheets changed since
+> `since`, so a sheet-only edit still surfaces its parent song (the response
+> nests sheets under `songs`, so there's no other way to represent it).
 
 ---
 
