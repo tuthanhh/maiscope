@@ -100,6 +100,45 @@ Single song with its sheets (same shape as §1.1). `404` if unknown.
 Single sheet, `sheetExpr` URL-encoded. `404` if no match — mirrors the client's
 `makeDummySheet` fallback path in `utils/sheet.ts`.
 
+### `GET /sheets/search`
+
+Filtered, paginated sheet list — powers the browse page's search/filter UI.
+Unlike `GET /catalog` (full snapshot for the offline-first cache), this
+endpoint does the filtering in SQL and returns only a page of results.
+
+Query params (all optional — omitting all returns the full unfiltered,
+paginated sheet list):
+
+| param | type | meaning |
+|-------|------|---------|
+| `title` | string | substring match on song title (case-insensitive), or exact match if `matchExactTitle` is set |
+| `matchExactTitle` | boolean | see above |
+| `artist` | string | same substring/exact behavior as `title`, on artist |
+| `matchExactArtist` | boolean | see above |
+| `categories` | string[] | matches if any of `sheet.category`'s `\|`-delimited parts is in this list |
+| `versions` | string[] | exact match |
+| `types` | string[] | exact match |
+| `difficulties` | string[] | exact match |
+| `minLevelValue` / `maxLevelValue` | number | inclusive range on level value (or internal level value if `useInternalLevel`) |
+| `useInternalLevel` | boolean | see above |
+| `minBPM` / `maxBPM` | number | inclusive range |
+| `noteDesigners` | string[] | exact match |
+| `region` | string | prefix `!` excludes; otherwise includes. When combined with `useRegionOverride`, the region's override values (level/internalLevel/noteDesigner) substitute for the base sheet's before other filters evaluate. A sheet with a region-specific override counts as belonging to that region even without a separate availability row |
+| `useRegionOverride` | boolean | see above |
+| `page` | integer | 1-indexed, default 1 |
+| `pageSize` | integer | default 22, max 100 |
+
+Response `200`:
+```jsonc
+{
+  "sheets": [ /* Sheet[] — same shape as GET /sheets/{sheetExpr}, see §1.1 */ ],
+  "total": 0   // total matches before pagination, for computing page count
+}
+```
+
+No `superFilter` equivalent — the client-side arbitrary-JS filter was removed
+from the app (never had UI wiring); revisit if/when the app needs it again.
+
 ---
 
 ## 2. Charts & audio — feeds the visualizer

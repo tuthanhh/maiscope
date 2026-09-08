@@ -196,6 +196,13 @@ pub struct Catalog {
     pub update_time: String,
 }
 
+/// `GET /sheets/search` response (contract §1.2).
+#[derive(Debug, Serialize)]
+pub struct SheetSearchResponse {
+    pub sheets: Vec<Sheet>,
+    pub total: i64,
+}
+
 /// Raw row from the `songs` table (plus `to_char`-formatted `release_date`).
 /// Field order MUST match the SELECT list in queries.rs::fetch_song_row /
 /// fetch_all_songs — sqlx::query_as! maps positionally.
