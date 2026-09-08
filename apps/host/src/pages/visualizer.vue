@@ -195,22 +195,29 @@ async function maybeAutoLoad(): Promise<void> {
 
     loading.value = true;
     errorMsg.value = "";
+    sheetInfo.value = null;
+
+    // Info is best-effort and independent of chart availability — resolve and
+    // display it on its own, so the info card still shows for songs with no
+    // chart text (hasChart: false, the common case). Previously this was
+    // awaited together with fetchChart via Promise.all, so a chart-fetch
+    // failure (also common) rejected the whole thing and info never rendered.
+    fetchSheetInfo(key)
+        .then((info) => {
+            // Resolve the cover URL the same way preprocessData would (the API
+            // sends only the raw imageName), so MvCover shows the real jacket.
+            if (info.imageName && info.imageUrl == null) {
+                info.imageUrl = new URL(
+                    info.imageName,
+                    `${GAME.dataSourceUrl}/img/cover/`,
+                ).toString();
+            }
+            if (key === lastKey) sheetInfo.value = info;
+        })
+        .catch(() => {});
+
     try {
-        // Fetch the chart + its catalog metadata in parallel. Chart is required;
-        // info is best-effort (don't fail the load if it's missing).
-        const [chart, info] = await Promise.all([
-            fetchChart(songId, type, difficulty),
-            fetchSheetInfo(key).catch(() => null),
-        ]);
-        // Resolve the cover URL the same way preprocessData would (the API sends
-        // only the raw imageName), so MvCover shows the real jacket.
-        if (info && info.imageName && info.imageUrl == null) {
-            info.imageUrl = new URL(
-                info.imageName,
-                `${GAME.dataSourceUrl}/img/cover/`,
-            ).toString();
-        }
-        sheetInfo.value = info;
+        const chart = await fetchChart(songId, type, difficulty);
         simai.value = chart;
         await loadChart(chart);
         loaded.value = true;
