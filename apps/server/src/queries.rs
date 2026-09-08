@@ -176,7 +176,11 @@ pub async fn search_sheets(
     );
     build_joins(&mut qb, params, effective_region);
     build_where(&mut qb, params, effective_region);
-    qb.push(" ORDER BY so.source_index, s.source_index ");
+    // Newest-first, matching GET /catalog's convention (client used to
+    // achieve this via data.songs.reverse() on the full catalog; this
+    // endpoint returns an already-paginated page, so it must sort this way
+    // itself instead of relying on a reversal step that no longer runs).
+    qb.push(" ORDER BY so.source_index DESC, s.source_index ");
     qb.push(" LIMIT ").push_bind(params.page_size);
     qb.push(" OFFSET ").push_bind((params.page - 1).max(0) * params.page_size);
 
@@ -782,6 +786,22 @@ mod tests {
 
         assert_eq!(total, 2); // total matches regardless of page_size
         assert_eq!(rows.len(), 1);
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn search_sheets_orders_newest_first(pool: PgPool) -> sqlx::Result<()> {
+        // seed_two_songs_for_search inserts song_a (source_index 0) then
+        // song_b (source_index 1) — source_index is upstream data.json order
+        // (oldest-added first), so song_b is newer. GET /catalog's client-side
+        // buildCatalog reverses to newest-first; this endpoint must match that
+        // convention itself, since results here aren't reversed client-side.
+        seed_two_songs_for_search(&pool).await;
+
+        let (rows, _total) = search_sheets(&pool, &SheetSearchParams::default()).await.unwrap();
+
+        assert_eq!(rows[0].0.title.as_deref(), Some("Ice Crystal"));
+        assert_eq!(rows[1].0.title.as_deref(), Some("Fire Flower"));
         Ok(())
     }
 
