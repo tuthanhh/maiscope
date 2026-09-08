@@ -50,6 +50,10 @@ export const VOID_SHEET: Sheet = {
   searchUrl: 'https://www.youtube.com/watch?v=C9PFVo1FEwU',
 };
 
+export function getRegionOverrideSheet(sheet: Sheet, region: string): Sheet {
+  return sheet.regionOverrides?.[region] ?? sheet;
+}
+
 export function getCanonicalSheet(sheet: Sheet): Sheet {
   return sheet[$canonicalSheet] ?? sheet;
 }

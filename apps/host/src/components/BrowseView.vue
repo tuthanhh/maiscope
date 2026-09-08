@@ -4,8 +4,12 @@ import { useDataStore } from "~/stores/data";
 import useI18n from "~/composables/useI18n";
 import useSheetDialog from "~/composables/useSheetDialog";
 import useSelectedSheets from "~/composables/useSelectedSheets";
-import { buildEmptyFilters, buildFilterOptions, pickItem } from "~/utils";
-import useSheetSearch from "~/composables/useSheetSearch";
+import {
+    buildEmptyFilters,
+    buildFilterOptions,
+    filterSheets,
+    pickItem,
+} from "~/utils";
 import type { Filters, FilterOption, Sheet } from "~/types";
 import { type SelectOption } from "~/components/ui/MvSelect.vue";
 import BrowseSearchBar from "~/components/browse/BrowseSearchBar.vue";
@@ -74,8 +78,6 @@ const regionOptions = computed(() => toSelectOptions(options.value.regions));
 const typeChips = computed(() => data.value.types);
 const difficultyChips = computed(() => data.value.difficulties);
 
-const { results: searchResults, total: searchTotal, search } = useSheetSearch();
-
 // ── build Filters from UI state, then run the engine ──────────
 const filters = computed<Filters>(() => {
     const f = buildEmptyFilters();
@@ -101,32 +103,29 @@ const filters = computed<Filters>(() => {
 // One Set of selected sheets, shared by the My-List filter and per-row checks.
 const selectedSet = computed(() => new Set(selectedSheets.value));
 
-// myListOnly (bookmarks) has no server equivalent — it's a client-only
-// concept (Pinia-stored selection), so it stays a post-filter client pass
-// over whatever page the server just returned.
 const results = computed(() => {
-    if (!myListOnly.value) return searchResults.value;
-    return searchResults.value.filter((sheet) => selectedSet.value.has(sheet));
+    const sheets = filterSheets(data.value.sheets, filters.value);
+    if (!myListOnly.value) return sheets;
+    return sheets.filter((sheet) => selectedSet.value.has(sheet));
 });
 
 const bookmarkCount = computed(() => selectedSheets.value.length);
 
 // ── pagination ────────────────────────────────────────────────
-const PAGE_SIZE = 22; // cards per page in both list and grid views — must match useSheetSearch's server call
+const PAGE_SIZE = 22; // cards per page in both list and grid views
 const currentPage = ref(1);
 
-// Reset to the first page and re-run the server search anytime filters change.
-watch(filters, () => {
+// Reset to the first page anytime the underlying results change
+watch(results, () => {
     currentPage.value = 1;
-    search(filters.value, currentPage.value, PAGE_SIZE);
-}, { immediate: true, deep: true });
-
-watch(currentPage, () => {
-    search(filters.value, currentPage.value, PAGE_SIZE);
 });
 
-const totalPages = computed(() => Math.ceil(searchTotal.value / PAGE_SIZE));
-const paginatedResults = results; // already exactly one server-fetched page
+const totalPages = computed(() => Math.ceil(results.value.length / PAGE_SIZE));
+
+const paginatedResults = computed(() => {
+    const start = (currentPage.value - 1) * PAGE_SIZE;
+    return results.value.slice(start, start + PAGE_SIZE);
+});
 
 function prevPage(): void {
     if (currentPage.value > 1) currentPage.value -= 1;
@@ -140,13 +139,9 @@ function onBookmark(sheet: Sheet, event: Event): void {
     event.stopPropagation();
     toggleSheetSelection(sheet);
 }
-// TODO(server-side-search): drawRandom now only picks from the current page
-// (up to PAGE_SIZE sheets) instead of the full filtered set, because pagination
-// moved server-side. Fixing this properly needs a dedicated random-pick
-// endpoint; out of scope for the server-side search migration itself.
 function drawRandom(): void {
-    if (searchResults.value.length === 0) return;
-    viewSheet(pickItem(searchResults.value));
+    if (results.value.length === 0) return;
+    viewSheet(pickItem(results.value));
 }
 function reset(): void {
     Object.assign(form, emptyForm());
@@ -176,7 +171,7 @@ function reset(): void {
         <BrowseResultBar
             v-model:grid-view="gridView"
             v-model:my-list-only="myListOnly"
-            :count="searchTotal"
+            :count="results.length"
             :bookmark-count="bookmarkCount"
         />
 
@@ -207,7 +202,7 @@ function reset(): void {
             :current-page="currentPage"
             :total-pages="totalPages"
             :page-size="PAGE_SIZE"
-            :total="searchTotal"
+            :total="results.length"
             @prev="prevPage"
             @next="nextPage"
         />
