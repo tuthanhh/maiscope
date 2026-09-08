@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { ref, computed, onMounted, onUnmounted } from "vue";
+import { useRoute } from "vue-router";
 import useI18n from "~/composables/useI18n";
 import useGameData from "~/composables/useGameData";
 import usePageTitle from "~/composables/usePageTitle";
-import useSheetSearch from "~/composables/useSheetSearch";
-import { buildEmptyFilters } from "~/utils";
 import {
     ensureEngine,
     mountEngineCanvas,
@@ -29,10 +27,8 @@ import MvCover from "~/components/ui/MvCover.vue";
 defineOptions({ name: "GameVisualizerPage" });
 
 const { t } = useI18n();
-const { getTypeName, getTypeAbbr, getDifficultyName, getSheetSearchLink } =
-    useGameData();
+const { getTypeName, getDifficultyName, getSheetSearchLink } = useGameData();
 const route = useRoute();
-const router = useRouter();
 
 // Catalog metadata for the loaded sheet (null for a manually pasted chart).
 const sheetInfo = ref<Sheet | null>(null);
@@ -182,15 +178,21 @@ function hasDeepLink(): boolean {
     );
 }
 
-// Fetch + load a sheet's chart and catalog metadata by key. Shared by the
-// deep-link auto-loader and the in-page search results — callers decide
-// whether to auto-play (only valid from a real user gesture).
-async function loadSheetByKey(
-    songId: string,
-    type: string,
-    difficulty: string,
-): Promise<boolean> {
+// Deep-link: /visualizer?songId=..&type=..&difficulty=.. (e.g. from the sheet
+// dialog) auto-fetches that chart from the backend.
+async function maybeAutoLoad(): Promise<void> {
+    const { songId, type, difficulty } = route.query;
+    if (
+        typeof songId !== "string" ||
+        typeof type !== "string" ||
+        typeof difficulty !== "string"
+    ) {
+        return;
+    }
     const key = `${songId}|${type}|${difficulty}`;
+    if (key === lastKey) return; // same chart already loaded
+    lastKey = key;
+
     loading.value = true;
     errorMsg.value = "";
     try {
@@ -212,80 +214,24 @@ async function loadSheetByKey(
         simai.value = chart;
         await loadChart(chart);
         loaded.value = true;
+
+        // Sound can only start from a user gesture (e.g. arriving via a click in
+        // the sheet dialog). On a gesture-less hard reload, start paused — the
+        // first transport click then both plays and unlocks audio.
+        const active = navigator.userActivation?.isActive ?? false;
+        if (active) {
+            resumeAudio();
+            playing.value = true; // engine auto-plays on parse
+        } else {
+            pause();
+            playing.value = false;
+        }
         if (speed.value !== 1) setSpeed(speed.value);
-        return true;
     } catch (err: unknown) {
         errorMsg.value = err instanceof Error ? err.message : String(err);
-        return false;
     } finally {
         loading.value = false;
     }
-}
-
-// Deep-link: /visualizer?songId=..&type=..&difficulty=.. (e.g. from the sheet
-// dialog) auto-fetches that chart from the backend.
-async function maybeAutoLoad(): Promise<void> {
-    const { songId, type, difficulty } = route.query;
-    if (
-        typeof songId !== "string" ||
-        typeof type !== "string" ||
-        typeof difficulty !== "string"
-    ) {
-        return;
-    }
-    const key = `${songId}|${type}|${difficulty}`;
-    if (key === lastKey) return; // same chart already loaded
-    lastKey = key;
-
-    const ok = await loadSheetByKey(songId, type, difficulty);
-    if (!ok) return;
-
-    // Sound can only start from a user gesture (e.g. arriving via a click in
-    // the sheet dialog). On a gesture-less hard reload, start paused — the
-    // first transport click then both plays and unlocks audio.
-    const active = navigator.userActivation?.isActive ?? false;
-    if (active) {
-        resumeAudio();
-        playing.value = true; // engine auto-plays on parse
-    } else {
-        pause();
-        playing.value = false;
-    }
-}
-
-// ── in-page chart search (backed by GET /sheets/search) ───────────────────
-const searchQuery = ref("");
-const searchOpen = ref(false);
-const {
-    results: searchResults,
-    loading: searchLoading,
-    search: runSearch,
-} = useSheetSearch();
-
-watch(searchQuery, (q) => {
-    searchOpen.value = q.trim().length > 0;
-    if (q.trim().length === 0) return;
-    const filters = { ...buildEmptyFilters(), title: q };
-    runSearch(filters, 1, 8); // small page — this is a dropdown, not the browse list
-});
-
-async function selectSearchResult(sheet: Sheet): Promise<void> {
-    if (sheet.songId == null || sheet.type == null || sheet.difficulty == null) {
-        return;
-    }
-    searchOpen.value = false;
-    searchQuery.value = "";
-    lastKey = `${sheet.songId}|${sheet.type}|${sheet.difficulty}`;
-    const ok = await loadSheetByKey(sheet.songId, sheet.type, sheet.difficulty);
-    if (!ok) return;
-    // Clicking a result is a real user gesture — safe to unlock audio and autoplay.
-    resumeAudio();
-    playing.value = true;
-    // Keep the URL in sync so refresh/share/back-button still work, without
-    // relying on a route watcher (this page doesn't remount on same-route nav).
-    router.replace({
-        query: { songId: sheet.songId, type: sheet.type, difficulty: sheet.difficulty },
-    });
 }
 
 // Hand the pasted chart to the running engine. The chart clock is frame-driven,
@@ -460,46 +406,6 @@ usePageTitle(() => ({ title: t("page-title.visualizer") as string }));
 
         <!-- chart info + loader -->
         <div class="mv-viz-side">
-            <div class="mv-search">
-                <div class="mv-label mv-side-label">
-                    {{ t("page.viz.searchTitle") }}
-                </div>
-                <input
-                    v-model="searchQuery"
-                    type="text"
-                    class="mv-search-input"
-                    :placeholder="t('page.viz.searchPlaceholder')"
-                    @focus="searchOpen = searchQuery.trim().length > 0"
-                />
-                <div v-if="searchOpen" class="mv-search-results">
-                    <div v-if="searchLoading" class="mv-search-empty">
-                        {{ t("page.viz.loading") }}
-                    </div>
-                    <div
-                        v-else-if="searchResults.length === 0"
-                        class="mv-search-empty"
-                    >
-                        {{ t("description.filterResultEmpty") }}
-                    </div>
-                    <button
-                        v-for="sheet in searchResults"
-                        :key="`${sheet.songId}|${sheet.type}|${sheet.difficulty}`"
-                        type="button"
-                        class="mv-search-result"
-                        @click="selectSearchResult(sheet)"
-                    >
-                        <span class="mv-search-result-title">{{
-                            sheet.title
-                        }}</span>
-                        <span class="mv-search-result-meta">
-                            {{ getTypeAbbr(sheet.type ?? "") }}
-                            {{ getDifficultyName(sheet.difficulty ?? "") }}
-                            {{ sheet.level }}
-                        </span>
-                    </button>
-                </div>
-            </div>
-
             <div class="mv-label mv-side-label">
                 {{ t("page.viz.chartInfo") }}
             </div>
@@ -898,65 +804,6 @@ usePageTitle(() => ({ title: t("page-title.visualizer") as string }));
 .mv-yt:hover {
     background: var(--mv-bg);
     color: #e0405a;
-}
-.mv-search {
-    position: relative;
-    margin-bottom: 18px;
-}
-.mv-search-input {
-    width: 100%;
-    box-sizing: border-box;
-    background: var(--mv-panel);
-    border: 1px solid var(--mv-bd);
-    border-radius: 4px;
-    color: var(--mv-fg);
-    font-size: 13px;
-    padding: 8px 10px;
-}
-.mv-search-results {
-    position: absolute;
-    z-index: 10;
-    top: 100%;
-    left: 0;
-    right: 0;
-    margin-top: 4px;
-    max-height: 320px;
-    overflow-y: auto;
-    background: var(--mv-panel);
-    border: 1px solid var(--mv-bd);
-    border-radius: 4px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-}
-.mv-search-empty {
-    padding: 10px;
-    font-size: 12px;
-    color: var(--mv-mut);
-}
-.mv-search-result {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    width: 100%;
-    text-align: left;
-    background: none;
-    border: none;
-    border-bottom: 1px solid var(--mv-bd2);
-    color: var(--mv-fg);
-    padding: 8px 10px;
-    cursor: pointer;
-}
-.mv-search-result:last-child {
-    border-bottom: none;
-}
-.mv-search-result:hover {
-    background: var(--mv-panel2);
-}
-.mv-search-result-title {
-    font-size: 13px;
-}
-.mv-search-result-meta {
-    font-size: 11px;
-    color: var(--mv-mut);
 }
 .mv-paste {
     margin-top: 22px;

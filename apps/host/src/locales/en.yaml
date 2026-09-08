@@ -83,8 +83,6 @@ page:
     thisFile: this File
     yourLocalFile: your local file
   viz:
-    searchTitle: Find a chart
-    searchPlaceholder: title…
     chartInfo: Chart
     awaiting: awaiting chart
     pasteTitle: Load simai
