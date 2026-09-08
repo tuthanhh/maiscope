@@ -91,16 +91,16 @@ pub fn tick_metronome(
     sfx_channel: Res<AudioChannel<Sfx>>,
     metronome_sfx: Option<Res<MetronomeSfx>>,
 ) {
-    if !metro.enabled || !chart.is_playing {
+    if !metro.enabled || !chart.is_playing() {
         return;
     }
     let Some(sfx) = metronome_sfx else { return };
-    let events = &chart.timed_events;
+    let events = chart.timed_events();
     if events.is_empty() {
         return;
     }
 
-    let elapsed = chart.elapsed_time;
+    let elapsed = chart.elapsed_time();
     let delta = elapsed - metro.last_elapsed;
     metro.last_elapsed = elapsed;
 
@@ -119,7 +119,7 @@ pub fn tick_metronome(
 
     // Click interval (chart-time seconds): a quarter note, doubled until the
     // *wall* gap (chart-time / chart_speed) clears the comfortable minimum.
-    let chart_speed = chart.chart_speed.max(0.01) as f64;
+    let chart_speed = chart.chart_speed().max(0.01) as f64;
     let mut beat = 60.0 / bpm as f64;
     while beat / chart_speed < METRONOME_MIN_CLICK_SECS {
         beat *= 2.0;
@@ -156,7 +156,7 @@ pub fn start_bgm(
     let handle = bgm_channel
         .play(bgm_source.0.clone())
         .with_volume(BGM_VOLUME)
-        .with_playback_rate(chart.chart_speed as f64)
+        .with_playback_rate(chart.chart_speed() as f64)
         .handle();
     commands.insert_resource(BgmInstance(handle));
 }

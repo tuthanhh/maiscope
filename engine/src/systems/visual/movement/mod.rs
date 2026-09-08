@@ -194,8 +194,8 @@ pub fn update_movement(
     // Travel is faster with both play speed and note speed; hold/slide musical
     // durations follow the play tempo (/ chart_speed), so effective bpm is
     // bpm × chart_speed.
-    let note_speed = chart.note_speed;
-    let chart_speed = chart.chart_speed;
+    let note_speed = chart.note_speed();
+    let chart_speed = chart.chart_speed();
     let move_duration = MOVING as f32 / (chart_speed * note_speed);
 
     for (

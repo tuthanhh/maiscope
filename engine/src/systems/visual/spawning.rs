@@ -36,7 +36,7 @@ pub fn next_event(
     note_assets: Res<NoteAssets>,
     layout: Res<ButtonLayout>,
 ) {
-    if !chart.is_playing {
+    if !chart.is_playing() {
         return;
     }
 
@@ -45,7 +45,7 @@ pub fn next_event(
     // the chart plays silently. Either way spawning just reads `elapsed_time`.
     //
     // .map() clones event data and releases the &mut borrow on chart,
-    // so chart.chart_speed / chart.note_speed are accessible in the loop body.
+    // so chart.chart_speed() / chart.note_speed() are accessible in the loop body.
     while let Some((event, bpm)) = chart.advance().map(|e| (e.event.clone(), e.bpm)) {
         if let ChartEvent::NoteGroup(notes) = event {
             let is_paired = notes.len() >= 2;
@@ -55,8 +55,8 @@ pub fn next_event(
                     note,
                     is_paired,
                     bpm,
-                    chart.chart_speed,
-                    chart.note_speed,
+                    chart.chart_speed(),
+                    chart.note_speed(),
                     &note_assets,
                     &layout,
                 );
@@ -64,8 +64,8 @@ pub fn next_event(
         }
     }
 
-    if chart.next_spawn_index >= chart.timed_events.len() {
-        chart.is_playing = false;
+    if chart.is_finished() {
+        chart.pause();
     }
 }
 
@@ -87,17 +87,17 @@ pub fn apply_commands(
         match cmd {
             crate::wasm_bridge::EngineCommand::Pause => {
                 bgm_channel.pause();
-                chart.is_playing = false;
+                chart.pause();
             }
             crate::wasm_bridge::EngineCommand::Resume => {
                 bgm_channel.resume();
-                chart.is_playing = true;
+                chart.resume();
             }
             crate::wasm_bridge::EngineCommand::SetSongSpeed(rate) => {
                 bgm_channel.set_playback_rate(rate as f64);
-                chart.chart_speed = rate;
+                chart.set_chart_speed(rate);
             }
-            crate::wasm_bridge::EngineCommand::SetNoteSpeed(speed) => chart.note_speed = speed,
+            crate::wasm_bridge::EngineCommand::SetNoteSpeed(speed) => chart.set_note_speed(speed),
             crate::wasm_bridge::EngineCommand::Restart => {
                 // Rewind the audio (the clock anchor) and clear every spawned note.
                 if let Some(instance) = bgm_instance
@@ -109,9 +109,7 @@ pub fn apply_commands(
                 for entity in &notes {
                     commands.entity(entity).despawn();
                 }
-                chart.next_spawn_index = 0;
-                chart.elapsed_time = 0.0;
-                chart.is_playing = true;
+                chart.restart();
                 bgm_channel.resume();
             }
         }

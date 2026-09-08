@@ -26,7 +26,7 @@ fn check_if_ready(
 ) {
     // The chart clock is frame-driven and audio is optional, so readiness only
     // depends on having a parsed chart. As soon as it has events, start playing.
-    if !playback.timed_events.is_empty() {
+    if playback.has_events() {
         next_state.set(AppState::Playing);
     }
 }
@@ -41,7 +41,7 @@ fn tick_clock(
     bgm_instance: Option<Res<audio::BgmInstance>>,
     audio_instances: Res<Assets<AudioInstance>>,
 ) {
-    if !playback.is_playing {
+    if !playback.is_playing() {
         return;
     }
 
@@ -56,7 +56,7 @@ fn tick_clock(
             match instance.state() {
                 PlaybackState::Playing { position }
                 | PlaybackState::Pausing { position }
-                | PlaybackState::Paused { position } => playback.elapsed_time = position,
+                | PlaybackState::Paused { position } => playback.sync_to_audio_position(position),
                 _ => {}
             }
         }
@@ -64,7 +64,7 @@ fn tick_clock(
     }
 
     // No BGM (chart loaded silently): drive the clock off frame time.
-    playback.elapsed_time += time.delta_secs_f64() * playback.chart_speed as f64;
+    playback.tick(time.delta_secs_f64());
 }
 
 fn ingest_songs(
@@ -91,9 +91,7 @@ fn ingest_songs(
         for entity in &notes {
             commands.entity(entity).despawn();
         }
-        playback.compute_timestamps(events); // resets next_spawn_index
-        playback.elapsed_time = 0.0;
-        playback.is_playing = true;
+        playback.load_chart(events);
 
         // The song BGM is optional — a chart with no audio plays silently. The
         // guide SFX is loaded separately at startup, so hit sounds still play.
