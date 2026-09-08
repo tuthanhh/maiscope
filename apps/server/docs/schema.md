@@ -102,9 +102,7 @@ sheets + sub-rows vanish.
 
 | Table | Purpose | Contract |
 |-------|---------|----------|
-| `charts` | canonical simai/ma2 per sheet (`content` TEXT or `blob_url`); `UNIQUE(sheet_id, format)` | §2 chart |
 | `chart_revisions` | append-only chart history → rollback/audit | §5 |
-| `assets` | audio/jacket/movie blobs (S3 key + meta) | §2 audio |
 | `users` | GitHub-OAuth identities + role | §4 |
 | `contributions` | open submission queue (`payload` JSONB, `status`) → merge on approve | §5 |
 | `audit_log` | moderator/admin action trail | §5 |

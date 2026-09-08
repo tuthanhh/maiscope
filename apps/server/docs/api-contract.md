@@ -86,13 +86,12 @@ Matches `types/Song.ts` and `types/Sheet.ts` (raw fields, no derived):
   "regions?": { "intl": true, "jp": true },
   "regionOverrides?": { "<region>": { /* partial Sheet */ } },
   "isSpecial?": false,
-  "hasChart": false,   // NEW: true if §2 chart/audio exists for this sheetExpr
-  "hasAudio": false    // NEW
+  "hasChart": false    // true if a chart row exists for this sheetExpr
 }
 ```
-`hasChart`/`hasAudio` are the only additions vs. today — they let `songs.vue`/
-`song.vue` show a "visualize" affordance without a probe request. They are server
-truth, not derived, so they belong in the payload.
+`hasChart` is the only addition vs. today — it lets `songs.vue`/`song.vue` show a
+"visualize" affordance without a probe request. It is server truth, not derived,
+so it belongs in the payload.
 
 ### `GET /songs/{songId}`
 Single song with its sheets (same shape as §1.1). `404` if unknown.
@@ -124,15 +123,10 @@ Returns the chart source for the engine parser.
 ```
 `404` if `hasChart` is false.
 
-### `GET /sheets/{sheetExpr}/audio`
-Binary audio stream for `loadSong`'s `Uint8Array` arg.
-- `200` body = raw bytes, `Content-Type: audio/*`, supports `Range`.
-- May `302` to S3-compatible storage (R2/B2) instead of streaming.
-- `404` / `451` if unavailable (not hosted / copyright-withheld).
-
-> Client wiring: when `sheet.hasChart`, fetch `/chart`; if `audioUrl`, fetch
-> `/audio` → bytes → `loadSong(chart, bytes)`, else `loadChart(chart)`. Manual
-> paste in `visualizer.vue` stays as a fallback.
+> Client wiring: when `sheet.hasChart`, fetch `/chart` → chart text →
+> `loadChart(chart)`. Manual paste in `visualizer.vue` stays as a fallback.
+> Audio-serving is not part of this contract — the audio-serving feature was
+> cut.
 
 ---
 
@@ -240,8 +234,8 @@ Status enum: `pending | approved | rejected | merged`.
 | Contract | Frontend touch-point |
 |----------|---------------------|
 | `GET /catalog` | `stores/data.ts:loadData`, tauri `data.rs:load_chart_data` (swap `data.json`) |
-| `hasChart/hasAudio` | `pages/songs.vue`, `pages/song.vue`, `MvSheetDialog.vue` (show visualize affordance) |
-| §2 chart/audio | `pages/visualizer.vue`, `composables/useEngine.ts` (auto-load real charts) |
+| `hasChart` | `pages/songs.vue`, `pages/song.vue`, `MvSheetDialog.vue` (show visualize affordance) |
+| §2 chart | `pages/visualizer.vue`, `composables/useEngine.ts` (auto-load real charts) |
 | §3 sync | new `src-tauri` cache layer (tier 2) |
 | §4 auth | new login UI + `src-tauri` token store |
 | §5 contributions | new contribution UI (desktop and/or web — open question) |
