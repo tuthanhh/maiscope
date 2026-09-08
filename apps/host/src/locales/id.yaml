@@ -50,7 +50,6 @@ term:
   totalNotes: TOTAL
   region: Wilayah
   comment: Komentar
-  superFilter: Filter Super
 
 # Descriptions & Tooltips
 description:
@@ -67,10 +66,6 @@ description:
   clearMyList: Kosongkan MY LIST
   pickOneFromFilter: PILIH SALAH SATU DARI FILTER!
   noMoreSheetsToPick: Tidak ada lagi lembaran yang harus dipilih.
-  superFilterPlaceholder: |
-    // mengembalikan fungsi predikat untuk memfilter hasil
-    return (sheet) => true;
-  superFilterHint: // Kuharap kau tahu apa yang kau lakukan ...
 
 # Pages
 page:
@@ -87,6 +82,9 @@ page:
     # yourLocalFile: your local file
   songs:
     sheetData: Data Lembar
+    exactMatch: Exact match
+    useInternalLevel: Use internal level
+    useRegionOverride: Use region override
   about:
     author: Pembuat
     dataSource: Sumber Data

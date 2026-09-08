@@ -50,7 +50,6 @@ term:
   totalNotes: ノーツ総数
   region: 地区
   comment: コメント
-  superFilter: スーパーフィルター
 
 # Descriptions & Tooltips
 description:
@@ -67,10 +66,6 @@ description:
   clearMyList: 「マイリスト」を空にする
   pickOneFromFilter: フィルター結果から選択する！
   noMoreSheetsToPick: 選ばれる譜面がありません。
-  # superFilterPlaceholder: |
-  #   // return a predicate function to filter the result
-  #   return (sheet) => true;
-  # superFilterHint: // I hope you know what you're doing ...
 
 # Pages
 page:
@@ -87,6 +82,9 @@ page:
     yourLocalFile: あなたのローカルファイル
   songs:
     sheetData: 譜面データ
+    exactMatch: Exact match
+    useInternalLevel: Use internal level
+    useRegionOverride: Use region override
   about:
     author: 制作者
     dataSource: 情報源

@@ -50,7 +50,6 @@ term:
   totalNotes: 总计
   region: 地区
   comment: 备注
-  superFilter: 超级筛选器
 
 # Descriptions & Tooltips
 description:
@@ -67,10 +66,6 @@ description:
   clearMyList: 清空【我的歌单】
   pickOneFromFilter: 从筛选结果中选取一个！
   noMoreSheetsToPick: 已经没有可选取的谱面。
-  superFilterPlaceholder: |
-    // 返回用于过滤结果的谓词函数
-    return (sheet) => true;
-  superFilterHint: // 我希望你知道自己在做什么 ...
 
 # Pages
 page:
@@ -87,6 +82,9 @@ page:
     yourLocalFile: 你的本地文件
   songs:
     sheetData: 谱面数据
+    exactMatch: Exact match
+    useInternalLevel: Use internal level
+    useRegionOverride: Use region override
   about:
     author: 作者
     dataSource: 数据源

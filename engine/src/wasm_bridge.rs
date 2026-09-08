@@ -20,6 +20,17 @@ pub fn load_chart(chart: String) {
         .push(SongPayload { chart, audio: None });
 }
 
+/// Load a chart with its audio bytes — the BGM becomes the authoritative
+/// clock (see `chart_playback.rs::sync_to_audio_position`).
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn load_song(chart: String, audio: Vec<u8>) {
+    INBOX
+        .lock()
+        .unwrap()
+        .push(SongPayload { chart, audio: Some(audio) });
+}
+
 pub fn take_songs() -> Vec<SongPayload> {
     std::mem::take(&mut *INBOX.lock().unwrap())
 }

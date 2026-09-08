@@ -20,6 +20,11 @@ export type BrowseForm = {
     levelMax: string;
     bpmMin: string;
     bpmMax: string;
+    region: string;
+    useRegionOverride: boolean;
+    matchExactTitle: boolean;
+    matchExactArtist: boolean;
+    useInternalLevel: boolean;
 };
 
 defineOptions({ name: "BrowseFilters" });
@@ -30,6 +35,7 @@ const props = defineProps<{
     versionOptions: SelectOption[];
     designerOptions: SelectOption[];
     levelOptions: SelectOption[];
+    regionOptions: SelectOption[];
     typeChips: { type: string }[];
     difficultyChips: { difficulty: string; name?: string }[];
 }>();
@@ -67,12 +73,22 @@ function toggle(list: string[], value: string): string[] {
 
         <div v-if="advOpen" class="mv-adv-body">
             <div class="mv-fields">
+                <MvField :label="t('term.title')">
+                    <label class="mv-check">
+                        <input type="checkbox" v-model="props.form.matchExactTitle" />
+                        {{ t("page.songs.exactMatch") }}
+                    </label>
+                </MvField>
                 <MvField :label="t('term.artist')">
                     <MvTextInput
                         v-model="props.form.artist"
                         placeholder="—"
                         :width="150"
                     />
+                    <label class="mv-check">
+                        <input type="checkbox" v-model="props.form.matchExactArtist" />
+                        {{ t("page.songs.exactMatch") }}
+                    </label>
                 </MvField>
                 <MvField :label="t('term.noteDesigner')">
                     <MvSelect
@@ -97,6 +113,18 @@ function toggle(list: string[], value: string): string[] {
                         :placeholder="t('ui.all')"
                         :width="160"
                     />
+                </MvField>
+                <MvField :label="t('term.region')">
+                    <MvSelect
+                        v-model="props.form.region"
+                        :options="regionOptions"
+                        :placeholder="t('ui.all')"
+                        :width="140"
+                    />
+                    <label class="mv-check">
+                        <input type="checkbox" v-model="props.form.useRegionOverride" />
+                        {{ t("page.songs.useRegionOverride") }}
+                    </label>
                 </MvField>
             </div>
 
@@ -153,6 +181,10 @@ function toggle(list: string[], value: string): string[] {
                             :width="90"
                         />
                     </div>
+                    <label class="mv-check">
+                        <input type="checkbox" v-model="props.form.useInternalLevel" />
+                        {{ t("page.songs.useInternalLevel") }}
+                    </label>
                 </MvField>
                 <MvField :label="t('term.bpm')">
                     <div class="mv-range">
@@ -248,6 +280,15 @@ function toggle(list: string[], value: string): string[] {
 }
 .mv-dash {
     color: var(--mv-mut);
+}
+.mv-check {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--mv-mut);
+    margin-top: 6px;
+    cursor: pointer;
 }
 .mv-adv-actions {
     display: flex;

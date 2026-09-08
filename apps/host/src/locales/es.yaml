@@ -50,7 +50,6 @@ term:
   totalNotes: TOTAL
   region: Región
   comment: Comentario
-  superFilter: Superfiltro
 
 # Descriptions & Tooltips
 description:
@@ -67,10 +66,6 @@ description:
   clearMyList: Borrar MI LISTA
   pickOneFromFilter: ¡ELIGE UNO DEL FILTRO!
   noMoreSheetsToPick: No hay más gráficos para seleccionar.
-  superFilterPlaceholder: |
-    // devuelve una función de predicado para filtrar el resultado
-    return (sheet) => true;
-  superFilterHint: // Espero que sepas lo que estás haciendo ...
 
 # Pages
 page:
@@ -87,6 +82,9 @@ page:
     # yourLocalFile: your local file
   songs:
     sheetData: Datos de mapa
+    exactMatch: Exact match
+    useInternalLevel: Use internal level
+    useRegionOverride: Use region override
   about:
     author: Autor
     dataSource: Origen de los datos

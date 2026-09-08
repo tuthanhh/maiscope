@@ -50,7 +50,6 @@ term:
   totalNotes: ВСЕГО
   region: Регион
   comment: Комментарий
-  superFilter: Супер Фильтр
 
 # Descriptions & Tooltips
 description:
@@ -67,10 +66,6 @@ description:
   clearMyList: Очистить МОЙ СПИСОК
   pickOneFromFilter: ВЫБЕРИТЕ ОДИН ИЗ ФИЛЬТРОВ!
   noMoreSheetsToPick: Больше не нужно выбирать простыни.
-  superFilterPlaceholder: |
-    // возвращаем предикатную функцию для фильтрации результата
-    return (sheet) => true;
-  superFilterHint: // Надеюсь, вы знаете, что делаете ...
 
 # Pages
 page:
@@ -87,6 +82,9 @@ page:
     yourLocalFile: ваш локальный файл
   songs:
     sheetData: Данные Листа
+    exactMatch: Exact match
+    useInternalLevel: Use internal level
+    useRegionOverride: Use region override
   about:
     author: Автор
     dataSource: Источник Данных

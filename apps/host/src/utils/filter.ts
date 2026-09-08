@@ -1,7 +1,6 @@
-import { getRegionOverrideSheet, getCanonicalSheet } from "~/utils/sheet";
 import { parseBoolean, isEmptyArray } from "~/utils/misc";
 import type { I18nFacade } from "~/app/i18n";
-import type { Data, Sheet, Filters, FilterOptions } from "~/types";
+import type { Data, Filters, FilterOptions } from "~/types";
 
 const filterTypes = {
   categories: "string[]",
@@ -25,9 +24,6 @@ const filterTypes = {
   noteDesigners: "string[]",
   region: "string",
   useRegionOverride: "boolean",
-
-  // Super Filter is not saved or loaded due to security concerns
-  // superFilter: 'string',
 };
 
 export function buildEmptyFilters(): Filters {
@@ -53,8 +49,6 @@ export function buildEmptyFilters(): Filters {
     noteDesigners: [],
     region: null,
     useRegionOverride: null,
-
-    superFilter: null,
   };
 }
 
@@ -240,160 +234,6 @@ export function buildFilterOptions(
   };
 }
 
-export function parseSuperFilter(superFilterText: string) {
-  // eslint-disable-next-line no-new-func
-  return new Function(superFilterText)();
-}
-
-export function filterSheets(sheets: Sheet[], filters: Filters) {
-  let result = sheets.slice();
-
-  if (filters.useRegionOverride) {
-    const currentRegion =
-      filters.region != null && !filters.region.startsWith("!")
-        ? filters.region
-        : null;
-
-    if (currentRegion != null) {
-      result = result.map((sheet) =>
-        getRegionOverrideSheet(sheet, currentRegion),
-      );
-    }
-  }
-
-  // Collect the active predicates, then apply them in a single pass instead of
-  // allocating a fresh array for every individual filter.
-  const predicates: ((sheet: Sheet) => boolean)[] = [];
-
-  if (filters.region != null) {
-    if (filters.region.startsWith("!")) {
-      const excludedRegion = filters.region.replace(/^!/, "");
-      predicates.push(
-        (sheet) => sheet.regions == null || !sheet.regions[excludedRegion],
-      );
-    } else {
-      const includedRegion = filters.region;
-      predicates.push(
-        (sheet) => sheet.regions != null && sheet.regions[includedRegion],
-      );
-    }
-  }
-  if (filters.categories.length !== 0) {
-    const categorySet = new Set(filters.categories);
-    predicates.push(
-      (sheet) =>
-        categorySet.has(sheet.category!) ||
-        (sheet.category != null &&
-          sheet.category
-            .split("|")
-            .some((category) => categorySet.has(category))),
-    );
-  }
-  if (filters.title != null) {
-    if (filters.matchExactTitle) {
-      const exactTitle = filters.title;
-      predicates.push((sheet) => sheet.title === exactTitle);
-    } else {
-      const normalizedTitle = filters.title.toLowerCase();
-      predicates.push(
-        (sheet) =>
-          sheet.title != null &&
-          sheet.title.toLowerCase().includes(normalizedTitle),
-      );
-    }
-  }
-  if (filters.versions.length !== 0) {
-    const versionSet = new Set(filters.versions);
-    predicates.push((sheet) => versionSet.has(sheet.version!));
-  }
-  if (filters.types.length !== 0) {
-    const typeSet = new Set(filters.types);
-    predicates.push((sheet) => typeSet.has(sheet.type!));
-  }
-  if (filters.difficulties.length !== 0) {
-    const difficultySet = new Set(filters.difficulties);
-    predicates.push((sheet) => difficultySet.has(sheet.difficulty!));
-  }
-  if (typeof filters.minLevelValue === "number") {
-    const minLevelValue = filters.minLevelValue;
-    if (filters.useInternalLevel) {
-      predicates.push(
-        (sheet) =>
-          sheet.internalLevelValue != null &&
-          sheet.internalLevelValue >= minLevelValue,
-      );
-    } else {
-      predicates.push(
-        (sheet) => sheet.levelValue != null && sheet.levelValue >= minLevelValue,
-      );
-    }
-  }
-  if (typeof filters.maxLevelValue === "number") {
-    const maxLevelValue = filters.maxLevelValue;
-    if (filters.useInternalLevel) {
-      predicates.push(
-        (sheet) =>
-          sheet.internalLevelValue != null &&
-          sheet.internalLevelValue <= maxLevelValue,
-      );
-    } else {
-      predicates.push(
-        (sheet) => sheet.levelValue != null && sheet.levelValue <= maxLevelValue,
-      );
-    }
-  }
-  if (typeof filters.minBPM === "number") {
-    const minBPM = filters.minBPM;
-    predicates.push((sheet) => sheet.bpm != null && sheet.bpm >= minBPM);
-  }
-  if (typeof filters.maxBPM === "number") {
-    const maxBPM = filters.maxBPM;
-    predicates.push((sheet) => sheet.bpm != null && sheet.bpm <= maxBPM);
-  }
-  if (filters.artist != null) {
-    if (filters.matchExactArtist) {
-      const exactArtist = filters.artist;
-      predicates.push((sheet) => sheet.artist === exactArtist);
-    } else {
-      const normalizedArtist = filters.artist.toLowerCase();
-      predicates.push(
-        (sheet) =>
-          sheet.artist != null &&
-          sheet.artist.toLowerCase().includes(normalizedArtist),
-      );
-    }
-  }
-  if (filters.noteDesigners.length !== 0) {
-    const noteDesignerSet = new Set(filters.noteDesigners);
-    predicates.push((sheet) => noteDesignerSet.has(sheet.noteDesigner!));
-  }
-
-  if (predicates.length !== 0) {
-    result = result.filter((sheet) => predicates.every((p) => p(sheet)));
-  }
-
-  if (filters.superFilter != null) {
-    try {
-      const superFilter = parseSuperFilter(filters.superFilter);
-
-      if (typeof superFilter !== "function")
-        throw new TypeError("Invalid super filter");
-
-      try {
-        result = result.filter(superFilter);
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.warn(err);
-      }
-    } catch {
-      // do nothing if the super filter is invalid
-    }
-  }
-
-  result = result.map((sheet) => getCanonicalSheet(sheet));
-
-  return result;
-}
 
 export function loadFiltersFromQuery(query: Record<string, string>): Filters {
   const QueryReader = {

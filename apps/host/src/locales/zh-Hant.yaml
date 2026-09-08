@@ -50,7 +50,6 @@ term:
   totalNotes: 總計
   region: 地區
   comment: 備註
-  superFilter: 超級篩選器
 
 # Descriptions & Tooltips
 description:
@@ -67,10 +66,6 @@ description:
   clearMyList: 清空【我的歌單】
   pickOneFromFilter: 從篩選結果中選取一個！
   noMoreSheetsToPick: 已經沒有可選取的譜面。
-  # superFilterPlaceholder: |
-  #   // return a predicate function to filter the result
-  #   return (sheet) => true;
-  # superFilterHint: // I hope you know what you're doing ...
 
 # Pages
 page:
@@ -87,6 +82,9 @@ page:
     yourLocalFile: 你的本地檔案
   songs:
     sheetData: 譜面資料
+    exactMatch: Exact match
+    useInternalLevel: Use internal level
+    useRegionOverride: Use region override
   about:
     author: 作者
     dataSource: 資料來源

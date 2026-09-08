@@ -4,12 +4,8 @@ import { useDataStore } from "~/stores/data";
 import useI18n from "~/composables/useI18n";
 import useSheetDialog from "~/composables/useSheetDialog";
 import useSelectedSheets from "~/composables/useSelectedSheets";
-import {
-    buildEmptyFilters,
-    buildFilterOptions,
-    filterSheets,
-    pickItem,
-} from "~/utils";
+import { buildEmptyFilters, buildFilterOptions, pickItem } from "~/utils";
+import useSheetSearch from "~/composables/useSheetSearch";
 import type { Filters, FilterOption, Sheet } from "~/types";
 import { type SelectOption } from "~/components/ui/MvSelect.vue";
 import BrowseSearchBar from "~/components/browse/BrowseSearchBar.vue";
@@ -43,6 +39,11 @@ function emptyForm(): BrowseForm {
         levelMax: "",
         bpmMin: "",
         bpmMax: "",
+        region: "",
+        useRegionOverride: false,
+        matchExactTitle: false,
+        matchExactArtist: false,
+        useInternalLevel: false,
     };
 }
 const form = reactive(emptyForm());
@@ -68,15 +69,20 @@ const designerOptions = computed(() =>
     toSelectOptions(options.value.noteDesigners),
 );
 const levelOptions = computed(() => toSelectOptions(options.value.levels));
+const regionOptions = computed(() => toSelectOptions(options.value.regions));
 
 const typeChips = computed(() => data.value.types);
 const difficultyChips = computed(() => data.value.difficulties);
+
+const { results: searchResults, total: searchTotal, search } = useSheetSearch();
 
 // ── build Filters from UI state, then run the engine ──────────
 const filters = computed<Filters>(() => {
     const f = buildEmptyFilters();
     f.title = form.title || null;
+    f.matchExactTitle = form.matchExactTitle;
     f.artist = form.artist || null;
+    f.matchExactArtist = form.matchExactArtist;
     f.noteDesigners = form.designer ? [form.designer] : [];
     f.categories = form.category ? [form.category] : [];
     f.versions = form.version ? [form.version] : [];
@@ -84,37 +90,43 @@ const filters = computed<Filters>(() => {
     f.difficulties = form.difficulties;
     f.minLevelValue = form.levelMin ? Number(form.levelMin) : null;
     f.maxLevelValue = form.levelMax ? Number(form.levelMax) : null;
+    f.useInternalLevel = form.useInternalLevel;
     f.minBPM = form.bpmMin ? Number(form.bpmMin) : null;
     f.maxBPM = form.bpmMax ? Number(form.bpmMax) : null;
+    f.region = form.region || null;
+    f.useRegionOverride = form.useRegionOverride;
     return f;
 });
 
 // One Set of selected sheets, shared by the My-List filter and per-row checks.
 const selectedSet = computed(() => new Set(selectedSheets.value));
 
+// myListOnly (bookmarks) has no server equivalent — it's a client-only
+// concept (Pinia-stored selection), so it stays a post-filter client pass
+// over whatever page the server just returned.
 const results = computed(() => {
-    const sheets = filterSheets(data.value.sheets, filters.value);
-    if (!myListOnly.value) return sheets;
-    return sheets.filter((sheet) => selectedSet.value.has(sheet));
+    if (!myListOnly.value) return searchResults.value;
+    return searchResults.value.filter((sheet) => selectedSet.value.has(sheet));
 });
 
 const bookmarkCount = computed(() => selectedSheets.value.length);
 
 // ── pagination ────────────────────────────────────────────────
-const PAGE_SIZE = 22; // cards per page in both list and grid views
+const PAGE_SIZE = 22; // cards per page in both list and grid views — must match useSheetSearch's server call
 const currentPage = ref(1);
 
-// Reset to the first page anytime the underlying results change
-watch(results, () => {
+// Reset to the first page and re-run the server search anytime filters change.
+watch(filters, () => {
     currentPage.value = 1;
+    search(filters.value, currentPage.value, PAGE_SIZE);
+}, { immediate: true, deep: true });
+
+watch(currentPage, () => {
+    search(filters.value, currentPage.value, PAGE_SIZE);
 });
 
-const totalPages = computed(() => Math.ceil(results.value.length / PAGE_SIZE));
-
-const paginatedResults = computed(() => {
-    const start = (currentPage.value - 1) * PAGE_SIZE;
-    return results.value.slice(start, start + PAGE_SIZE);
-});
+const totalPages = computed(() => Math.ceil(searchTotal.value / PAGE_SIZE));
+const paginatedResults = results; // already exactly one server-fetched page
 
 function prevPage(): void {
     if (currentPage.value > 1) currentPage.value -= 1;
@@ -128,9 +140,13 @@ function onBookmark(sheet: Sheet, event: Event): void {
     event.stopPropagation();
     toggleSheetSelection(sheet);
 }
+// TODO(server-side-search): drawRandom now only picks from the current page
+// (up to PAGE_SIZE sheets) instead of the full filtered set, because pagination
+// moved server-side. Fixing this properly needs a dedicated random-pick
+// endpoint; out of scope for the server-side search migration itself.
 function drawRandom(): void {
-    if (results.value.length === 0) return;
-    viewSheet(pickItem(results.value));
+    if (searchResults.value.length === 0) return;
+    viewSheet(pickItem(searchResults.value));
 }
 function reset(): void {
     Object.assign(form, emptyForm());
@@ -150,6 +166,7 @@ function reset(): void {
             :version-options="versionOptions"
             :designer-options="designerOptions"
             :level-options="levelOptions"
+            :region-options="regionOptions"
             :type-chips="typeChips"
             :difficulty-chips="difficultyChips"
             @draw="drawRandom"
@@ -159,7 +176,7 @@ function reset(): void {
         <BrowseResultBar
             v-model:grid-view="gridView"
             v-model:my-list-only="myListOnly"
-            :count="results.length"
+            :count="searchTotal"
             :bookmark-count="bookmarkCount"
         />
 
@@ -190,7 +207,7 @@ function reset(): void {
             :current-page="currentPage"
             :total-pages="totalPages"
             :page-size="PAGE_SIZE"
-            :total="results.length"
+            :total="searchTotal"
             @prev="prevPage"
             @next="nextPage"
         />

@@ -50,7 +50,6 @@ term:
   totalNotes: TỔNG
   region: Khu vực
   comment: Bình luận
-  superFilter: Bộ lọc Nâng cao
 
 # Descriptions & Tooltips
 description:
@@ -67,10 +66,6 @@ description:
   clearMyList: Dọn dẹp DANH SÁCH CỦA TÔI
   pickOneFromFilter: CHỌN MỘT BÀI TRONG BỘ LỌC!
   noMoreSheetsToPick: Không còn bản nhạc nào để lựa chọn.
-  superFilterPlaceholder: |
-    // trả về một hàm điều kiện để lọc kết quả
-    return (sheet) => true;
-  superFilterHint: // Tôi hy vọng bạn biết mình đang làm gì ...
 
 # Pages
 page:
@@ -87,6 +82,9 @@ page:
     yourLocalFile: thư mục cục bộ của bạn
   songs:
     sheetData: Dữ Liệu Bản Nhạc
+    exactMatch: Exact match
+    useInternalLevel: Use internal level
+    useRegionOverride: Use region override
   about:
     author: Tác giả
     dataSource: Dữ liệu nguồn
