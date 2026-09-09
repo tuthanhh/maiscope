@@ -11,7 +11,7 @@ tickets 01–04 actually built, in the same change — the repository's doc-sync
 
 **Blocked by:** 01, 02, 03, 04
 
-**Status:** ready-for-agent
+**Status:** todo
 
 - [ ] `docs/reference/api-contract.md` §4 callback response updated to
       `{ "token": "<jwt>", "refreshToken": "<opaque>", "user": { ... } }`, with a

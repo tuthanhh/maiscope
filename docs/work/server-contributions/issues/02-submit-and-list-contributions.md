@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 — contributions tables migration, `server-auth-github-oauth/issues/02-jwt-and-authuser-extractor.md` (needs `AuthUser`).
 
-**Status:** ready-for-agent
+**Status:** todo
 
 - [ ] `POST /contributions` inserts a row, returns `201` with `{ id, status: "pending" }`; invalid `kind` returns `400` not `500`
 - [ ] `GET /contributions` — plain `user` role always restricted to own contributions server-side (not just an optional `mine` filter a caller could omit); moderators see all or filter by `mine`

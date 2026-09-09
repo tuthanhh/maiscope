@@ -23,10 +23,12 @@ Parser first, ahead of server tests, because:
 - [ ] Unit tests per note kind: tap, hold, touch, touch-hold, slide (each shape),
       break/EX variants
 - [ ] Timing: BPM change mid-chart, divisor changes, rest handling
-- [ ] Corpus test over the 16 real `maidata.txt` files: parse without panicking,
-      snapshot the event counts per difficulty
+- [ ] Re-acquire a chart corpus (the original 16 `maidata.txt` were deleted with
+      the audio on 2026-09-09) into the private data repo, chart text only
+- [ ] Corpus test: parse every acquired `maidata.txt` without panicking, snapshot
+      the event counts per difficulty
+- [ ] Fixtures vendored into `engine/tests/fixtures/` — chart text only, never
+      mp3 or bg images
 - [ ] Malformed-input tests: parser returns an error, never panics — a panic in
       wasm takes the whole canvas down
-- [ ] Corpus files vendored into `engine/tests/fixtures/` (chart text only, no
-      mp3/bg — see issue 01)
 - [ ] `cargo test -p engine` wired into CI (issue 15)

@@ -12,9 +12,9 @@ does not satisfy.
 
 **Status:** todo
 
-- [ ] `songs/` added to `.gitignore` (whole directory; chart text lives in the
-      private data repo per issue 17, not here)
-- [ ] `git status` confirms `songs/` no longer appears as untracked
+- [ ] `songs/` added to `.gitignore` **pre-emptively** — the directory was deleted
+      on 2026-09-09, but the same layout returns whenever a song pack is unpacked
+      locally, and it must never be committed
 - [ ] Confirm nothing under `songs/` was ever committed (`git log --all -- songs/`)
 - [ ] Upstream `zetaraku/arcade-songs` license identified and recorded here
 - [ ] Whatever that license requires is satisfied — typically a `LICENSE-THIRD-PARTY`

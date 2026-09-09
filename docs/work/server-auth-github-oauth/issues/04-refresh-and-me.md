@@ -13,7 +13,7 @@ visible as an unexpected logout.
 
 **Blocked by:** 02, 03
 
-**Status:** ready-for-agent
+**Status:** todo
 
 - [ ] `POST /auth/refresh` takes `{ "refreshToken": "<opaque>" }`
 - [ ] Presented token hashed and matched against `users.refresh_token_hash`;

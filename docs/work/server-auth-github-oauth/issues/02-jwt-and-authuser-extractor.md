@@ -13,7 +13,7 @@ load-bearing beyond this feature.
 
 **Blocked by:** 01 (needs the `users` table and `JWT_SECRET`)
 
-**Status:** ready-for-agent
+**Status:** todo
 
 - [ ] `pub struct Claims { pub sub: i64, pub role: String, pub exp: usize }`
 - [ ] `pub fn issue_jwt(user_id: i64, role: &str) -> Result<String, jsonwebtoken::errors::Error>`

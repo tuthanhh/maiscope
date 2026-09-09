@@ -4,7 +4,7 @@
 
 **Blocked by:** 01 — revision tracking migration, `server-contributions/issues/03-approve-and-reject.md`.
 
-**Status:** ready-for-agent
+**Status:** todo
 
 - [ ] `edit` branch of `approve_contribution` bumps `catalog_meta.revision` (`+1`, `RETURNING revision`) and `update_time` in one atomic query
 - [ ] Same call stamps the new revision onto the edited sheet's `revision` column

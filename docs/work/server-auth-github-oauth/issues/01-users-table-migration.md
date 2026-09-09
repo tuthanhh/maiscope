@@ -11,7 +11,7 @@ credentials.
 
 **Blocked by:** None — first ticket of this feature.
 
-**Status:** ready-for-agent
+**Status:** todo
 
 - [ ] `apps/server/migrations/20260907090000_users.up.sql` creates `users`:
       `id BIGSERIAL PK`, `github_id BIGINT UNIQUE NOT NULL`, `login TEXT NOT NULL`,

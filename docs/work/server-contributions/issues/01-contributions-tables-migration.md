@@ -4,7 +4,7 @@
 
 **Blocked by:** `server-auth-github-oauth/issues/01-users-table-migration.md` (users table must exist for the FKs).
 
-**Status:** ready-for-agent
+**Status:** todo
 
 - [ ] Confirmed `charts` table already exists (migration only adds `chart_revisions`, doesn't duplicate `charts`)
 - [ ] `contributions` table: `kind`/`status` CHECK constraints, `author_user_id`/`reviewed_by_user_id` FKs to `users`, indexes on `status` and `author_user_id`

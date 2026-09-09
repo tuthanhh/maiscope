@@ -16,7 +16,7 @@ an additive field. Ticket 05 updates the contract to match in the same feature.
 
 **Blocked by:** 02 (needs `issue_jwt`, `generate_refresh_token`, `hash_refresh_token`)
 
-**Status:** ready-for-agent
+**Status:** todo
 
 - [ ] `UserRow` added to `types.rs`, `Serialize`, `#[serde(rename_all = "camelCase")]`,
       with `id` serialised as a string per the contract

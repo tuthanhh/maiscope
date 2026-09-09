@@ -4,7 +4,7 @@
 
 **Blocked by:** `server-auth-github-oauth/issues/02-jwt-and-authuser-extractor.md` (needs `AuthUser`).
 
-**Status:** ready-for-agent
+**Status:** todo
 
 - [ ] `aws-sdk-s3`/`aws-config`/`uuid` deps added; `.env.example` documents `S3_ENDPOINT_URL`/`S3_BUCKET`/`S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY`/`S3_REGION`
 - [ ] `POST /contributions/audio` returns a valid presigned PUT URL, 15-minute expiry, keyed `contributions/audio/{uploadId}`

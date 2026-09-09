@@ -4,7 +4,7 @@
 
 **Blocked by:** 02 — submit/list contributions.
 
-**Status:** ready-for-agent
+**Status:** todo
 
 - [ ] `require_moderator` guard: non-moderator/admin gets `403`
 - [ ] Approve: `edit` kind merges into `sheets` via COALESCE (only payload-present fields change), bumps `catalog_meta.update_time`, sets status `merged`, writes an `audit_log` row

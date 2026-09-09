@@ -20,7 +20,8 @@ mobile WebView" has no reliable answer to look up.
       recorded here** (the dev build is ~74MB; the release number is unknown and
       feeds issues 24 and 25)
 - [ ] `apps/host` served over LAN; opened on a real mid-range Android device
-- [ ] One of the 16 corpus charts loaded end to end
+- [ ] One chart loaded end to end (requires the corpus re-acquired in issue 26, or
+      a single `maidata.txt` obtained ad hoc for the spike)
 - [ ] Recorded: frame pacing, time to first note, memory ceiling, whether the tab
       is OOM-killed
 - [ ] Tested in Android Chrome **and** in an installed PWA — they are not always

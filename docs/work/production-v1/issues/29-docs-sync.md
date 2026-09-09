@@ -20,7 +20,11 @@ Known-stale, found during the grilling session:
 
 **Blocked by:** 21, 24 (write it once the frontend shape is final)
 
-**Status:** todo
+**Status:** dropped
+
+**Dropped:** absorbed by the `docs-restructure` feature — see
+[`docs/work/docs-restructure/spec.md`](../../docs-restructure/spec.md). That work
+covers every item this ticket listed.
 
 - [ ] CLAUDE.md: doc paths, test-suite claim, Tauri references, commands corrected
 - [ ] README: architecture diagram, prerequisites, getting-started, roadmap
