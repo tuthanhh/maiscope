@@ -26,5 +26,21 @@ getting-started, so full Diátaxis would create empty folders.
 
 ## Consequences
 
-ADRs carry the rationale; `work/production-v1/spec.md` is reduced to scope and
-sequencing and links to them, so the reasoning lives in exactly one place.
+Each document answers exactly one question; if two documents answer the same
+question, one of them is wrong. Decisions go in `adr/`, behaviour changes in
+`reference/`, planned steps in `work/`, and current status only in
+`ROADMAP.md` — nowhere else. Milestones (v1.0 / v1.1 / phase 2), previously
+defined inside `work/production-v1/spec.md`, move to `ROADMAP.md`; the feature
+spec links to them instead of restating them.
+
+Two status vocabularies replace the three strings in use before (`todo`,
+`done`, `ready-for-agent`): features go `planned` → `active` → `shipped` →
+`superseded`, tickets go `todo` → `in-progress` → `done` → `dropped`. The
+archive rule follows from this split: when a feature ships, its real decisions
+move into an ADR, its behaviour changes land in `reference/`, and
+`ROADMAP.md` collapses it to one line — this is what stops `work/` from
+becoming the next `.scratch/`.
+
+`guides/` starts with a single file rather than empty stubs for `deploy.md`
+and `runbook.md`, which are outputs of later production-v1 tickets, not
+placeholders — empty stubs are what make docs look abandoned.
