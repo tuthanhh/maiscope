@@ -30,7 +30,7 @@ contributor-supplied audio. Unscheduled.
 | Feature | Status | Milestone |
 |---|---|---|
 | [production-v1](work/production-v1/spec.md) | active | v1.0 |
-| [docs-restructure](work/docs-restructure/spec.md) | active | — |
+| [docs-restructure](work/docs-restructure/spec.md) | shipped | — |
 | [server-sync-tier](work/server-sync-tier/) | active | v1.0 |
 | [server-auth-github-oauth](work/server-auth-github-oauth/) | planned | phase 2 |
 | [server-contributions](work/server-contributions/) | planned | phase 2 |

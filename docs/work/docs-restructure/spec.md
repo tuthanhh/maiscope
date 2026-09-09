@@ -1,6 +1,6 @@
 # Spec — Documentation restructure
 
-**Status:** planned
+**Status:** shipped
 **Date:** 2026-09-09
 
 Unify the project's documentation into one structure with a single roadmap, no
