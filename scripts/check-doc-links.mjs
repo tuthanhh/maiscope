@@ -33,11 +33,15 @@ async function markdownFiles(dir) {
 // Strips lines that fall inside fenced code blocks (both open/close fence
 // markers themselves and everything between them), returning the same number
 // of lines so line numbers stay accurate — skipped lines become "".
+//
+// Also reports a fence left open at end of file. That case is not cosmetic:
+// every line after the stray fence is blanked, so the rest of the document
+// is never link-checked and the run still passes. Callers must fail on it.
 function stripFencedBlocks(lines) {
   const out = [];
-  let fence = null; // { char: '`' | '~', len: number }
+  let fence = null; // { char: '`' | '~', len: number, line: number }
 
-  for (const line of lines) {
+  for (const [index, line] of lines.entries()) {
     if (fence) {
       const close = line.match(FENCE_CLOSE);
       if (close && close[1][0] === fence.char && close[1].length >= fence.len) {
@@ -49,7 +53,7 @@ function stripFencedBlocks(lines) {
 
     const open = line.match(FENCE_OPEN);
     if (open) {
-      fence = { char: open[1][0], len: open[1].length };
+      fence = { char: open[1][0], len: open[1].length, line: index + 1 };
       out.push(""); // opening marker line itself is not scanned
       continue;
     }
@@ -57,7 +61,7 @@ function stripFencedBlocks(lines) {
     out.push(line);
   }
 
-  return out;
+  return { lines: out, unterminated: fence ? fence.line : null };
 }
 
 const root = process.argv[2] ?? ".";
@@ -65,7 +69,14 @@ const failures = [];
 
 for (const file of await markdownFiles(root)) {
   const body = await readFile(file, "utf8");
-  const lines = stripFencedBlocks(body.split("\n"));
+  const { lines, unterminated } = stripFencedBlocks(body.split("\n"));
+
+  if (unterminated !== null) {
+    failures.push(
+      `${file}:${unterminated}: code fence opened here is never closed — ` +
+        `every line below it went unchecked`,
+    );
+  }
 
   for (const [index, rawLine] of lines.entries()) {
     // Inline code spans (`like this`) quote example text too; drop them
@@ -87,7 +98,7 @@ for (const file of await markdownFiles(root)) {
 }
 
 if (failures.length > 0) {
-  console.error(`${failures.length} broken reference(s):\n`);
+  console.error(`${failures.length} problem(s):\n`);
   for (const f of failures) console.error(`  ${f}`);
   process.exit(1);
 }
