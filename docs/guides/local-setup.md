@@ -24,7 +24,7 @@ cargo run                     # API on :3000
 ## 2. Engine
 
 ```sh
-./engine/build-wasm.sh        # dev build; pass `release` for a size-optimised one
+./scripts/build-wasm.sh       # dev build; pass `release` for a size-optimised one
 ```
 
 Output lands in `apps/host/src/wasm/` (gitignored — rebuild after any change under

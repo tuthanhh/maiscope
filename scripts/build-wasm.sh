@@ -8,8 +8,9 @@
 # engine/Cargo.toml exactly, or you'll get a "schema version" mismatch at bindgen time.
 set -euo pipefail
 
-ENGINE_DIR="$(cd "$(dirname "$0")" && pwd)"
-WORKSPACE_DIR="$(cd "$ENGINE_DIR/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+WORKSPACE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+ENGINE_DIR="$WORKSPACE_DIR/engine"
 OUT_DIR="$WORKSPACE_DIR/apps/host/src/wasm"
 PROFILE="${1:-dev}" # dev (fast) | release (size-optimized, slow)
 

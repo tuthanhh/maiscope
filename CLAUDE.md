@@ -12,7 +12,7 @@ Conditionally relevant:
 
 - [`docs/reference/api-contract.md`](docs/reference/api-contract.md) — read before adding or changing any server endpoint
 - [`docs/reference/schema.md`](docs/reference/schema.md) — read before touching tables or migrations
-- `engine/build-wasm.sh` — only when changing anything under `engine/` or the wasm-bindgen pin
+- `scripts/build-wasm.sh` — only when changing anything under `engine/` or the wasm-bindgen pin
 
 ## What this is
 
@@ -38,7 +38,7 @@ cargo run --bin seed_songs         # load chart text, keyed by sheet_expr
 ### Engine
 
 ```sh
-./engine/build-wasm.sh             # dev build; pass `release` for size-optimised
+./scripts/build-wasm.sh            # dev build; pass `release` for size-optimised
 ```
 
 Output goes to `apps/host/src/wasm/` (gitignored). The `wasm-bindgen-cli` version

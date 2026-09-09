@@ -16,7 +16,7 @@ mobile WebView" has no reliable answer to look up.
 
 **Status:** todo
 
-- [ ] `./engine/build-wasm.sh release` run; **raw and brotli'd `.wasm` size
+- [ ] `./scripts/build-wasm.sh release` run; **raw and brotli'd `.wasm` size
       recorded here** (the dev build is ~74MB; the release number is unknown and
       feeds `web-delivery` issues 04 and 05)
 - [ ] `apps/host` served over LAN; opened on a real mid-range Android device
