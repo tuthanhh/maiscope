@@ -1,7 +1,9 @@
 # 04 — `POST /auth/refresh` and `GET /auth/me`
 
-> **Reconstructed 2026-09-09** from `docs/superpowers/plans/2026-09-07-server-auth-github-oauth.md`
-> Task 4 after the original ticket file was lost during a botched directory move.
+> **Reconstructed 2026-09-09** from the plan at
+> `git show 301b167:docs/superpowers/plans/2026-09-07-server-auth-github-oauth.md`
+> (removed from the working tree since; recoverable from that commit), Task 4,
+> after the original ticket file was lost during a botched directory move.
 
 **What to build:** The two remaining §4 endpoints. `POST /auth/refresh` trades an
 opaque refresh token for a fresh JWT; `GET /auth/me` returns the current user and

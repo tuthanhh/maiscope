@@ -1,7 +1,9 @@
 # 05 — Update the API contract §4 and the schema doc
 
-> **Reconstructed 2026-09-09** from `docs/superpowers/plans/2026-09-07-server-auth-github-oauth.md`
-> Task 5 after the original ticket file was lost during a botched directory move.
+> **Reconstructed 2026-09-09** from the plan at
+> `git show 301b167:docs/superpowers/plans/2026-09-07-server-auth-github-oauth.md`
+> (removed from the working tree since; recoverable from that commit), Task 5,
+> after the original ticket file was lost during a botched directory move.
 >
 > **Path note:** the plan referenced `apps/server/docs/`. Those documents now live
 > at `docs/reference/`. Use the current paths.

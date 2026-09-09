@@ -1,7 +1,9 @@
 # 02 — JWT issue/verify + `AuthUser` extractor
 
-> **Reconstructed 2026-09-09** from `docs/superpowers/plans/2026-09-07-server-auth-github-oauth.md`
-> Task 2 after the original ticket file was lost during a botched directory move.
+> **Reconstructed 2026-09-09** from the plan at
+> `git show 301b167:docs/superpowers/plans/2026-09-07-server-auth-github-oauth.md`
+> (removed from the working tree since; recoverable from that commit), Task 2,
+> after the original ticket file was lost during a botched directory move.
 
 **What to build:** `apps/server/src/auth.rs` — the module every later auth and
 contributions handler depends on. It owns JWT issue/verify, refresh-token

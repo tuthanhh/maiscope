@@ -1,8 +1,10 @@
 # 01 — `users` table migration + new dependencies
 
-> **Reconstructed 2026-09-09** from `docs/superpowers/plans/2026-09-07-server-auth-github-oauth.md`
-> after the original ticket file was lost during a botched directory move. Content
-> is faithful to that plan's Task 1; wording is not byte-identical to the original.
+> **Reconstructed 2026-09-09** from the plan at
+> `git show 301b167:docs/superpowers/plans/2026-09-07-server-auth-github-oauth.md`
+> (removed from the working tree since; recoverable from that commit) after the
+> original ticket file was lost during a botched directory move. Content is
+> faithful to that plan's Task 1; wording is not byte-identical to the original.
 
 **What to build:** The `users` table backing contract §4, plus the four crates the
 auth tier needs. `refresh_token_hash` stores a SHA-256 hash of the current refresh

@@ -1,7 +1,9 @@
 # 03 — GitHub OAuth login + callback handlers
 
-> **Reconstructed 2026-09-09** from `docs/superpowers/plans/2026-09-07-server-auth-github-oauth.md`
-> Task 3 after the original ticket file was lost during a botched directory move.
+> **Reconstructed 2026-09-09** from the plan at
+> `git show 301b167:docs/superpowers/plans/2026-09-07-server-auth-github-oauth.md`
+> (removed from the working tree since; recoverable from that commit), Task 3,
+> after the original ticket file was lost during a botched directory move.
 
 **What to build:** The two handlers that turn a GitHub identity into a maiscope
 session: `GET /auth/github/login` (302 to GitHub) and
