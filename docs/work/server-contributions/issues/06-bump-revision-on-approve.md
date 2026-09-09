@@ -1,8 +1,8 @@
-# 03 — Bump revision on contribution-approve edit (optional)
+# 06 — Bump revision on contribution-approve edit (optional)
 
 **What to build:** `approve_contribution`'s `edit` branch bumps `catalog_meta.revision` atomically (via `UPDATE ... RETURNING revision`) and stamps the new revision onto the affected sheet's `revision` column, replacing the old unconditional `update_time`-only bump — so an incremental edit becomes visible to `GET /sync/delta`. This ticket is optional: if the contributions feature's approve handler doesn't exist yet or looks different, skip it — manifest/delta still work correctly with revision only ever bumped by `ingest`.
 
-**Blocked by:** 01 — revision tracking migration, `server-contributions/issues/03-approve-and-reject.md`.
+**Blocked by:** 03 — approve and reject, `server-sync-tier/issues/01-revision-tracking-migration.md`.
 
 **Status:** todo
 

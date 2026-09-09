@@ -2,7 +2,7 @@
 
 **What to build:** Doc sync: precise 409 semantics (predates last full reload, not a vague staleness heuristic — incremental contribution-approve edits never trigger it), and the `charts: []` scope-cut note on `GET /sync/delta`'s response shape.
 
-**Blocked by:** 03 — bump revision on approve, 04 — manifest/delta/etag (docs describe what actually shipped).
+**Blocked by:** `server-contributions/issues/06-bump-revision-on-approve.md`, 04 — manifest/delta/etag (docs describe what actually shipped).
 
 **Status:** dropped
 

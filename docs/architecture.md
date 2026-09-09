@@ -89,5 +89,5 @@ See [ADR-0001](adr/0001-postgres-source-of-truth-for-charts.md) and
 ## Known deviations from this document
 
 `apps/host/src-tauri/` still exists and still proxies catalog fetches through
-Rust. It is deleted by `work/production-v1/issues/21-delete-tauri.md`. Until that
+Rust. It is deleted by `work/web-delivery/issues/01-delete-tauri.md`. Until that
 lands, the desktop path bypasses HTTP caching entirely.

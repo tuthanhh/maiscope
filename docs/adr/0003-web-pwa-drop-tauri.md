@@ -31,6 +31,6 @@ PWA's install identity is its origin, so moving from `*.pages.dev` later orphans
 installed apps.
 
 **This decision reopens if the mobile WebView spike
-(`work/production-v1/issues/28-mobile-webview-spike.md`) shows Bevy cannot hold
+(`work/mobile-webview-spike/issues/01-bevy-mobile-webview-spike.md`) shows Bevy cannot hold
 frame rate in an Android WebView.** In that case an APK bundling the wasm becomes
 the only path to v1.1.

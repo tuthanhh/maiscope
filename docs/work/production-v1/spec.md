@@ -6,8 +6,9 @@ work more than the choices do.
 
 ## Product shape
 
-Milestones are defined in [`docs/ROADMAP.md`](../../ROADMAP.md). This feature
-delivers **v1.0**.
+Milestones are defined in [`docs/ROADMAP.md`](../../ROADMAP.md). This is the
+**umbrella spec for v1.0**: it holds the rules and risks that span every child
+feature listed at the bottom, and owns no tickets itself.
 
 **Explicitly out of v1**: audio hosting, auth, contributions, desktop app,
 local SQLite cache, Tauri (any target).
@@ -74,17 +75,31 @@ answers and the wrong one gets checked first.
 - **PWA install identity is its origin.** Moving `*.pages.dev` → custom domain
   orphans installed apps. Do not promote installs until the domain lands.
 - **`seed_songs` matches by NFC-normalized title.** Upstream renames silently
-  drop charts (issue 10 makes this loud; issue 17 makes it reviewable).
+  drop charts (`server-restructure` issue 09 makes this loud;
+  `prod-data-and-infra` issue 02 makes it reviewable).
 
-## Ticket order
+## Child features
 
-Issues `01`–`29` in `issues/`. Rough phases:
+This directory is an **umbrella**: it holds the cross-cutting rules above and no
+tickets of its own. The work is split across the feature directories below, each
+with its own `spec.md`. Build them roughly in this order — the ordering is the
+dependency graph, not a preference.
 
-1. **01** hygiene — do first, it is a live hazard.
-2. **02–10** server restructure in place, tests green throughout.
-3. **11–13** hermetic build + deploy mechanics.
-4. **14–20** infrastructure, CI/CD, data pipeline, backups.
-5. **21–25** frontend: de-Tauri, hosting, PWA, mobile gate.
-6. **26–27** tests (parser first — highest defect density, zero infra).
-7. **28** spike that gates v1.1.
-8. **29** docs sync.
+| Order | Feature | Why here |
+|---|---|---|
+| 1 | [`repo-hygiene`](../repo-hygiene/spec.md) | A live hazard — `songs/` is untracked but not ignored, and the upstream licence is unverified. Do it before the repo goes public. |
+| 2 | [`server-restructure`](../server-restructure/spec.md) | Config, errors, state, modules, tracing, HTTP layer, caching, rate limiting. In place, tests green throughout ([ADR-0005](../../adr/0005-restructure-server-in-place.md)). |
+| 3 | [`build-and-deploy`](../build-and-deploy/spec.md) | Hermetic build and deploy mechanics: `.sqlx/`, Dockerfile, `fly.toml`, CI, CD. |
+| 4 | [`prod-data-and-infra`](../prod-data-and-infra/spec.md) | Neon provisioning, the vendored upstream snapshot and its refresh PR, seed workflows, backups. |
+| 5 | [`web-delivery`](../web-delivery/spec.md) | De-Tauri, catalog freshness, Cloudflare Pages, PWA, the mobile visualizer gate. |
+| 6 | [`test-foundation`](../test-foundation/spec.md) | Engine parser tests first — highest defect density, zero infrastructure — then server tests and the contract snapshot. |
+| — | [`mobile-webview-spike`](../mobile-webview-spike/) | Gates **v1.1**, not v1.0. Run it early and in parallel; a bad result reopens [ADR-0003](../../adr/0003-web-pwa-drop-tauri.md). |
+
+The split itself, and the rules it changed, are recorded in
+[ADR-0009](../../adr/0009-umbrella-features-and-spec-timing.md). One ticket from the
+original 29 is in no directory: `29 — docs sync` was dropped because the
+[`docs-restructure`](../docs-restructure/spec.md) feature absorbed it and shipped.
+
+The "verify before relying on" list above is owned by
+[`prod-data-and-infra`](../prod-data-and-infra/spec.md) ticket 01 — treat those
+facts as its acceptance criteria rather than as background reading.
