@@ -23,19 +23,15 @@ local SQLite cache, Tauri (any target).
 | Source of truth | Postgres for chart text + revisions. A private repo is the seed *input* and *backup*, never the authority. |
 | Upstream catalog | Vendored `data.json` snapshot in-repo; a scheduled job opens a PR to refresh it. |
 
-### Rejected, and why
+### Decisions behind this scope
 
-- **Static/bundled catalog with GitHub-PR contributions** — rejected because
-  phase 2 writes go through `charts`/`chart_revisions` with a moderation queue;
-  git cannot be the write path.
-- **Tauri (desktop or Android)** — its only remaining advantage was bundling the
-  wasm in an APK and native FS access for local song packs. Neither is a v1
-  requirement, and a service worker recovers most of the first.
-- **Serving the SPA from Axum** — a ~20MB wasm artifact on metered Fly bandwidth
-  with no CDN.
-- **Rewriting the server** — the schema, SQL, contract, `sheet_expr` identity key
-  and sync-revision design are sound. Every real flaw is a move-code-around
-  problem. Restructure in place, tests green throughout.
+| Decision | ADR |
+|---|---|
+| Postgres is the source of truth for chart text | [ADR-0001](../../adr/0001-postgres-source-of-truth-for-charts.md) |
+| Chart data only, no audio hosting | [ADR-0002](../../adr/0002-chart-data-only-no-audio-hosting.md) |
+| Web + PWA, Tauri dropped | [ADR-0003](../../adr/0003-web-pwa-drop-tauri.md) |
+| Fly compute + Neon Postgres | [ADR-0004](../../adr/0004-fly-compute-neon-postgres.md) |
+| Restructure the server in place | [ADR-0005](../../adr/0005-restructure-server-in-place.md) |
 
 ## Cross-cutting rules
 
