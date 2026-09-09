@@ -1,10 +1,19 @@
 # maiscope API Contract (v1)
 
-Status: **proposed**. Defines the HTTP surface the global backend (`apps/server`,
-Rust/Axum/Postgres) must expose so the frontend (`apps/host/src/`) can drop its
-static `data.json` dependency and gain the features it has stubs for but no
-backend: live catalog, per-sheet chart/audio for the visualizer, offline-first
-delta sync, and open community contributions with auth.
+Defines the HTTP surface the global backend (`apps/server`, Rust/Axum/Postgres)
+exposes so the frontend (`apps/host/src/`) can drop its static `data.json`
+dependency: live catalog, per-sheet chart text for the visualizer, and a
+revision-probe sync tier. Auth (§4) and contributions (§5) are phase 2.
+
+Each section carries its implementation status:
+
+- **shipped** — routed in `apps/server/src/main.rs` and covered by handler tests
+- **phase 2** — designed, not built; no route exists. See
+  [ROADMAP](../ROADMAP.md).
+
+No audio crosses this API. Audio hosting was cut by
+[ADR-0002](../adr/0002-chart-data-only-no-audio-hosting.md); v1 plays charts on the
+engine's silent, wall-clock-driven path.
 
 - Base URL: `/api/v1`
 - Content type: `application/json; charset=utf-8` unless noted (binary endpoints).
@@ -20,10 +29,10 @@ NOT send derived fields (`songNo`, `imageUrl`, `imageUrlM`, `sheetExpr`,
 
 ---
 
-## 1. Catalog — replaces static `data.json`
+## 1. Catalog — replaces static `data.json`  *(shipped)*
 
-Fills: `stores/data.ts:loadData` and tauri `load_chart_data`, which today fetch a
-flat `data.json` from CloudFront.
+Fills: `stores/data.ts:loadData`, which previously fetched a flat `data.json`
+from CloudFront.
 
 ### `GET /catalog`
 
@@ -34,7 +43,9 @@ Query params (all optional):
 | param | type | meaning |
 |-------|------|---------|
 | `region` | string | filter sheets to a region (else all) |
-| `since` | RFC3339 | if set, server MAY 304 when nothing newer (see §3) |
+
+Freshness is negotiated with `If-None-Match`, not a `since` param — see Headers
+below.
 
 Response `200`:
 ```jsonc
@@ -51,8 +62,12 @@ Response `200`:
 > `sheets` is intentionally absent — `preprocessData` derives it from
 > `songs[].sheets`. Keep it that way.
 
-Headers: `ETag: "<updateTime-or-hash>"`, `Cache-Control: public, max-age=...`.
-Honors `If-None-Match` → `304 Not Modified`.
+Headers: `ETag: "<sha256(revision:updateTime)>"` — the same value
+`GET /sync/manifest` reports as `catalogHash` (§3). A matching `If-None-Match`
+returns `304 Not Modified` with an empty body.
+
+No `Cache-Control` is sent yet; edge caching is a deployment concern, not a
+contract one.
 
 ### 1.1 `Song` / `Sheet` payload shape
 
@@ -100,7 +115,7 @@ Single song with its sheets (same shape as §1.1). `404` if unknown.
 Single sheet, `sheetExpr` URL-encoded. `404` if no match — mirrors the client's
 `makeDummySheet` fallback path in `utils/sheet.ts`.
 
-### `GET /sheets/search`
+### 1.2 `GET /sheets/search`
 
 Filtered, paginated sheet list — powers the browse page's search/filter UI.
 Unlike `GET /catalog` (full snapshot for the offline-first cache), this
@@ -141,38 +156,49 @@ from the app (never had UI wiring); revisit if/when the app needs it again.
 
 ---
 
-## 2. Charts & audio — feeds the visualizer
+## 2. Charts — feeds the visualizer  *(shipped)*
 
-Fills: `pages/visualizer.vue` + `composables/useEngine.ts`. Today a user must
-paste simai text and pick an audio file by hand. These endpoints let the engine
-load a real chart for any sheet via `loadSong(chart, audioBytes)` /
-`loadChart(chart)`.
+Fills: `pages/visualizer.vue` + `composables/useEngine.ts`. Without it a user
+must paste simai text by hand. This endpoint lets the engine load a real chart
+for any sheet via `loadChart(chart)`.
 
-### `GET /sheets/{sheetExpr}/chart`
-Returns the chart source for the engine parser.
-```jsonc
-{
-  "sheetExpr": "string",
-  "format": "simai",          // first target format; "ma2" reserved
-  "chart": "string",          // raw simai text → loadChart()/loadSong() arg
-  "audioUrl": "string|null",  // null if no audio (copyright); → GET below
-  "version": 1,               // chart revision, bumps on re-merge
-  "updatedAt": "RFC3339"
-}
-```
-`404` if `hasChart` is false.
+### `GET /sheets/{songId}/chart?type={type}&difficulty={difficulty}`
+
+Returns the raw chart source for the engine parser as **`text/plain`** — not a
+JSON envelope. The engine wants the simai text itself, and wrapping it would
+only cost the client a parse and an unwrap.
+
+The path segment is the **`songId` alone**, not the full `sheetExpr`; `type`
+and `difficulty` are query params. The server rebuilds `sheet_expr` from the
+three (`main.rs:get_chart`), so the cross-tier key is still what is matched —
+it is just not URL-encoded into one segment here.
+
+| status | meaning |
+|--------|---------|
+| `200` | body is the raw simai text |
+| `404` | no chart row for this sheet (`hasChart` is false) |
+| `501` | a chart row exists but holds no inline text (blob-only charts are not served yet) |
+
+Errors from this endpoint are plain text, not the §6 JSON error shape.
 
 > Client wiring: when `sheet.hasChart`, fetch `/chart` → chart text →
 > `loadChart(chart)`. Manual paste in `visualizer.vue` stays as a fallback.
-> Audio-serving is not part of this contract — the audio-serving feature was
-> cut.
+> No audio endpoint exists or is planned for v1 (ADR-0002); the engine's
+> `loadSong(chart, audioBytes)` audio-slaved path is unused.
 
 ---
 
-## 3. Sync — offline-first local SQLite cache
+## 3. Sync — revision probe for the client cache  *(shipped)*
 
-Fills the planned tier-2 cache (driven from `src-tauri/`): load cache → check
-manifest → delta sync → atomic swap. No frontend code yet; this is its contract.
+Fills the client-side catalog cache: load cache → check manifest → delta sync →
+atomic swap.
+
+The cache is an **IndexedDB blob plus this revision probe**, not a relational
+store. Because the client holds the whole catalog in memory and filters locally
+([ADR-0007](../adr/0007-client-side-filtering.md)), a local SQLite mirror would
+buy no query benefit and would only translate rows back into the JSON shape
+`preprocessData` already wants. The earlier `src-tauri`-driven SQLite design
+went with Tauri ([ADR-0003](../adr/0003-web-pwa-drop-tauri.md)).
 
 ### `GET /sync/manifest`
 Cheap freshness probe.
@@ -207,9 +233,13 @@ If `since` is too old to diff, respond `409` with
 
 ---
 
-## 4. Auth — GitHub OAuth, roles user/moderator/admin
+## 4. Auth — GitHub OAuth, roles user/moderator/admin  *(phase 2)*
 
-Fills: nothing in `src/` today (no login). Required to gate §5.
+**Not implemented.** No auth route is mounted; the design below is the plan of
+record for `docs/work/server-auth-github-oauth/`. Required to gate §5.
+
+v1 has no accounts and holds no PII — a property worth preserving deliberately
+rather than losing by accident (ADR-0002).
 
 - `GET /auth/github/login` → `302` to GitHub OAuth.
 - `GET /auth/github/callback?code=...` → sets session / returns
@@ -224,10 +254,11 @@ Fills: nothing in `src/` today (no login). Required to gate §5.
 
 ---
 
-## 5. Contributions — submit → pending → moderate → merge
+## 5. Contributions — submit → pending → moderate → merge  *(phase 2)*
 
-Fills: the open-contribution flow. No direct writes to canonical; everything goes
-through a review queue. Needs auth (§4).
+**Not implemented.** No contribution route is mounted; the design below is the
+plan of record for `docs/work/server-contributions/`. No direct writes to
+canonical; everything goes through a review queue. Needs auth (§4).
 
 ### `POST /contributions`  *(role: user+)*
 Propose a new sheet, a chart, or an edit.
@@ -235,20 +266,23 @@ Propose a new sheet, a chart, or an edit.
 {
   "kind": "song|sheet|chart|edit",
   "sheetExpr": "string|null",   // target for chart/edit; null for new song
-  "payload": { /* Song | Sheet | { format, chart, audioUploadId? } */ },
+  "payload": { /* Song | Sheet | { format, chart } */ },
   "note": "string"              // contributor message to moderators
 }
 ```
 `201` → `{ "id": "string", "status": "pending" }`.
 
-### Audio upload (for chart contributions)
-- `POST /contributions/audio` → `{ "uploadId": "string", "uploadUrl": "string" }`
-  (presigned PUT to S3-compatible storage). Client PUTs bytes, then references
-  `audioUploadId` in the contribution payload.
+> **Audio upload is struck.** An earlier draft specified
+> `POST /contributions/audio` returning a presigned PUT to S3-compatible
+> storage. [ADR-0002](../adr/0002-chart-data-only-no-audio-hosting.md) cut it:
+> the cost is not storage but moderation — a "community chart" is the obvious
+> route for laundering official audio, and the only defence is a human
+> reviewing every upload. No object storage enters the stack. Contributor
+> audio, if it ever returns, needs its own decision record.
 
 ### `GET /contributions?status=&mine=`  *(user sees own; moderator+ sees all)*
-List with `{ id, kind, sheetExpr, status, author, createdAt }[]`, paginated
-(`?page=&perPage=`, `X-Total-Count` header).
+List with `{ id, kind, sheetExpr, status, author, createdAt }[]`, paginated the
+same way as §1.2 — `?page=&pageSize=` with a `total` field in the envelope.
 
 ### `GET /contributions/{id}`
 Full record incl. `payload`, `diff`, review history.
@@ -266,12 +300,18 @@ Status enum: `pending | approved | rejected | merged`.
 ## 6. Conventions
 
 - **Errors** (non-2xx): `{ "error": "snake_case_code", "message": "human text" }`.
-- **Pagination**: `?page` (1-based) + `?perPage` (default 50, max 200);
-  `X-Total-Count` response header.
-- **Rate limits**: write endpoints (§5) limited per user; `429` +
-  `Retry-After`.
-- **CORS**: the Tauri client routes writes through `src-tauri` (reqwest) to hold
-  the token and dodge CORS; browser dev build needs `Access-Control-Allow-Origin`.
+  Exception: `GET /sheets/{songId}/chart` returns plain-text errors (§2).
+- **Pagination**: `?page` (1-based) + `?pageSize` (default 22, max 100). The
+  total is a `total` **field in the response body**, not an `X-Total-Count`
+  header — the only paginated endpoint (`GET /sheets/search`) returns an
+  envelope already, so a header would be a second place to look.
+- **Rate limits** *(phase 2)*: write endpoints (§5) limited per user; `429` +
+  `Retry-After`. Nothing is rate-limited today — all shipped endpoints are
+  public reads.
+- **CORS**: `CorsLayer::permissive()` in local dev. Production needs an origin
+  allowlist for the Pages deployment until the custom domain lands
+  ([ADR-0003](../adr/0003-web-pwa-drop-tauri.md)). There is no longer a native
+  proxy tier — the browser talks to this API directly.
 - **Versioning**: breaking changes → `/api/v2`. Additive fields are non-breaking;
   clients ignore unknowns (frontend already tolerates extra keys).
 
@@ -279,9 +319,9 @@ Status enum: `pending | approved | rejected | merged`.
 
 | Contract | Frontend touch-point |
 |----------|---------------------|
-| `GET /catalog` | `stores/data.ts:loadData`, tauri `data.rs:load_chart_data` (swap `data.json`) |
+| `GET /catalog` | `stores/data.ts:loadData` (replaced `data.json`) |
 | `hasChart` | `pages/songs.vue`, `pages/song.vue`, `MvSheetDialog.vue` (show visualize affordance) |
 | §2 chart | `pages/visualizer.vue`, `composables/useEngine.ts` (auto-load real charts) |
-| §3 sync | new `src-tauri` cache layer (tier 2) |
-| §4 auth | new login UI + `src-tauri` token store |
-| §5 contributions | new contribution UI (desktop and/or web — open question) |
+| §3 sync | IndexedDB catalog cache + manifest revision probe |
+| §4 auth *(phase 2)* | new login UI, token in browser storage |
+| §5 contributions *(phase 2)* | new contribution UI (web) |
