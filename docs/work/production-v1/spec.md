@@ -6,21 +6,11 @@ work more than the choices do.
 
 ## Product shape
 
-| Milestone | Contents |
-|---|---|
-| **v1.0** | Public web app, **browse-only**. Catalog, search, sheet details. Visualizer reachable on desktop browsers, gated off mobile. |
-| **v1.1** | Mobile visualizer, gated on the Bevy/WebView spike (issue 28). |
-| **Phase 2** (unscheduled) | Community charts, GitHub auth, contribution + moderation flow, contributor-supplied audio. |
+Milestones are defined in [`docs/ROADMAP.md`](../../ROADMAP.md). This feature
+delivers **v1.0**.
 
 **Explicitly out of v1**: audio hosting, auth, contributions, desktop app,
 local SQLite cache, Tauri (any target).
-
-### Why browse-only
-
-The catalog browser is the entire upstream arcade-songs product and is useful
-alone. The visualizer is the differentiator but Bevy has never been run in a
-mobile WebView — that is the single unproven assumption in the plan, so it does
-not gate the first release.
 
 ## Architecture
 
