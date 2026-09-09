@@ -275,7 +275,7 @@ git commit -m "docs: add ROADMAP as the single work index"
 
 Create `docs/architecture.md` with exactly this content:
 
-```markdown
+````markdown
 # Architecture
 
 How the pieces fit together. Decisions and their rationale live in [`adr/`](adr/);
@@ -369,7 +369,7 @@ See [ADR-0001](adr/0001-postgres-source-of-truth-for-charts.md) and
 `apps/host/src-tauri/` still exists and still proxies catalog fetches through
 Rust. It is deleted by `work/production-v1/issues/21-delete-tauri.md`. Until that
 lands, the desktop path bypasses HTTP caching entirely.
-```
+````
 
 - [ ] **Step 2: Verify every ADR link points at a file Task 4 will create**
 
@@ -558,7 +558,7 @@ git commit -m "docs: seed ADR trail for decisions 0001-0008"
 
 Create `docs/guides/local-setup.md`:
 
-```markdown
+````markdown
 # Get maiscope running locally
 
 ## Prerequisites
@@ -610,13 +610,13 @@ Set `VITE_API_BASE_URL` if the server is not at the default
 
 **`wasm-bindgen` schema error.** The CLI and crate versions differ. Check
 `engine/Cargo.toml` and install the matching CLI version.
-```
+````
 
 - [ ] **Step 2: Rewrite the README**
 
 Replace the entire contents of `README.md` with:
 
-```markdown
+````markdown
 # maiscope
 
 A song browser and real-time chart visualizer for **maimai** (SEGA's arcade
@@ -669,7 +669,7 @@ See [docs/guides/local-setup.md](docs/guides/local-setup.md).
 ## License
 
 MIT — see [LICENSE](./LICENSE).
-```
+````
 
 - [ ] **Step 3: Verify the README no longer enumerates work**
 
@@ -713,7 +713,7 @@ git commit -m "docs: rewrite README as an entry point, extract setup guide"
 
 Replace the entire contents of `CLAUDE.md` with:
 
-```markdown
+````markdown
 # CLAUDE.md
 
 Guidance for Claude Code when working in this repository.
@@ -783,7 +783,7 @@ exists.
 
 Six `#[sqlx::test]` handler tests live in `apps/server/src/main.rs`. `engine/` and
 `apps/host/` have no tests yet — growing that is tracked in
-[`docs/work/production-v1/`](../production-v1/) issues 26 and 27.
+[`docs/work/production-v1/`](docs/work/production-v1/) issues 26 and 27.
 
 ## Conventions
 
@@ -811,10 +811,10 @@ drained once per frame by `apply_commands`. Never call into Bevy synchronously.
 ## Agent skills
 
 **Issue tracker.** Work lives as markdown under `docs/work/<feature-slug>/`.
-See [`docs/agents/issue-tracker.md`](../../agents/issue-tracker.md).
+See [`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md).
 
-**Domain docs.** See [`docs/agents/domain.md`](../../agents/domain.md).
-```
+**Domain docs.** See [`docs/agents/domain.md`](docs/agents/domain.md).
+````
 
 - [ ] **Step 2: Verify every stale claim is gone**
 
