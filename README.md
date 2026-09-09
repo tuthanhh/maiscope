@@ -49,4 +49,6 @@ See [docs/guides/local-setup.md](docs/guides/local-setup.md).
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
+MIT — see [LICENSE](./LICENSE). Third-party licenses (including the upstream
+`zetaraku/arcade-songs` MIT notice this frontend is ported from) are in
+[LICENSE-THIRD-PARTY](./LICENSE-THIRD-PARTY).

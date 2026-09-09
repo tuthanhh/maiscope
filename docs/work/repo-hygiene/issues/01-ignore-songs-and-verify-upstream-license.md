@@ -10,13 +10,16 @@ does not satisfy.
 
 **Blocked by:** None — do this first.
 
-**Status:** todo
+**Status:** done
 
-- [ ] `songs/` added to `.gitignore` **pre-emptively** — the directory was deleted
+- [x] `songs/` added to `.gitignore` **pre-emptively** — the directory was deleted
       on 2026-09-09, but the same layout returns whenever a song pack is unpacked
       locally, and it must never be committed
-- [ ] Confirm nothing under `songs/` was ever committed (`git log --all -- songs/`)
-- [ ] Upstream `zetaraku/arcade-songs` license identified and recorded here
-- [ ] Whatever that license requires is satisfied — typically a `LICENSE-THIRD-PARTY`
-      or an upstream copyright notice block retained alongside the MIT `LICENSE`
-- [ ] README acknowledgment section kept, but no longer the *only* compliance mechanism
+- [x] Confirm nothing under `songs/` was ever committed (`git log --all -- songs/`) —
+      empty, clean
+- [x] Upstream `zetaraku/arcade-songs` license identified and recorded here — MIT,
+      copyright (c) 2022 Raku Zeta (via `gh api repos/zetaraku/arcade-songs/license`)
+- [x] Whatever that license requires is satisfied — added `LICENSE-THIRD-PARTY` at
+      repo root with the upstream copyright notice and full MIT text
+- [x] README acknowledgment section kept, but no longer the *only* compliance
+      mechanism — License section now links `LICENSE-THIRD-PARTY` alongside prose

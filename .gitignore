@@ -13,3 +13,6 @@ apps/server/.env
 
 # SDD scratch workspace (ledger, briefs, review packages)
 .superpowers/
+
+# A small sample of maimai songs for testing.
+songs/
