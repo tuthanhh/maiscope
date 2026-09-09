@@ -2,6 +2,7 @@
 
 **Status:** accepted
 **Date:** 2026-09-09
+**Amended by:** [ADR-0009](0009-umbrella-features-and-spec-timing.md)
 
 ## Context
 
