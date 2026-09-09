@@ -10,3 +10,6 @@ apps/server/.env
 
 # OS cruft
 .DS_Store
+
+# SDD scratch workspace (ledger, briefs, review packages)
+.superpowers/
