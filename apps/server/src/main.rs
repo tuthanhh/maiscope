@@ -1,4 +1,7 @@
+mod config;
+mod error;
 mod queries;
+mod state;
 mod types;
 
 use axum::{
@@ -8,6 +11,7 @@ use axum::{
     response::IntoResponse,
     routing::get,
 };
+use error::AppError;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sqlx::{Pool, Postgres};
@@ -65,14 +69,20 @@ struct ChartQuery {
 
 #[tokio::main]
 async fn main() {
+    if let Err(e) = run().await {
+        eprintln!("startup failed: {e}");
+        std::process::exit(1);
+    }
+}
+
+async fn run() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();
-    let url = std::env::var("DATABASE_URL").unwrap();
+    let config = config::Config::from_env()?;
 
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(4)
-        .connect(&url)
-        .await
-        .unwrap();
+        .connect(&config.database_url)
+        .await?;
 
     let app = Router::new()
         .nest(
@@ -89,35 +99,21 @@ async fn main() {
         )
         // Browser dev build (Vite) hits this cross-origin; Tauri routes through
         // src-tauri so it doesn't need CORS. Permissive is fine for local dev.
+        // TODO(06): swap for an allowlist built from config.cors_allowed_origins.
         .layer(CorsLayer::permissive())
         .with_state(pool);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
-        .await
-        .expect("failed to bind port 3000");
+    let addr = format!("0.0.0.0:{}", config.port);
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
 
-    println!("listening on {}", listener.local_addr().unwrap());
+    println!("listening on {}", listener.local_addr()?);
 
-    axum::serve(listener, app).await.expect("server crashed");
+    axum::serve(listener, app).await?;
+    Ok(())
 }
 
 async fn healthcheck() -> Json<Value> {
     Json(json!({ "status": "good" }))
-}
-
-// Maps any sqlx error to a 500 with the contract error shape.
-fn db_error(e: sqlx::Error) -> (StatusCode, Json<Value>) {
-    (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        Json(json!({ "error": "database_error", "message": e.to_string() })),
-    )
-}
-
-fn not_found(kind: &str, key: &str) -> (StatusCode, Json<Value>) {
-    (
-        StatusCode::NOT_FOUND,
-        Json(json!({ "error": "not_found", "message": format!("{kind} '{key}' not found") })),
-    )
 }
 
 // Query params for GET /sheets/search — mirrors apps/host/src/types/Filters.ts
@@ -168,7 +164,7 @@ fn default_search_page_size() -> i64 {
 async fn search_sheets(
     Query(q): Query<SheetSearchQuery>,
     State(pool): State<Pool<Postgres>>,
-) -> Result<Json<types::SheetSearchResponse>, (StatusCode, Json<Value>)> {
+) -> Result<Json<types::SheetSearchResponse>, AppError> {
     let params = queries::SheetSearchParams {
         title: q.title,
         match_exact_title: q.match_exact_title,
@@ -190,11 +186,14 @@ async fn search_sheets(
         page_size: q.page_size.clamp(1, 100),
     };
 
-    let (rows, total) = queries::search_sheets(&pool, &params).await.map_err(db_error)?;
+    let (rows, total) = queries::search_sheets(&pool, &params).await?;
 
     let sheets = rows
         .into_iter()
-        .map(|(song, sheet)| types::Sheet { song: song.into_meta(), sheet: sheet.into_meta() })
+        .map(|(song, sheet)| types::Sheet {
+            song: song.into_meta(),
+            sheet: sheet.into_meta(),
+        })
         .collect();
 
     Ok(Json(types::SheetSearchResponse { sheets, total }))
@@ -221,14 +220,13 @@ async fn catalog(
     Query(CatalogQuery { region }): Query<CatalogQuery>,
     headers: axum::http::HeaderMap,
     State(pool): State<Pool<Postgres>>,
-) -> Result<axum::response::Response, (StatusCode, Json<Value>)> {
+) -> Result<axum::response::Response, AppError> {
     let meta = sqlx::query!(
         r#"SELECT to_char(update_time, 'YYYY-MM-DD') AS "update_time!", revision AS "revision!"
            FROM catalog_meta LIMIT 1"#
     )
     .fetch_one(&pool)
-    .await
-    .map_err(db_error)?;
+    .await?;
     let etag = format!("\"{}\"", catalog_hash(meta.revision, &meta.update_time));
 
     if headers
@@ -239,10 +237,8 @@ async fn catalog(
         return Ok(StatusCode::NOT_MODIFIED.into_response());
     }
 
-    let song_rows = queries::fetch_all_songs(&pool).await.map_err(db_error)?;
-    let mut sheets_by_song = queries::fetch_all_sheets(&pool, region.as_deref())
-        .await
-        .map_err(db_error)?;
+    let song_rows = queries::fetch_all_songs(&pool).await?;
+    let mut sheets_by_song = queries::fetch_all_sheets(&pool, region.as_deref()).await?;
 
     let songs = song_rows
         .into_iter()
@@ -251,20 +247,25 @@ async fn catalog(
                 .remove(&row.id)
                 .unwrap_or_default()
                 .into_iter()
-                .map(|sheet_row| NestedSheet { sheet: sheet_row.into_meta() })
+                .map(|sheet_row| NestedSheet {
+                    sheet: sheet_row.into_meta(),
+                })
                 .collect();
-            Song { meta: row.into_meta(), sheets }
+            Song {
+                meta: row.into_meta(),
+                sheets,
+            }
         })
         .collect();
 
     let catalog = Catalog {
         songs,
-        categories: queries::fetch_categories(&pool).await.map_err(db_error)?,
-        versions: queries::fetch_versions(&pool).await.map_err(db_error)?,
-        types: queries::fetch_types(&pool).await.map_err(db_error)?,
-        difficulties: queries::fetch_difficulties(&pool).await.map_err(db_error)?,
-        regions: queries::fetch_regions(&pool).await.map_err(db_error)?,
-        update_time: queries::fetch_update_time(&pool).await.map_err(db_error)?,
+        categories: queries::fetch_categories(&pool).await?,
+        versions: queries::fetch_versions(&pool).await?,
+        types: queries::fetch_types(&pool).await?,
+        difficulties: queries::fetch_difficulties(&pool).await?,
+        regions: queries::fetch_regions(&pool).await?,
+        update_time: queries::fetch_update_time(&pool).await?,
     };
 
     Ok(([(axum::http::header::ETAG, etag)], Json(catalog)).into_response())
@@ -274,24 +275,27 @@ async fn catalog(
 async fn get_song(
     Path(id): Path<String>,
     State(pool): State<Pool<Postgres>>,
-) -> Result<Json<Song>, (StatusCode, Json<Value>)> {
-    let Some(song_row) = queries::fetch_song_by_song_id(&pool, &id)
-        .await
-        .map_err(db_error)?
-    else {
-        return Err(not_found("song", &id));
+) -> Result<Json<Song>, AppError> {
+    let Some(song_row) = queries::fetch_song_by_song_id(&pool, &id).await? else {
+        return Err(AppError::NotFound {
+            kind: "song",
+            key: id,
+        });
     };
 
-    let sheet_rows = queries::fetch_sheets_for_song(&pool, song_row.id)
-        .await
-        .map_err(db_error)?;
+    let sheet_rows = queries::fetch_sheets_for_song(&pool, song_row.id).await?;
 
     let sheets = sheet_rows
         .into_iter()
-        .map(|row| NestedSheet { sheet: row.into_meta() })
+        .map(|row| NestedSheet {
+            sheet: row.into_meta(),
+        })
         .collect();
 
-    Ok(Json(Song { meta: song_row.into_meta(), sheets }))
+    Ok(Json(Song {
+        meta: song_row.into_meta(),
+        sheets,
+    }))
 }
 
 // GET /sheets/{sheetExpr} — standalone Sheet, song fields flattened in
@@ -299,15 +303,19 @@ async fn get_song(
 async fn get_sheet(
     Path(sheet_expr): Path<String>,
     State(pool): State<Pool<Postgres>>,
-) -> Result<Json<types::Sheet>, (StatusCode, Json<Value>)> {
-    let Some((song_row, sheet_row)) = queries::fetch_sheet_by_expr(&pool, &sheet_expr)
-        .await
-        .map_err(db_error)?
+) -> Result<Json<types::Sheet>, AppError> {
+    let Some((song_row, sheet_row)) = queries::fetch_sheet_by_expr(&pool, &sheet_expr).await?
     else {
-        return Err(not_found("sheet", &sheet_expr));
+        return Err(AppError::NotFound {
+            kind: "sheet",
+            key: sheet_expr,
+        });
     };
 
-    Ok(Json(types::Sheet { song: song_row.into_meta(), sheet: sheet_row.into_meta() }))
+    Ok(Json(types::Sheet {
+        song: song_row.into_meta(),
+        sheet: sheet_row.into_meta(),
+    }))
 }
 
 // GET /sheets/{songId}/chart?type=dx&difficulty=master
@@ -348,31 +356,24 @@ async fn get_chart(
 }
 
 // GET /sync/manifest — cheap freshness probe (contract §3).
-async fn sync_manifest(
-    State(pool): State<Pool<Postgres>>,
-) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+async fn sync_manifest(State(pool): State<Pool<Postgres>>) -> Result<Json<Value>, AppError> {
     let row = sqlx::query!(
         r#"SELECT to_char(update_time, 'YYYY-MM-DD') AS "update_time!", revision AS "revision!"
            FROM catalog_meta LIMIT 1"#
     )
     .fetch_one(&pool)
-    .await
-    .map_err(db_error)?;
+    .await?;
 
     let song_count: i64 = sqlx::query_scalar!(r#"SELECT COUNT(*) AS "count!" FROM songs"#)
         .fetch_one(&pool)
-        .await
-        .map_err(db_error)?;
+        .await?;
     let sheet_count: i64 = sqlx::query_scalar!(r#"SELECT COUNT(*) AS "count!" FROM sheets"#)
         .fetch_one(&pool)
-        .await
-        .map_err(db_error)?;
-    let chart_count: i64 = sqlx::query_scalar!(
-        r#"SELECT COUNT(*) AS "count!" FROM charts WHERE content IS NOT NULL"#
-    )
-    .fetch_one(&pool)
-    .await
-    .map_err(db_error)?;
+        .await?;
+    let chart_count: i64 =
+        sqlx::query_scalar!(r#"SELECT COUNT(*) AS "count!" FROM charts WHERE content IS NOT NULL"#)
+            .fetch_one(&pool)
+            .await?;
 
     Ok(Json(json!({
         "updateTime": row.update_time,
@@ -396,19 +397,15 @@ struct DeltaQuery {
 async fn sync_delta(
     Query(q): Query<DeltaQuery>,
     State(pool): State<Pool<Postgres>>,
-) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+) -> Result<Json<Value>, AppError> {
     let last_full_reload: i64 = sqlx::query_scalar!(
         r#"SELECT last_full_reload_revision AS "v!" FROM catalog_meta LIMIT 1"#
     )
     .fetch_one(&pool)
-    .await
-    .map_err(db_error)?;
+    .await?;
 
     if q.since < last_full_reload {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({ "error": "snapshot_required" })),
-        ));
+        return Err(AppError::SnapshotRequired);
     }
 
     // A song counts as "changed" if it changed itself OR any of its sheets
@@ -421,8 +418,7 @@ async fn sync_delta(
         q.since
     )
     .fetch_all(&pool)
-    .await
-    .map_err(db_error)?;
+    .await?;
 
     let mut songs = Vec::with_capacity(changed_song_ids.len());
     for song_pk in changed_song_ids {
@@ -434,37 +430,37 @@ async fn sync_delta(
             song_pk
         )
         .fetch_one(&pool)
-        .await
-        .map_err(db_error)?;
-        let sheet_rows = queries::fetch_sheets_for_song(&pool, song_pk)
-            .await
-            .map_err(db_error)?;
+        .await?;
+        let sheet_rows = queries::fetch_sheets_for_song(&pool, song_pk).await?;
         let sheets = sheet_rows
             .into_iter()
-            .map(|r| NestedSheet { sheet: r.into_meta() })
+            .map(|r| NestedSheet {
+                sheet: r.into_meta(),
+            })
             .collect();
-        songs.push(Song { meta: song_row.into_meta(), sheets });
+        songs.push(Song {
+            meta: song_row.into_meta(),
+            sheets,
+        });
     }
 
-    let current_revision: i64 = sqlx::query_scalar!(r#"SELECT revision AS "v!" FROM catalog_meta LIMIT 1"#)
-        .fetch_one(&pool)
-        .await
-        .map_err(db_error)?;
+    let current_revision: i64 =
+        sqlx::query_scalar!(r#"SELECT revision AS "v!" FROM catalog_meta LIMIT 1"#)
+            .fetch_one(&pool)
+            .await?;
 
     let deleted_song_ids: Vec<String> = sqlx::query_scalar!(
         r#"SELECT song_id AS "v!" FROM deleted_songs WHERE revision > $1"#,
         q.since
     )
     .fetch_all(&pool)
-    .await
-    .map_err(db_error)?;
+    .await?;
     let deleted_sheet_exprs: Vec<String> = sqlx::query_scalar!(
         r#"SELECT sheet_expr AS "v!" FROM deleted_sheets WHERE revision > $1"#,
         q.since
     )
     .fetch_all(&pool)
-    .await
-    .map_err(db_error)?;
+    .await?;
 
     Ok(Json(json!({
         "revision": current_revision,
@@ -485,14 +481,17 @@ mod tests {
     ) -> sqlx::Result<()> {
         sqlx::query!(
             "INSERT INTO songs (song_id, title, source_index) VALUES ($1, $2, $3)",
-            "maimai_song", "Example Song", 0
+            "maimai_song",
+            "Example Song",
+            0
         )
         .execute(&pool)
         .await?;
         sqlx::query!(
             "INSERT INTO sheets (song_id_fk, sheet_expr, type, difficulty, source_index)
              SELECT id, $1, 'dx', 'master', 0 FROM songs WHERE song_id = $2",
-            "maimai_song|dx|master", "maimai_song"
+            "maimai_song|dx|master",
+            "maimai_song"
         )
         .execute(&pool)
         .await?;
@@ -502,7 +501,9 @@ mod tests {
         // No sheet_regions row for "kr" — sheet_a should be filtered out.
 
         let response = catalog(
-            AxumQuery(CatalogQuery { region: Some("kr".to_string()) }),
+            AxumQuery(CatalogQuery {
+                region: Some("kr".to_string()),
+            }),
             axum::http::HeaderMap::new(),
             AxumState(pool),
         )
@@ -530,19 +531,24 @@ mod tests {
     async fn get_song_returns_song_with_sheets(pool: sqlx::PgPool) -> sqlx::Result<()> {
         sqlx::query!(
             "INSERT INTO songs (song_id, title, source_index) VALUES ($1, $2, $3)",
-            "maimai_song", "Example Song", 0
+            "maimai_song",
+            "Example Song",
+            0
         )
         .execute(&pool)
         .await?;
         sqlx::query!(
             "INSERT INTO sheets (song_id_fk, sheet_expr, type, difficulty, source_index)
              SELECT id, $1, 'dx', 'master', 0 FROM songs WHERE song_id = $2",
-            "maimai_song|dx|master", "maimai_song"
+            "maimai_song|dx|master",
+            "maimai_song"
         )
         .execute(&pool)
         .await?;
 
-        let result = get_song(Path("maimai_song".to_string()), AxumState(pool)).await.unwrap();
+        let result = get_song(Path("maimai_song".to_string()), AxumState(pool))
+            .await
+            .unwrap();
 
         assert_eq!(result.0.sheets.len(), 1);
         Ok(())
@@ -559,14 +565,17 @@ mod tests {
     async fn get_sheet_flattens_song_and_sheet_fields(pool: sqlx::PgPool) -> sqlx::Result<()> {
         sqlx::query!(
             "INSERT INTO songs (song_id, title, source_index) VALUES ($1, $2, $3)",
-            "maimai_song", "Example Song", 0
+            "maimai_song",
+            "Example Song",
+            0
         )
         .execute(&pool)
         .await?;
         sqlx::query!(
             "INSERT INTO sheets (song_id_fk, sheet_expr, type, difficulty, source_index)
              SELECT id, $1, 'dx', 'master', 0 FROM songs WHERE song_id = $2",
-            "maimai_song|dx|master", "maimai_song"
+            "maimai_song|dx|master",
+            "maimai_song"
         )
         .execute(&pool)
         .await?;
@@ -581,26 +590,46 @@ mod tests {
     }
 
     #[sqlx::test]
-    async fn search_sheets_handler_returns_paginated_response(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    async fn search_sheets_handler_returns_paginated_response(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
         sqlx::query!(
             "INSERT INTO songs (song_id, title, source_index) VALUES ($1, $2, $3)",
-            "maimai_song", "Example Song", 0
+            "maimai_song",
+            "Example Song",
+            0
         )
-        .execute(&pool).await?;
+        .execute(&pool)
+        .await?;
         sqlx::query!(
             "INSERT INTO sheets (song_id_fk, sheet_expr, source_index)
              SELECT id, $1, 0 FROM songs WHERE song_id = $2",
-            "maimai_song|dx|master", "maimai_song"
+            "maimai_song|dx|master",
+            "maimai_song"
         )
-        .execute(&pool).await?;
+        .execute(&pool)
+        .await?;
 
         let result = search_sheets(
             AxumQuery(SheetSearchQuery {
-                title: None, match_exact_title: false, artist: None, match_exact_artist: false,
-                categories: vec![], versions: vec![], types: vec![], difficulties: vec![],
-                min_level_value: None, max_level_value: None, use_internal_level: false,
-                min_bpm: None, max_bpm: None, note_designers: vec![], region: None,
-                use_region_override: false, page: 1, page_size: 22,
+                title: None,
+                match_exact_title: false,
+                artist: None,
+                match_exact_artist: false,
+                categories: vec![],
+                versions: vec![],
+                types: vec![],
+                difficulties: vec![],
+                min_level_value: None,
+                max_level_value: None,
+                use_internal_level: false,
+                min_bpm: None,
+                max_bpm: None,
+                note_designers: vec![],
+                region: None,
+                use_region_override: false,
+                page: 1,
+                page_size: 22,
             }),
             AxumState(pool),
         )
