@@ -33,6 +33,7 @@ pub struct Config {
     pub cors_allowed_origins: Vec<String>,
     /// `tracing_subscriber::EnvFilter` directive string (ticket 05).
     pub log_filter: String,
+    pub log_json: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -120,6 +121,31 @@ fn parse_cors_origins(raw: String) -> Vec<String> {
         .collect()
 }
 
+/// Masks credentials in a `postgres://user:pass@host:port/db` URL for
+/// logging — never put the raw `database_url` in a log line. Malformed input
+/// (no `://`) is fully redacted rather than risk leaking something we didn't
+/// anticipate the shape of.
+pub(crate) fn redact_database_url(url: &str) -> String {
+    let Some((scheme, rest)) = url.split_once("://") else {
+        return "***".to_string();
+    };
+    match rest.split_once('@') {
+        Some((_credentials, host_and_db)) => format!("{scheme}://***@{host_and_db}"),
+        // No "@" means no embedded credentials — nothing to redact.
+        None => format!("{scheme}://{rest}"),
+    }
+}
+
+/// `None` (unset) defaults to `false` — pretty/human-readable, matching every
+/// other unset default in this file favoring easy local dev. Only `"true"`
+/// (case-insensitive) turns JSON on; anything else is `false`.
+fn parse_log_json(raw: Option<String>) -> bool {
+    match raw {
+        Some(raw) => raw.eq_ignore_ascii_case("true"),
+        None => false,
+    }
+}
+
 impl Config {
     /// Loads configuration from the process environment. Call once, in `main`,
     /// after `dotenvy::dotenv()`.
@@ -129,6 +155,7 @@ impl Config {
             parse_database_max_connections(optional("DATABASE_MAX_CONNECTIONS")?)?;
         let port = parse_port(optional("PORT")?)?;
         let log_filter = optional("RUST_LOG")?.unwrap_or_else(|| DEFAULT_LOG_FILTER.to_string());
+        let log_json = parse_log_json(optional("LOG_JSON")?);
         let cors_allowed_origins =
             parse_cors_origins(optional("CORS_ALLOWED_ORIGINS")?.unwrap_or_default());
 
@@ -138,6 +165,7 @@ impl Config {
             port,
             cors_allowed_origins,
             log_filter,
+            log_json,
         })
     }
 }
@@ -149,7 +177,9 @@ mod tests {
 
     #[test]
     fn missing_error_names_the_variable() {
-        let err = ConfigError::Missing { var: "DATABASE_URL" };
+        let err = ConfigError::Missing {
+            var: "DATABASE_URL",
+        };
         assert_eq!(err.to_string(), "DATABASE_URL is not set");
     }
 
@@ -172,6 +202,40 @@ mod tests {
         let err = parse_port(Some("not-a-port".to_string())).unwrap_err();
         assert!(matches!(err, ConfigError::Invalid { var: "PORT", .. }));
         assert!(err.to_string().contains("not a valid port number"));
+    }
+
+    #[test]
+    fn redact_database_url_masks_credentials() {
+        assert_eq!(
+            redact_database_url("postgres://user:secret@localhost:5432/maiscope"),
+            "postgres://***@localhost:5432/maiscope"
+        );
+    }
+
+    #[test]
+    fn redact_database_url_leaves_urls_without_credentials_alone() {
+        assert_eq!(
+            redact_database_url("postgres://localhost:5432/maiscope"),
+            "postgres://localhost:5432/maiscope"
+        );
+    }
+
+    #[test]
+    fn redact_database_url_fully_redacts_malformed_input() {
+        assert_eq!(redact_database_url("not-a-url"), "***");
+    }
+
+    #[test]
+    fn parse_log_json_defaults_to_false_when_unset() {
+        assert!(!parse_log_json(None));
+    }
+
+    #[test]
+    fn parse_log_json_true_only_for_true_case_insensitive() {
+        assert!(parse_log_json(Some("true".to_string())));
+        assert!(parse_log_json(Some("TRUE".to_string())));
+        assert!(!parse_log_json(Some("false".to_string())));
+        assert!(!parse_log_json(Some("yes".to_string())));
     }
 
     #[test]

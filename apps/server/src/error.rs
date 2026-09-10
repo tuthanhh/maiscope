@@ -14,7 +14,10 @@ pub enum AppError {
     /// Any sqlx failure. The client gets an opaque message; the real error
     /// is logged server-side and never put in the response body.
     Database(sqlx::Error),
-    NotFound { kind: &'static str, key: String },
+    NotFound {
+        kind: &'static str,
+        key: String,
+    },
     BadRequest(String),
     /// `/sync/delta`'s `since` predates the last full reload (contract §3).
     SnapshotRequired,
@@ -24,10 +27,7 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         match self {
             AppError::Database(e) => {
-                // TODO(05): replace with `tracing::error!` once the
-                // subscriber lands — this is the one place every sqlx
-                // failure passes through.
-                eprintln!("database error: {e}");
+                tracing::error!(error = %e, "database query failed");
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(json!({ "error": "database_error", "message": "internal error" })),
@@ -36,7 +36,9 @@ impl IntoResponse for AppError {
             }
             AppError::NotFound { kind, key } => (
                 StatusCode::NOT_FOUND,
-                Json(json!({ "error": "not_found", "message": format!("{kind} '{key}' not found") })),
+                Json(
+                    json!({ "error": "not_found", "message": format!("{kind} '{key}' not found") }),
+                ),
             )
                 .into_response(),
             AppError::BadRequest(message) => (
