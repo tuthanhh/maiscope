@@ -3,7 +3,7 @@
 //! Same upsert target as seed_chart, batched across every difficulty a
 //! maidata file provides.
 //!
-//!   cargo run --bin seed_songs [-- <path/to/songs-dir>]
+//!   cargo run --bin seed_songs [-- <path/to/songs-dir>] [--allow-unmatched]
 //!
 //! Matches each maidata's &title= against the catalog's songs.title (NFC-
 //! normalized, since upstream data can use a different but visually
@@ -12,12 +12,18 @@
 //! is a warning (song legitimately doesn't have that difficulty, or the
 //! catalog is stale) — except master/remaster, which are commonly and
 //! expectedly absent for many songs, so those are skipped silently.
+//!
+//! A title that matches no catalog song at all (upstream renamed it, most
+//! likely) exits non-zero unless --allow-unmatched is passed — this runs
+//! unattended in CI (prod-data-and-infra issue 04), where silent skips mean
+//! nobody finds out a chart quietly stopped loading.
 
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::{Path, PathBuf};
 
-use sqlx::PgPool;
+use server::chart_revision::apply_chart_revision;
+use sha2::{Digest, Sha256};
 use sqlx::postgres::PgPoolOptions;
 use unicode_normalization::UnicodeNormalization;
 
@@ -32,6 +38,10 @@ const SLOT_DIFFICULTIES: &[(&str, &str)] = &[
 
 fn nfc(s: &str) -> String {
     s.nfc().collect()
+}
+
+fn content_hash(content: &str) -> String {
+    format!("{:x}", Sha256::digest(content.as_bytes()))
 }
 
 /// Parse `&key=value` blocks. A value runs from its `&key=` line until the
@@ -72,9 +82,16 @@ struct SheetRef {
 async fn main() -> Result<(), Box<dyn Error>> {
     dotenvy::dotenv().ok();
 
-    let songs_dir: PathBuf = std::env::args()
-        .nth(1)
-        .map(PathBuf::from)
+    let mut allow_unmatched = false;
+    let mut songs_dir_arg: Option<PathBuf> = None;
+    for arg in std::env::args().skip(1) {
+        if arg == "--allow-unmatched" {
+            allow_unmatched = true;
+        } else {
+            songs_dir_arg = Some(PathBuf::from(arg));
+        }
+    }
+    let songs_dir = songs_dir_arg
         .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../songs"));
 
     let pool = PgPoolOptions::new()
@@ -94,6 +111,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut seeded = 0usize;
     let mut warnings = 0usize;
     let mut skipped_songs = 0usize;
+    let mut unmatched_titles: Vec<String> = Vec::new();
 
     let mut entries: Vec<PathBuf> = std::fs::read_dir(&songs_dir)
         .map_err(|e| format!("reading songs dir '{}': {e}", songs_dir.display()))?
@@ -117,6 +135,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         let Some(&song_id) = song_by_title.get(&nfc(title)) else {
             eprintln!("warning: {dir_name}: no catalog song matches title '{title}', skipping");
+            unmatched_titles.push(format!("{dir_name}: '{title}'"));
             skipped_songs += 1;
             continue;
         };
@@ -146,28 +165,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 continue;
             };
 
-            upsert_chart(&pool, sheet.id, &sheet.sheet_expr, inote).await?;
+            let hash = content_hash(inote);
+            let mut tx = pool.begin().await?;
+            apply_chart_revision(&mut tx, sheet.id, &sheet.sheet_expr, "maimai-simai", inote, &hash).await?;
+            tx.commit().await?;
             seeded += 1;
         }
     }
 
     println!("seeded {seeded} sheets, {warnings} warnings, {skipped_songs} songs skipped entirely");
-    Ok(())
-}
 
-async fn upsert_chart(pool: &PgPool, sheet_id: i64, sheet_expr: &str, content: &str) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "INSERT INTO charts (sheet_id, sheet_expr, format, content, approved_at) \
-         VALUES ($1, $2, 'maimai-simai', $3, now()) \
-         ON CONFLICT (sheet_id, format) DO UPDATE \
-           SET content = EXCLUDED.content, \
-               version = charts.version + 1, \
-               updated_at = now()",
-    )
-    .bind(sheet_id)
-    .bind(sheet_expr)
-    .bind(content)
-    .execute(pool)
-    .await?;
+    if !unmatched_titles.is_empty() {
+        eprintln!("\nunmatched titles ({}):", unmatched_titles.len());
+        for t in &unmatched_titles {
+            eprintln!("  - {t}");
+        }
+        if !allow_unmatched {
+            std::process::exit(1);
+        }
+    }
+
     Ok(())
 }

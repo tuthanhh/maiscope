@@ -31,7 +31,7 @@ contributor-supplied audio. Unscheduled.
 |---|---|---|
 | [production-v1](work/production-v1/spec.md) — umbrella | active | v1.0 |
 | ├ [repo-hygiene](work/repo-hygiene/spec.md) | planned | v1.0 |
-| ├ [server-restructure](work/server-restructure/spec.md) | planned | v1.0 |
+| ├ [server-restructure](work/server-restructure/spec.md) | shipped | v1.0 |
 | ├ [build-and-deploy](work/build-and-deploy/spec.md) | planned | v1.0 |
 | ├ [prod-data-and-infra](work/prod-data-and-infra/spec.md) | planned | v1.0 |
 | ├ [web-delivery](work/web-delivery/spec.md) | planned | v1.0 |
