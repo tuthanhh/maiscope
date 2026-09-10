@@ -308,10 +308,13 @@ Status enum: `pending | approved | rejected | merged`.
 - **Rate limits** *(phase 2)*: write endpoints (§5) limited per user; `429` +
   `Retry-After`. Nothing is rate-limited today — all shipped endpoints are
   public reads.
-- **CORS**: `CorsLayer::permissive()` in local dev. Production needs an origin
-  allowlist for the Pages deployment until the custom domain lands
-  ([ADR-0003](../adr/0003-web-pwa-drop-tauri.md)). There is no longer a native
-  proxy tier — the browser talks to this API directly.
+- **CORS**: allowlist built from `CORS_ALLOWED_ORIGINS` (`Config`, `server-restructure`
+  issue 06) — no origin configured means no origin allowed, not a permissive
+  fallback. Local dev sets it to the Vite dev origin (`.env.example`).
+  Egress control, not a security control: `curl` ignores CORS entirely, so
+  it doesn't gate access to public read-only data — the real cap on abuse is
+  `server-restructure` issue 08's rate limiting. There is no native proxy
+  tier — the browser talks to this API directly.
 - **Versioning**: breaking changes → `/api/v2`. Additive fields are non-breaking;
   clients ignore unknowns (frontend already tolerates extra keys).
 

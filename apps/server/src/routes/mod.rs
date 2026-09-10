@@ -6,6 +6,7 @@ mod songs;
 mod sync;
 
 use axum::Router;
+use axum::http::{HeaderValue, Method};
 use tower_http::cors::CorsLayer;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use tracing::Level;
@@ -13,6 +14,17 @@ use tracing::Level;
 use crate::state::AppState;
 
 pub fn router(state: AppState) -> Router {
+    // Unparseable entries are dropped, not a startup error: a CORS
+    // misconfiguration here is an availability nuisance for that one origin,
+    // not a security hole (curl ignores CORS entirely, so this layer never
+    // gates access to the data itself).
+    let cors_origins: Vec<HeaderValue> = state
+        .config
+        .cors_allowed_origins
+        .iter()
+        .filter_map(|origin| origin.parse().ok())
+        .collect();
+
     Router::new()
         .nest(
             "/api/v1",
@@ -35,9 +47,14 @@ pub fn router(state: AppState) -> Router {
                 .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
                 .on_response(DefaultOnResponse::new().level(Level::INFO)),
         )
-        // Browser dev build (Vite) hits this cross-origin; Tauri routes through
-        // src-tauri so it doesn't need CORS. Permissive is fine for local dev.
-        // TODO(06): swap for an allowlist built from config.cors_allowed_origins.
-        .layer(CorsLayer::permissive())
+        .layer(tower_http::compression::CompressionLayer::new())
+        // CORS here is an egress control, not a security control — curl
+        // ignores it entirely. The real cap on abuse is ticket 08's rate
+        // limiting.
+        .layer(
+            CorsLayer::new()
+                .allow_origin(cors_origins)
+                .allow_methods([Method::GET]),
+        )
         .with_state(state)
 }
