@@ -1,6 +1,7 @@
 use axum::{
     Json, Router,
     extract::{Query, State},
+    response::IntoResponse,
     routing::get,
 };
 use serde::Deserialize;
@@ -20,13 +21,25 @@ pub fn router() -> Router<AppState> {
 }
 
 // GET /sync/manifest — cheap freshness probe (contract §3).
-async fn sync_manifest(State(pool): State<Pool<Postgres>>) -> Result<Json<Value>, AppError> {
+async fn sync_manifest(
+    headers: axum::http::HeaderMap,
+    State(pool): State<Pool<Postgres>>,
+) -> Result<axum::response::Response, AppError> {
     let row = sqlx::query!(
         r#"SELECT to_char(update_time, 'YYYY-MM-DD') AS "update_time!", revision AS "revision!"
            FROM catalog_meta LIMIT 1"#
     )
     .fetch_one(&pool)
     .await?;
+    let etag = format!("\"{}\"", catalog_hash(row.revision, &row.update_time));
+
+    if headers
+        .get(axum::http::header::IF_NONE_MATCH)
+        .and_then(|v| v.to_str().ok())
+        == Some(etag.as_str())
+    {
+        return Ok(axum::http::StatusCode::NOT_MODIFIED.into_response());
+    }
 
     let song_count: i64 = sqlx::query_scalar!(r#"SELECT COUNT(*) AS "count!" FROM songs"#)
         .fetch_one(&pool)
@@ -39,12 +52,19 @@ async fn sync_manifest(State(pool): State<Pool<Postgres>>) -> Result<Json<Value>
             .fetch_one(&pool)
             .await?;
 
-    Ok(Json(json!({
-        "updateTime": row.update_time,
-        "revision": row.revision,
-        "catalogHash": catalog_hash(row.revision, &row.update_time),
-        "counts": { "songs": song_count, "sheets": sheet_count, "charts": chart_count }
-    })))
+    Ok((
+        [
+            (axum::http::header::ETAG, etag),
+            (axum::http::header::CACHE_CONTROL, String::from("no-cache")),
+        ],
+        Json(json!({
+            "updateTime": row.update_time,
+            "revision": row.revision,
+            "catalogHash": catalog_hash(row.revision, &row.update_time),
+            "counts": { "songs": song_count, "sheets": sheet_count, "charts": chart_count }
+        })),
+    )
+        .into_response())
 }
 
 // Query params for GET /sync/delta?since={revision} (contract §3).

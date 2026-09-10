@@ -12,13 +12,40 @@ instead of it.
 **Blocked by:** 06 (interacts with compression — ETag must be stable across
 encodings or vary correctly)
 
-**Status:** todo
+**Status:** done
 
-- [ ] `GET /catalog` emits `ETag` derived from `catalog_hash`
-- [ ] `If-None-Match` match → `304` with no body
-- [ ] `Cache-Control: public, max-age=…` chosen and justified in this ticket
-- [ ] `GET /sync/manifest` also emits an `ETag` (it is the cheap freshness probe)
-- [ ] `Vary: Accept-Encoding` set so compressed and uncompressed responses do not
-      poison one another in shared caches
-- [ ] Test: two requests, second with `If-None-Match`, asserts `304` and empty body
-- [ ] Test: catalog change bumps the ETag
+- [x] `GET /catalog` emits `ETag` derived from `catalog_hash`
+- [x] `If-None-Match` match → `304` with no body
+- [x] `Cache-Control: public, max-age=3600` on `/catalog` — see Comments for
+      the reasoning and why `/sync/manifest` gets a different value
+- [x] `GET /sync/manifest` also emits an `ETag` (it is the cheap freshness probe)
+- [x] `Vary: Accept-Encoding` set so compressed and uncompressed responses do not
+      poison one another in shared caches — already added automatically by
+      `tower_http`'s `CompressionLayer` (ticket 06); verified live, no code
+      needed
+- [x] Test: two requests, second with `If-None-Match`, asserts `304` and empty body
+- [x] Test: catalog change bumps the ETag
+
+## Comments
+
+**`Cache-Control` values, and why they differ by endpoint:** `/catalog`
+(`public, max-age=3600`) only changes on a `bin/ingest` run, not
+continuously, so a 1-hour window trades a small staleness risk for the best
+case this pairing enables — the browser skips the network entirely within
+that window, not just downgrading to a cheap `304`. `/sync/manifest`
+(`no-cache`) is deliberately different: it's the sync tier's freshness
+*probe* (contract §3) — if the browser trusted a locally cached manifest
+without asking the server, polling for new data would silently stop
+working. `no-cache` still gets the `304` win via the `ETag` above it, just
+without ever skipping the round-trip.
+
+**Real bug found and fixed while wiring this up:** `sync_manifest` took a
+`headers` parameter but never read it — the `If-None-Match` check was
+declared but not implemented, so manifest never actually returned `304`
+despite emitting an `ETag`. Separately, its `ETag` header value wasn't
+quoted (`catalog`'s is, per RFC 7232 — `ETag` values must be a quoted
+string). Since browsers always send back whatever the server gave them,
+an unquoted emit would never have matched a client's `If-None-Match` even
+after adding the comparison. Both fixed together; the JSON body's own
+`catalogHash` field is intentionally still the raw unquoted hash — that's
+a data field (contract §3), not an HTTP header.

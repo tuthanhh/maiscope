@@ -87,7 +87,17 @@ async fn catalog(
         update_time: queries::fetch_update_time(&pool).await?,
     };
 
-    Ok(([(axum::http::header::ETAG, etag)], Json(catalog)).into_response())
+    Ok((
+        [
+            (axum::http::header::ETAG, etag),
+            (
+                axum::http::header::CACHE_CONTROL,
+                String::from("public, max-age=3600"),
+            ),
+        ],
+        Json(catalog),
+    )
+        .into_response())
 }
 
 #[cfg(test)]
@@ -138,6 +148,96 @@ mod tests {
 
         assert_eq!(json["songs"].as_array().unwrap().len(), 1);
         assert_eq!(json["songs"][0]["sheets"].as_array().unwrap().len(), 0);
+        Ok(())
+    }
+
+    async fn seed_minimal_catalog(pool: &sqlx::PgPool) {
+        sqlx::query!(
+            "INSERT INTO songs (song_id, title, source_index) VALUES ($1, $2, $3)",
+            "maimai_song",
+            "Example Song",
+            0
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query!("INSERT INTO catalog_meta (id, update_time) VALUES (true, now())")
+            .execute(pool)
+            .await
+            .unwrap();
+    }
+
+    #[sqlx::test]
+    async fn catalog_returns_304_when_if_none_match_matches(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        seed_minimal_catalog(&pool).await;
+
+        let first = catalog(
+            AxumQuery(CatalogQuery { region: None }),
+            axum::http::HeaderMap::new(),
+            AxumState(pool.clone()),
+        )
+        .await
+        .unwrap();
+        let etag = first
+            .headers()
+            .get(axum::http::header::ETAG)
+            .unwrap()
+            .clone();
+
+        let mut conditional_headers = axum::http::HeaderMap::new();
+        conditional_headers.insert(axum::http::header::IF_NONE_MATCH, etag);
+
+        let second = catalog(
+            AxumQuery(CatalogQuery { region: None }),
+            conditional_headers,
+            AxumState(pool),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(second.status(), StatusCode::NOT_MODIFIED);
+        let body = axum::body::to_bytes(second.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert!(body.is_empty());
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn catalog_etag_changes_when_catalog_meta_changes(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        seed_minimal_catalog(&pool).await;
+
+        let first = catalog(
+            AxumQuery(CatalogQuery { region: None }),
+            axum::http::HeaderMap::new(),
+            AxumState(pool.clone()),
+        )
+        .await
+        .unwrap();
+        let etag_before = first
+            .headers()
+            .get(axum::http::header::ETAG)
+            .unwrap()
+            .clone();
+
+        sqlx::query!("UPDATE catalog_meta SET revision = revision + 1")
+            .execute(&pool)
+            .await?;
+
+        let second = catalog(
+            AxumQuery(CatalogQuery { region: None }),
+            axum::http::HeaderMap::new(),
+            AxumState(pool),
+        )
+        .await
+        .unwrap();
+        let etag_after = second
+            .headers()
+            .get(axum::http::header::ETAG)
+            .unwrap()
+            .clone();
+
+        assert_ne!(etag_before, etag_after);
         Ok(())
     }
 }

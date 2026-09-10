@@ -64,10 +64,11 @@ Response `200`:
 
 Headers: `ETag: "<sha256(revision:updateTime)>"` — the same value
 `GET /sync/manifest` reports as `catalogHash` (§3). A matching `If-None-Match`
-returns `304 Not Modified` with an empty body.
-
-No `Cache-Control` is sent yet; edge caching is a deployment concern, not a
-contract one.
+returns `304 Not Modified` with an empty body. `Cache-Control: public,
+max-age=3600` — the catalog only changes on a `bin/ingest` run, so an hour
+of unconditional client-side caching trades a small staleness window for
+skipping the network round-trip entirely within it (`server-restructure`
+issue 07).
 
 ### 1.1 `Song` / `Sheet` payload shape
 
@@ -210,6 +211,11 @@ Cheap freshness probe.
   "counts": { "songs": 0, "sheets": 0, "charts": 0 }
 }
 ```
+Headers: same `ETag`/`If-None-Match`/`304` pairing as `GET /catalog` (§1), but
+`Cache-Control: no-cache` instead of a `max-age` — this endpoint's whole job
+is telling the client whether the catalog changed, so it always revalidates
+against the server rather than trusting a local cache blindly. The `304`
+still saves the round-trip cost of a full body.
 
 ### `GET /sync/delta?since={revision}`
 Rows changed since `revision`. `tombstones` carry deletions.
