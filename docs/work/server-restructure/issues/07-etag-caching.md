@@ -49,3 +49,24 @@ an unquoted emit would never have matched a client's `If-None-Match` even
 after adding the comparison. Both fixed together; the JSON body's own
 `catalogHash` field is intentionally still the raw unquoted hash — that's
 a data field (contract §3), not an HTTP header.
+
+## Follow-up review (correction)
+
+**The `304`s shipped bare.** Both handlers returned
+`StatusCode::NOT_MODIFIED.into_response()` with no headers at all. RFC 7232
+§4.1 requires a `304` to repeat the validators the `200` would have sent,
+because that is how the client refreshes the freshness of the copy it
+already holds — without a `Cache-Control` on the `304`, the stored catalog
+expires again immediately and the very next visit revalidates too, which
+gives back most of the `max-age=3600` this ticket was for.
+
+Both now send `ETag` + `Cache-Control` on the `304`, pinned by
+`catalog_304_repeats_the_etag_and_cache_control` and
+`manifest_304_repeats_the_etag_and_revalidates`.
+
+The duplicated preamble the two handlers shared — same `catalog_meta`
+query, same `format!("\"{}\"")`, same `If-None-Match` compare — moved to
+`routes/caching.rs` (`Freshness::load` / `is_current_for` / `not_modified`,
+plus the two `Cache-Control` constants). `catalog_hash` moved there from
+`routes/catalog.rs`; `routes/sync.rs` no longer reaches across into the
+catalog module for it.

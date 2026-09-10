@@ -24,6 +24,10 @@ pub enum AppError {
     /// Per-IP rate limit tripped (ticket 08). `retry_after_secs` comes from
     /// `tower_governor`'s own wait-time calculation.
     RateLimited { retry_after_secs: u64 },
+    /// A server-side failure that isn't a database error — currently only the
+    /// rate limiter's unreachable key-extraction arm. The `&'static str` names
+    /// the origin for the log line; the client never sees it.
+    Internal(&'static str),
 }
 
 impl IntoResponse for AppError {
@@ -54,6 +58,14 @@ impl IntoResponse for AppError {
                 Json(json!({ "error": "snapshot_required" })),
             )
                 .into_response(),
+            AppError::Internal(context) => {
+                tracing::error!(context, "internal error");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "error": "internal_error", "message": "internal error" })),
+                )
+                    .into_response()
+            }
             AppError::RateLimited { retry_after_secs } => (
                 StatusCode::TOO_MANY_REQUESTS,
                 [(axum::http::header::RETRY_AFTER, retry_after_secs.to_string())],
@@ -91,6 +103,18 @@ mod tests {
         assert_eq!(
             body_json(response).await,
             json!({ "error": "database_error", "message": "internal error" })
+        );
+    }
+
+    #[tokio::test]
+    async fn internal_hides_its_context_from_the_client() {
+        let response = AppError::Internal("rate limiter failed").into_response();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        // Same policy as Database: the context is for the operator's logs,
+        // the client gets an opaque body in the standard error shape.
+        assert_eq!(
+            body_json(response).await,
+            json!({ "error": "internal_error", "message": "internal error" })
         );
     }
 

@@ -9,21 +9,25 @@
 //! normalized, since upstream data can use a different but visually
 //! identical Unicode form — e.g. U+212B ANGSTROM SIGN vs U+00C5 Å). A
 //! difficulty present in the maidata with no matching sheet in the catalog
-//! is a warning (song legitimately doesn't have that difficulty, or the
+//! is reported (song legitimately doesn't have that difficulty, or the
 //! catalog is stale) — except master/remaster, which are commonly and
 //! expectedly absent for many songs, so those are skipped silently.
 //!
-//! A title that matches no catalog song at all (upstream renamed it, most
-//! likely) exits non-zero unless --allow-unmatched is passed — this runs
-//! unattended in CI (prod-data-and-infra issue 04), where silent skips mean
-//! nobody finds out a chart quietly stopped loading.
+//! Anything that fails to match — a title matching no catalog song at all
+//! (upstream renamed it, most likely) or a non-master difficulty with no
+//! matching sheet — exits non-zero unless --allow-unmatched is passed. This
+//! runs unattended in CI (prod-data-and-infra issue 04), where silent skips
+//! mean nobody finds out a chart quietly stopped loading.
+//!
+//! Re-running is safe and cheap: identical chart text is a no-op that writes
+//! nothing and does not bump the revision, and is reported separately from
+//! sheets actually seeded.
 
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::{Path, PathBuf};
 
-use server::chart_revision::apply_chart_revision;
-use sha2::{Digest, Sha256};
+use server::chart_revision::{ChartRevisionOutcome, apply_chart_revision};
 use sqlx::postgres::PgPoolOptions;
 use unicode_normalization::UnicodeNormalization;
 
@@ -40,8 +44,16 @@ fn nfc(s: &str) -> String {
     s.nfc().collect()
 }
 
-fn content_hash(content: &str) -> String {
-    format!("{:x}", Sha256::digest(content.as_bytes()))
+/// Anything that failed to match is a chart that has quietly stopped
+/// loading — a renamed title and a missing difficulty are the same failure
+/// seen at two granularities, so both fail the run. `--allow-unmatched`
+/// is the single escape hatch for a knowingly-stale catalog.
+fn exit_code(unmatched_titles: usize, unmatched_difficulties: usize, allow_unmatched: bool) -> i32 {
+    if allow_unmatched || unmatched_titles + unmatched_difficulties == 0 {
+        0
+    } else {
+        1
+    }
 }
 
 /// Parse `&key=value` blocks. A value runs from its `&key=` line until the
@@ -108,10 +120,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
         song_by_title.insert(nfc(&title), id);
     }
 
-    let mut seeded = 0usize;
-    let mut warnings = 0usize;
+    // `applied` counts real writes only. Counting attempts instead makes a
+    // re-seed of unchanged data report the same number as the first run,
+    // which is precisely the log line CI reads to tell whether anything
+    // happened.
+    let mut applied = 0usize;
+    let mut unchanged = 0usize;
     let mut skipped_songs = 0usize;
     let mut unmatched_titles: Vec<String> = Vec::new();
+    let mut unmatched_difficulties: Vec<String> = Vec::new();
 
     let mut entries: Vec<PathBuf> = std::fs::read_dir(&songs_dir)
         .map_err(|e| format!("reading songs dir '{}': {e}", songs_dir.display()))?
@@ -160,30 +177,81 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     eprintln!(
                         "warning: {dir_name}: maidata has '{difficulty}' but no matching sheet in the catalog"
                     );
-                    warnings += 1;
+                    unmatched_difficulties.push(format!("{dir_name}: '{difficulty}'"));
                 }
                 continue;
             };
 
-            let hash = content_hash(inote);
             let mut tx = pool.begin().await?;
-            apply_chart_revision(&mut tx, sheet.id, &sheet.sheet_expr, "maimai-simai", inote, &hash).await?;
+            let outcome =
+                apply_chart_revision(&mut tx, sheet.id, &sheet.sheet_expr, "maimai-simai", inote)
+                    .await?;
             tx.commit().await?;
-            seeded += 1;
+            match outcome {
+                ChartRevisionOutcome::Applied => applied += 1,
+                ChartRevisionOutcome::Unchanged => unchanged += 1,
+            }
         }
     }
 
-    println!("seeded {seeded} sheets, {warnings} warnings, {skipped_songs} songs skipped entirely");
+    println!(
+        "seeded {applied} sheets ({unchanged} already up to date), \
+         {} unmatched difficulties, {} unmatched titles, {skipped_songs} songs skipped entirely",
+        unmatched_difficulties.len(),
+        unmatched_titles.len()
+    );
 
-    if !unmatched_titles.is_empty() {
-        eprintln!("\nunmatched titles ({}):", unmatched_titles.len());
-        for t in &unmatched_titles {
-            eprintln!("  - {t}");
-        }
-        if !allow_unmatched {
-            std::process::exit(1);
-        }
+    report("unmatched titles", &unmatched_titles);
+    report("unmatched difficulties", &unmatched_difficulties);
+
+    let code = exit_code(
+        unmatched_titles.len(),
+        unmatched_difficulties.len(),
+        allow_unmatched,
+    );
+    if code != 0 {
+        eprintln!("\nre-run with --allow-unmatched to accept these and exit 0");
+        std::process::exit(code);
     }
 
     Ok(())
+}
+
+fn report(label: &str, entries: &[String]) {
+    if entries.is_empty() {
+        return;
+    }
+    eprintln!("\n{label} ({}):", entries.len());
+    for entry in entries {
+        eprintln!("  - {entry}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_clean_run_exits_zero() {
+        assert_eq!(exit_code(0, 0, false), 0);
+    }
+
+    #[test]
+    fn an_unmatched_title_fails_the_run() {
+        assert_eq!(exit_code(1, 0, false), 1);
+    }
+
+    // The regression ticket 09 exists for: a difficulty present in the
+    // maidata with no catalog sheet is a chart that quietly stopped
+    // loading, exactly like a renamed title. Warning and exiting 0 means
+    // an unattended CI run stays green while charts go missing.
+    #[test]
+    fn an_unmatched_difficulty_fails_the_run_too() {
+        assert_eq!(exit_code(0, 1, false), 1);
+    }
+
+    #[test]
+    fn allow_unmatched_downgrades_both_to_warnings() {
+        assert_eq!(exit_code(3, 2, true), 0);
+    }
 }

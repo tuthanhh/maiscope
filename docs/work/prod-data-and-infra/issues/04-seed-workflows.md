@@ -25,6 +25,13 @@ and bumps `last_full_reload_revision`, which invalidates every client's delta sy
       that it truncates and invalidates delta sync.
 - [ ] Both use the lower-privilege Neon role (issue 01), not owner
 - [ ] Both take a `pg_dump` first (issue 05) and upload it as a run artifact
-- [ ] `seed-charts` fails the run on unmatched titles (`server-restructure` issue 09)
-- [ ] Run summary posts counts: seeded / skipped / unmatched
+- [ ] `seed-charts` fails the run on anything unmatched — both titles and
+      difficulties (`server-restructure` issue 09). This is the default: just
+      don't pass `--allow-unmatched`, which is the only way to get exit `0`
+      with unmatched entries.
+- [ ] Run summary posts counts: seeded / already-up-to-date / unmatched
+      difficulties / unmatched titles / skipped. Note `seeded` counts real
+      writes only — a re-run over unchanged chart text reports `seeded 0` with
+      everything under already-up-to-date, so a `0` here is normal, not a
+      failure signal.
 - [ ] Neither workflow can be triggered by a push or a merge

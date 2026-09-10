@@ -6,12 +6,10 @@ use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 
 use axum::extract::ConnectInfo;
-use axum::http::{Request, StatusCode};
+use axum::http::{HeaderMap, Request};
 use axum::response::IntoResponse;
-use axum::{Json, http::HeaderMap};
 use governor::middleware::NoOpMiddleware;
-use serde_json::json;
-use tower_governor::governor::{GovernorConfigBuilder, GovernorConfig};
+use tower_governor::governor::{GovernorConfig, GovernorConfigBuilder, SharedRateLimiter};
 use tower_governor::key_extractor::KeyExtractor;
 use tower_governor::{GovernorError, GovernorLayer};
 
@@ -71,13 +69,36 @@ fn peer_addr<T>(req: &Request<T>) -> Option<IpAddr> {
         .map(|info| info.0.ip())
 }
 
-/// Builds the rate-limit layer. `burst_size`/`period` are parameters (not
-/// hardcoded) so tests can use a tiny quota instead of the production
-/// numbers — see `routes::router` for those and the reasoning behind them.
+/// Periodically drops keyed state that has returned to a fresh quota, so the
+/// limiter's per-IP map stays proportional to *active* clients rather than to
+/// every IP ever seen. `governor` does no such collection itself — without
+/// this the map only grows, and varying the `Fly-Client-IP` header is enough
+/// to grow it on purpose.
+pub(crate) fn spawn_reaper(
+    limiter: SharedRateLimiter<IpAddr, NoOpMiddleware>,
+    every: Duration,
+) {
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(every).await;
+            limiter.retain_recent();
+            tracing::debug!(tracked_ips = limiter.len(), "reaped rate-limit state");
+        }
+    });
+}
+
+/// Builds the rate-limit layer and hands back the limiter behind it, which
+/// the caller passes to [`spawn_reaper`] — the layer alone would leave that
+/// state uncollected. `burst_size`/`period` are parameters (not hardcoded)
+/// so tests can use a tiny quota instead of the production numbers — see
+/// `routes::router` for those and the reasoning behind them.
 pub(crate) fn layer(
     burst_size: u32,
     period: Duration,
-) -> GovernorLayer<FlyClientIpKeyExtractor, NoOpMiddleware, axum::body::Body> {
+) -> (
+    GovernorLayer<FlyClientIpKeyExtractor, NoOpMiddleware, axum::body::Body>,
+    SharedRateLimiter<IpAddr, NoOpMiddleware>,
+) {
     let config: GovernorConfig<_, _> = GovernorConfigBuilder::default()
         .key_extractor(FlyClientIpKeyExtractor)
         .period(period)
@@ -85,21 +106,30 @@ pub(crate) fn layer(
         .finish()
         .expect("burst_size and period are both non-zero by construction");
 
-    GovernorLayer::new(config).error_handler(|error| match error {
+    // Cloned before `config` is moved into the layer — this Arc is the only
+    // remaining way to reach the keyed state afterwards.
+    let limiter = config.limiter().clone();
+
+    let layer = GovernorLayer::new(config).error_handler(|error| match error {
+        // tower_governor reports its wait time via `Duration::as_secs()`,
+        // which truncates. At RATE_LIMIT_PERIOD (1s) the real wait is always
+        // sub-second, so the raw value is 0 — a `Retry-After: 0` telling a
+        // throttled client to retry immediately, which is worse than sending
+        // nothing. Round up to the next whole second.
         GovernorError::TooManyRequests { wait_time, .. } => AppError::RateLimited {
-            retry_after_secs: wait_time,
+            retry_after_secs: wait_time.max(1),
         }
         .into_response(),
         // Only reachable if FlyClientIpKeyExtractor itself fails, which it
         // never does in practice — it always falls back to the peer address,
         // and main.rs wires ConnectInfo so that's always available. Kept as
         // a safety net, not a path real traffic should hit.
-        GovernorError::UnableToExtractKey | GovernorError::Other { .. } => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": "internal_error", "message": "rate limiter failed" })),
-        )
-            .into_response(),
-    })
+        GovernorError::UnableToExtractKey | GovernorError::Other { .. } => {
+            AppError::Internal("rate limiter failed").into_response()
+        }
+    });
+
+    (layer, limiter)
 }
 
 #[cfg(test)]
@@ -107,6 +137,7 @@ mod tests {
     use super::*;
     use axum::Router;
     use axum::body::Body;
+    use axum::http::StatusCode;
     use axum::routing::get;
     use tower::ServiceExt;
 
@@ -166,6 +197,74 @@ mod tests {
         ));
     }
 
+    // Without a reaper, governor's keyed state keeps one entry per distinct
+    // IP forever — an unbounded leak on exactly the free-tier VM the rate
+    // limiter exists to protect, and one an attacker grows just by varying
+    // the header. This drives the real `spawn_reaper` task rather than
+    // calling `retain_recent` inline, so it fails if the task is never
+    // spawned or never loops.
+    #[tokio::test]
+    async fn spawned_reaper_reclaims_stale_per_ip_state() {
+        // A short period keeps the test quick: governor only considers an
+        // entry reclaimable once its quota has been fully back at a fresh
+        // state for another whole period, so the wait below has to clear
+        // 2 x period.
+        let period = Duration::from_millis(200);
+        let (limit_layer, limiter) = layer(1, period);
+        let app = Router::new()
+            .route("/", get(|| async { "ok" }))
+            .layer(limit_layer);
+
+        for octet in 1..=5u8 {
+            let ip = format!("203.0.113.{octet}");
+            app.clone().oneshot(request_from(&ip)).await.unwrap();
+        }
+        assert_eq!(limiter.len(), 5, "one keyed entry per distinct IP");
+
+        spawn_reaper(limiter.clone(), Duration::from_millis(50));
+        tokio::time::sleep(period * 4).await;
+
+        assert_eq!(
+            limiter.len(),
+            0,
+            "entries back at a fresh state must be reclaimed, not retained forever"
+        );
+    }
+
+    // Uses the *production* period (RATE_LIMIT_PERIOD, 1s), not the long one
+    // the bucket test uses. tower_governor reports its wait time as whole
+    // seconds (`Duration::as_secs()`), so at a 1s refill the real sub-second
+    // wait truncates to 0 — a `Retry-After: 0` telling a throttled client to
+    // retry immediately. Any period under two seconds hits this; the bucket
+    // test's 60s period cannot see it.
+    #[tokio::test]
+    async fn retry_after_is_at_least_one_second_at_the_production_period() {
+        let app = Router::new()
+            .route("/", get(|| async { "ok" }))
+            .layer(layer(1, Duration::from_secs(1)).0);
+
+        assert_eq!(
+            app.clone().oneshot(request_from("203.0.113.5")).await.unwrap().status(),
+            StatusCode::OK
+        );
+
+        let throttled = app.oneshot(request_from("203.0.113.5")).await.unwrap();
+        assert_eq!(throttled.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        let retry_after: u64 = throttled
+            .headers()
+            .get(axum::http::header::RETRY_AFTER)
+            .expect("429 must carry Retry-After")
+            .to_str()
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!(
+            retry_after >= 1,
+            "Retry-After: {retry_after} tells the client to retry immediately"
+        );
+    }
+
     // The regression that matters: behind Fly, every request's peer address
     // is the proxy. If the key extractor ever regresses to keying on that
     // instead of Fly-Client-IP, this test starts failing because both IPs
@@ -176,7 +275,7 @@ mod tests {
         // period is rate-limited, keeping this test fast (no real waiting).
         let app = Router::new()
             .route("/", get(|| async { "ok" }))
-            .layer(layer(1, Duration::from_secs(60)));
+            .layer(layer(1, Duration::from_secs(60)).0);
 
         let first = app.clone().oneshot(request_from("203.0.113.1")).await.unwrap();
         assert_eq!(first.status(), StatusCode::OK);

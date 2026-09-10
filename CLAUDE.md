@@ -65,9 +65,14 @@ exists.
 
 ## Testing
 
-`#[sqlx::test]` tests live per-module next to the code they cover
-(`apps/server/src/routes/*.rs` for handlers, `apps/server/src/queries/*.rs` for
-queries), not centralized in `main.rs`. `engine/` and `apps/host/` have no tests
+Tests live per-module next to the code they cover, not centralized in
+`main.rs`: `#[sqlx::test]` for anything touching the DB
+(`apps/server/src/routes/*.rs`, `apps/server/src/queries/*.rs`,
+`chart_revision.rs`), plain `#[test]`/`#[tokio::test]` for the rest
+(`config.rs`, `error.rs`, `rate_limit.rs`, `bin/seed_songs.rs`). Middleware
+behaviour is tested through an assembled `Router` via `tower::ServiceExt::oneshot`
+(`routes/mod.rs`) — handler tests call handlers directly and never exercise a
+layer. `engine/` and `apps/host/` have no tests
 yet — growing that is tracked in
 [`docs/work/test-foundation/`](docs/work/test-foundation/).
 

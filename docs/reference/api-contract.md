@@ -64,7 +64,9 @@ Response `200`:
 
 Headers: `ETag: "<sha256(revision:updateTime)>"` — the same value
 `GET /sync/manifest` reports as `catalogHash` (§3). A matching `If-None-Match`
-returns `304 Not Modified` with an empty body. `Cache-Control: public,
+returns `304 Not Modified` with an empty body, repeating the `ETag` and
+`Cache-Control` (RFC 7232 §4.1 — the client needs them to refresh the
+freshness of the copy it already holds). `Cache-Control: public,
 max-age=3600` — the catalog only changes on a `bin/ingest` run, so an hour
 of unconditional client-side caching trades a small staleness window for
 skipping the network round-trip entirely within it (`server-restructure`
@@ -211,7 +213,8 @@ Cheap freshness probe.
   "counts": { "songs": 0, "sheets": 0, "charts": 0 }
 }
 ```
-Headers: same `ETag`/`If-None-Match`/`304` pairing as `GET /catalog` (§1), but
+Headers: same `ETag`/`If-None-Match`/`304` pairing as `GET /catalog` (§1) —
+including repeating both validators on the `304` — but
 `Cache-Control: no-cache` instead of a `max-age` — this endpoint's whole job
 is telling the client whether the catalog changed, so it always revalidates
 against the server rather than trusting a local cache blindly. The `304`
@@ -306,6 +309,11 @@ Status enum: `pending | approved | rejected | merged`.
 ## 6. Conventions
 
 - **Errors** (non-2xx): `{ "error": "snake_case_code", "message": "human text" }`.
+  Codes in use: `database_error`, `internal_error` (both `500`, both with an
+  opaque message — the real cause is logged server-side, never returned),
+  `not_found`, `snapshot_required` (§3), `rate_limited`. `bad_request` exists
+  as an `AppError` variant but no shipped endpoint returns it — every query
+  param today either parses or is optional.
   Exception: `GET /sheets/{songId}/chart` returns plain-text errors (§2).
 - **Pagination**: `?page` (1-based) + `?pageSize` (default 22, max 100). The
   total is a `total` **field in the response body**, not an `X-Total-Count`
@@ -313,8 +321,10 @@ Status enum: `pending | approved | rejected | merged`.
   envelope already, so a header would be a second place to look.
 - **Rate limits**: per-IP (keyed on `Fly-Client-IP`, not per-user — there is
   no auth yet), generous burst with a slow refill (`server-restructure` issue
-  08). `429` + `Retry-After`, same `{ "error": "rate_limited", "message": ... }`
-  shape as every other error. `/healthcheck` is exempt. Phase 2 write
+  08). `429` + `Retry-After` (always at least `1` — the underlying limiter
+  reports whole seconds and would otherwise say `0`, i.e. "retry now"), same
+  `{ "error": "rate_limited", "message": ... }` shape as every other error.
+  `/healthcheck` is exempt. Phase 2 write
   endpoints (§5) will need their own, tighter, per-user limits — this ticket
   only covers the shipped public reads.
 - **CORS**: allowlist built from `CORS_ALLOWED_ORIGINS` (`Config`, `server-restructure`

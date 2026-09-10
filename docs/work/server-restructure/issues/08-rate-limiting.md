@@ -65,11 +65,10 @@ effectively unreachable (the key extractor always finds a key once
 itself is too slow to actually saturate a 30-burst/1-req-s-refill bucket
 with sequential `curl`, since each 3MB response takes long enough that the
 bucket partially refills between requests) with one `Fly-Client-IP`: first
-30 requests `200`, next 5 `429` with the shape above; a second
+30 requests `200`, request 31 onward `429` with the shape above; a second
 `Fly-Client-IP` sent immediately after still got `200` (independent
-bucket); 35 rapid requests against `/healthcheck` from the *throttled* IP
-all returned `200` (exemption holds even while that IP is being limited
-elsewhere).
+bucket); requests against `/healthcheck` from the *throttled* IP returned
+`200` (exemption holds even while that IP is being limited elsewhere).
 
 **Test** (`rate_limit.rs`): an isolated `#[tokio::test]` against a minimal
 one-route `Router` with just the rate-limit layer applied and a tiny
@@ -79,3 +78,44 @@ handler-specific. This is deliberately a different shape from this
 codebase's usual `#[sqlx::test]` handler tests: those call handler
 functions directly, bypassing the router/middleware stack entirely, which
 would never exercise this layer at all.
+
+## Follow-up review (corrections)
+
+Three defects the original review of this ticket found. All fixed; the
+claims above have been corrected in place where they were wrong.
+
+**`Retry-After` was always `0`.** `tower_governor` reports its wait time
+via `Duration::as_secs()`, which truncates. At `RATE_LIMIT_PERIOD` (1s) the
+real wait is always sub-second, so every `429` carried `Retry-After: 0` and
+a body reading "retry after 0s" — telling a throttled client to retry
+immediately. The original "verified live … `429` with the shape above" was
+written without reading the actual header. Fixed by clamping to `.max(1)`
+in the `error_handler`, and pinned by
+`retry_after_is_at_least_one_second_at_the_production_period`, which uses
+the *production* period — the pre-existing bucket test uses 60s, the one
+regime where the truncation is invisible.
+
+**No reaper: per-IP state grew without bound.** `governor` never collects
+its own keyed state; `tower_governor`'s README spawns a cleanup task and
+this did not. One map entry per distinct IP, forever, on the free-tier VM
+this ticket exists to protect — and an attacker grows it deliberately just
+by varying the header. `rate_limit::layer` now returns the limiter
+alongside the layer and `routes::router` passes it to
+`rate_limit::spawn_reaper` (`RATE_LIMIT_CLEANUP_INTERVAL`, 60s). The leak
+existed *because* the config was built and dropped inside the helper,
+leaving the state unreachable.
+
+**`429` bypassed `AppError`.** The `UnableToExtractKey`/`Other` arm
+hand-rolled `Json(json!({ "error": "internal_error", … }))` — the one error
+shape in the codebase minted outside `AppError`, defeating issue 02. Now
+`AppError::Internal(&'static str)`: the context goes to the log, the client
+gets the standard opaque 500 body.
+
+**Health exemption was true but untested.** The only test built its own
+one-route router, so nothing verified the layer was attached to real routes
+at all. `routes/mod.rs` now has
+`healthcheck_is_exempt_while_the_same_ip_is_throttled_elsewhere`, which
+drives the *assembled* router: it first proves `/sync/manifest` does get
+throttled (so the layer is wired), then proves `/healthcheck` still answers
+`200` from that same throttled IP. Confirmed non-vacuous by temporarily
+merging `health::router()` into the limited sub-router — the test fails.

@@ -29,6 +29,17 @@ of `Data` (`apps/host/src/types/Data.ts`).
 Singleton (one row, pinned by a `CHECK (id)` on a boolean PK). Holds
 `Data.updateTime` — the catalog freshness stamp and ETag source (contract §1).
 The only top-level scalar in `Data`.
+- `revision` — monotonic counter shared by every table that participates in
+  sync. `bin/ingest` draws `previous + 1` per full reload and stamps it onto
+  every changed row; `apply_chart_revision` bumps it the same way for a single
+  chart. `GET /sync/delta?since=N` compares row revisions against this one
+  sequence, so a writer that invents its own counter breaks delta polling.
+- `last_full_reload_revision` — the revision of the most recent `bin/ingest`
+  run. A `since` older than this cannot be diffed, so `/sync/delta` answers
+  `409 snapshot_required` (contract §3).
+
+Both feed the `ETag` on `GET /catalog` and `GET /sync/manifest`, which is
+`sha256("{revision}:{updateTime}")`.
 
 ### Lookup tables — `categories`, `versions`, `types`, `difficulties`, `regions`
 The `Data.categories/versions/types/difficulties/regions` arrays. The frontend
@@ -65,7 +76,8 @@ type×difficulty). Mirrors `Sheet.ts` raw fields (`type`, `difficulty`, `level`,
 - `source_index` — upstream ordering, as on `songs`.
 
 > Note: this is **catalog metadata about a chart**, not the chart notes
-> themselves. The actual simai/ma2 data lives in the future `charts` table.
+> themselves. The actual simai/ma2 data lives in the `charts` table, written
+> through `apply_chart_revision` (`server-restructure` issue 09) — see §5.
 
 ### `sheets` sub-tables (1-to-many off a sheet)
 Normalized out of the `Sheet` object's `Record<...>` maps:
@@ -81,6 +93,24 @@ Normalized out of the `Sheet` object's `Record<...>` maps:
   `internal_level_value`, `note_designer`), null columns inherit.
 
 ---
+
+### `charts`
+The chart notes themselves — one canonical row per `(sheet_id, format)`,
+enforced by `UNIQUE (sheet_id, format)`. `content` holds inline simai/ma2
+text (`blob_url` is the alternative for large/binary payloads; only one is
+used). `hash` is sha256 over `content` and is what makes a re-seed of
+identical bytes a no-op. `sheet_expr` is denormalized off `sheets` for
+lookup by the cross-tier key. `version` increments on each overwrite.
+
+### `chart_revisions`
+Append-only history — every applied revision adds a row (`chart_id`,
+`content`, `hash`), enabling rollback and audit. Never updated in place.
+
+> Both are written **only** through `chart_revision::apply_chart_revision`
+> (`server-restructure` issue 09), which upserts `charts`, appends here, and
+> bumps `catalog_meta.revision` in one transaction. `bin/seed_songs` calls it
+> today; phase 2's contribution-approve handler will call the same function.
+> Contributor/contribution FKs are still nullable placeholders until §5 lands.
 
 ## Relationships
 
@@ -102,7 +132,6 @@ sheets + sub-rows vanish.
 
 | Table | Purpose | Contract |
 |-------|---------|----------|
-| `chart_revisions` | append-only chart history → rollback/audit | §5 |
 | `users` | GitHub-OAuth identities + role | §4 |
 | `contributions` | open submission queue (`payload` JSONB, `status`) → merge on approve | §5 |
 | `audit_log` | moderator/admin action trail | §5 |

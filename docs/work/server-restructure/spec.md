@@ -38,6 +38,15 @@ outright:
 | 07 | [`ETag` / `Cache-Control` / `304`](issues/07-etag-caching.md) | Highest-leverage free-tier protection |
 | 08 | [Per-IP rate limiting keyed on `Fly-Client-IP`](issues/08-rate-limiting.md) | Blast-radius cap, not the main defence |
 | 09 | [Extract "apply a chart revision"; `seed_songs` fails loudly](issues/09-chart-revision-service-fn.md) | The one piece of the write path that carries to phase 2 |
+| 10 | [Collapse the hand-rolled IP extractor onto `tower_governor`'s](issues/10-rate-limit-extractor-dedup.md) | **Deferred.** Cleanup only — no behaviour the spec depends on |
+
+Ticket 10 is open against an otherwise-shipped feature: it is a
+simplification raised by the branch review, deliberately not folded into the
+fix pass because narrowing versus widening the trusted-header set is a
+decision, not a cleanup. The other defects that review found — `Retry-After:
+0`, the unbounded rate-limit map, the `AppError` bypass, and `seed_songs`
+over-reporting its seeded count — were fixed in place; see the "Follow-up
+review" sections of issues 08 and 09.
 
 ## Decisions that constrain this work
 

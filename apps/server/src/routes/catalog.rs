@@ -1,7 +1,6 @@
 use axum::{
     Json, Router,
     extract::{Query, State},
-    http::StatusCode,
     response::IntoResponse,
     routing::get,
 };
@@ -10,6 +9,7 @@ use sqlx::{Pool, Postgres};
 
 use crate::error::AppError;
 use crate::queries;
+use crate::routes::caching::{CATALOG_CACHE_CONTROL, Freshness};
 use crate::state::AppState;
 use crate::types::{Catalog, NestedSheet, Song};
 
@@ -23,14 +23,6 @@ struct CatalogQuery {
     region: Option<String>,
 }
 
-// Shared with routes::sync (sync_manifest exposes the same hash).
-pub(crate) fn catalog_hash(revision: i64, update_time: &str) -> String {
-    use sha2::{Digest, Sha256};
-    let mut hasher = Sha256::new();
-    hasher.update(format!("{revision}:{update_time}").as_bytes());
-    format!("{:x}", hasher.finalize())
-}
-
 // GET /catalog — assembles the full Data shape (types/Data.ts) from the DB.
 // Byte-compatible with the old data.json so preprocessData is unchanged.
 // Supports ETag/If-None-Match (contract §1) sharing the sync tier's
@@ -40,20 +32,9 @@ async fn catalog(
     headers: axum::http::HeaderMap,
     State(pool): State<Pool<Postgres>>,
 ) -> Result<axum::response::Response, AppError> {
-    let meta = sqlx::query!(
-        r#"SELECT to_char(update_time, 'YYYY-MM-DD') AS "update_time!", revision AS "revision!"
-           FROM catalog_meta LIMIT 1"#
-    )
-    .fetch_one(&pool)
-    .await?;
-    let etag = format!("\"{}\"", catalog_hash(meta.revision, &meta.update_time));
-
-    if headers
-        .get(axum::http::header::IF_NONE_MATCH)
-        .and_then(|v| v.to_str().ok())
-        == Some(etag.as_str())
-    {
-        return Ok(StatusCode::NOT_MODIFIED.into_response());
+    let freshness = Freshness::load(&pool).await?;
+    if freshness.is_current_for(&headers) {
+        return Ok(freshness.not_modified(CATALOG_CACHE_CONTROL));
     }
 
     let song_rows = queries::fetch_all_songs(&pool).await?;
@@ -87,23 +68,14 @@ async fn catalog(
         update_time: queries::fetch_update_time(&pool).await?,
     };
 
-    Ok((
-        [
-            (axum::http::header::ETAG, etag),
-            (
-                axum::http::header::CACHE_CONTROL,
-                String::from("public, max-age=3600"),
-            ),
-        ],
-        Json(catalog),
-    )
-        .into_response())
+    Ok((freshness.headers(CATALOG_CACHE_CONTROL), Json(catalog)).into_response())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use axum::extract::{Query as AxumQuery, State as AxumState};
+    use axum::http::StatusCode;
     use serde_json::Value;
 
     #[sqlx::test]
@@ -200,6 +172,86 @@ mod tests {
             .await
             .unwrap();
         assert!(body.is_empty());
+        Ok(())
+    }
+
+    // RFC 7232 §4.1: a 304 must send the same validators the 200 would have,
+    // because the client uses them to refresh what it already has stored.
+    // Dropping Cache-Control here throws away ticket 07's max-age on every
+    // revalidation — the cached copy goes stale again immediately and the
+    // next visit re-revalidates instead of being served locally.
+    #[sqlx::test]
+    async fn catalog_304_repeats_the_etag_and_cache_control(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        seed_minimal_catalog(&pool).await;
+
+        let full = catalog(
+            AxumQuery(CatalogQuery { region: None }),
+            axum::http::HeaderMap::new(),
+            AxumState(pool.clone()),
+        )
+        .await
+        .unwrap();
+        let etag = full.headers().get(axum::http::header::ETAG).unwrap().clone();
+        let cache_control = full
+            .headers()
+            .get(axum::http::header::CACHE_CONTROL)
+            .unwrap()
+            .clone();
+
+        let mut conditional_headers = axum::http::HeaderMap::new();
+        conditional_headers.insert(axum::http::header::IF_NONE_MATCH, etag.clone());
+
+        let not_modified = catalog(
+            AxumQuery(CatalogQuery { region: None }),
+            conditional_headers,
+            AxumState(pool),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(not_modified.status(), StatusCode::NOT_MODIFIED);
+        assert_eq!(
+            not_modified.headers().get(axum::http::header::ETAG),
+            Some(&etag)
+        );
+        assert_eq!(
+            not_modified.headers().get(axum::http::header::CACHE_CONTROL),
+            Some(&cache_control)
+        );
+        Ok(())
+    }
+
+    // The negative half of the conditional. Every other 304 test sends a
+    // matching validator, so an `is_current_for` that was inverted or always
+    // true would leave them all green while serving a permanent 304 — every
+    // client stuck on whatever catalog it first fetched, with no way to
+    // learn the catalog had changed.
+    #[sqlx::test]
+    async fn catalog_serves_a_body_when_if_none_match_is_stale(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        seed_minimal_catalog(&pool).await;
+
+        let mut stale = axum::http::HeaderMap::new();
+        stale.insert(
+            axum::http::header::IF_NONE_MATCH,
+            axum::http::HeaderValue::from_static("\"not-the-current-hash\""),
+        );
+
+        let response = catalog(
+            AxumQuery(CatalogQuery { region: None }),
+            stale,
+            AxumState(pool),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["songs"].as_array().unwrap().len(), 1);
         Ok(())
     }
 
