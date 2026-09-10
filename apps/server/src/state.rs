@@ -19,6 +19,6 @@ pub struct AppState {
 /// no signature change needed until they actually need `config` too.
 impl FromRef<AppState> for PgPool {
     fn from_ref(state: &AppState) -> Self {
-        todo!("state.pool.clone() — PgPool clones cheaply, it wraps an Arc internally")
+        state.pool.clone()
     }
 }

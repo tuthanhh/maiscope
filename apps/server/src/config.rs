@@ -14,12 +14,19 @@ use std::fmt;
 /// Fly injects `PORT` itself, so production never takes this branch.
 const DEFAULT_PORT: u16 = 3000;
 
+/// Pool size when `DATABASE_MAX_CONNECTIONS` is unset. Matches the value
+/// local docker Postgres was hardcoded to before this was configurable.
+/// Neon's free tier caps total connections low enough that this needs to
+/// shrink for production — see the ticket note.
+const DEFAULT_DATABASE_MAX_CONNECTIONS: u32 = 4;
+
 /// Default log directives when `RUST_LOG` is unset.
 const DEFAULT_LOG_FILTER: &str = "info,tower_http=info";
 
 #[derive(Debug, Clone)]
 pub struct Config {
     pub database_url: String,
+    pub database_max_connections: u32,
     pub port: u16,
     /// Exact `Origin` values allowed to call the API cross-origin. Empty means
     /// "no allowlist configured" — see `from_env` for what that implies.
@@ -88,6 +95,18 @@ fn parse_port(raw: Option<String>) -> Result<u16, ConfigError> {
     }
 }
 
+/// `None` (unset) defaults to [`DEFAULT_DATABASE_MAX_CONNECTIONS`]; anything
+/// present must parse.
+fn parse_database_max_connections(raw: Option<String>) -> Result<u32, ConfigError> {
+    match raw {
+        Some(raw) => raw.parse::<u32>().map_err(|e| ConfigError::Invalid {
+            var: "DATABASE_MAX_CONNECTIONS",
+            reason: format!("{raw:?} is not a valid connection count ({e})"),
+        }),
+        None => Ok(DEFAULT_DATABASE_MAX_CONNECTIONS),
+    }
+}
+
 /// Comma-separated exact Origin values, e.g.
 /// "https://maiscope.pages.dev,https://staging.maiscope.pages.dev". An empty
 /// input (unset `CORS_ALLOWED_ORIGINS`) yields an empty list — ticket 06
@@ -106,6 +125,8 @@ impl Config {
     /// after `dotenvy::dotenv()`.
     pub fn from_env() -> Result<Self, ConfigError> {
         let database_url = required("DATABASE_URL")?;
+        let database_max_connections =
+            parse_database_max_connections(optional("DATABASE_MAX_CONNECTIONS")?)?;
         let port = parse_port(optional("PORT")?)?;
         let log_filter = optional("RUST_LOG")?.unwrap_or_else(|| DEFAULT_LOG_FILTER.to_string());
         let cors_allowed_origins =
@@ -113,6 +134,7 @@ impl Config {
 
         Ok(Config {
             database_url,
+            database_max_connections,
             port,
             cors_allowed_origins,
             log_filter,
@@ -150,6 +172,27 @@ mod tests {
         let err = parse_port(Some("not-a-port".to_string())).unwrap_err();
         assert!(matches!(err, ConfigError::Invalid { var: "PORT", .. }));
         assert!(err.to_string().contains("not a valid port number"));
+    }
+
+    #[test]
+    fn parse_database_max_connections_defaults_when_unset() {
+        assert_eq!(
+            parse_database_max_connections(None),
+            Ok(DEFAULT_DATABASE_MAX_CONNECTIONS)
+        );
+    }
+
+    #[test]
+    fn parse_database_max_connections_rejects_non_numeric_value() {
+        let err = parse_database_max_connections(Some("lots".to_string())).unwrap_err();
+        assert!(matches!(
+            err,
+            ConfigError::Invalid {
+                var: "DATABASE_MAX_CONNECTIONS",
+                ..
+            }
+        ));
+        assert!(err.to_string().contains("not a valid connection count"));
     }
 
     #[test]

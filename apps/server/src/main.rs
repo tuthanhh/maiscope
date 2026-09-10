@@ -4,6 +4,8 @@ mod queries;
 mod state;
 mod types;
 
+use std::sync::Arc;
+
 use axum::{
     Json, Router,
     extract::{Path, Query, State},
@@ -17,6 +19,8 @@ use serde_json::{Value, json};
 use sqlx::{Pool, Postgres};
 use tower_http::cors::CorsLayer;
 use types::{Catalog, NestedSheet, Song};
+
+use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -80,9 +84,15 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let config = config::Config::from_env()?;
 
     let pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(4)
+        .max_connections(config.database_max_connections)
         .connect(&config.database_url)
         .await?;
+
+    let port = config.port;
+    let state = AppState {
+        pool,
+        config: Arc::new(config),
+    };
 
     let app = Router::new()
         .nest(
@@ -101,9 +111,9 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         // src-tauri so it doesn't need CORS. Permissive is fine for local dev.
         // TODO(06): swap for an allowlist built from config.cors_allowed_origins.
         .layer(CorsLayer::permissive())
-        .with_state(pool);
+        .with_state(state);
 
-    let addr = format!("0.0.0.0:{}", config.port);
+    let addr = format!("0.0.0.0:{port}");
     let listener = tokio::net::TcpListener::bind(&addr).await?;
 
     println!("listening on {}", listener.local_addr()?);
