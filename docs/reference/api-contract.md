@@ -311,9 +311,12 @@ Status enum: `pending | approved | rejected | merged`.
   total is a `total` **field in the response body**, not an `X-Total-Count`
   header — the only paginated endpoint (`GET /sheets/search`) returns an
   envelope already, so a header would be a second place to look.
-- **Rate limits** *(phase 2)*: write endpoints (§5) limited per user; `429` +
-  `Retry-After`. Nothing is rate-limited today — all shipped endpoints are
-  public reads.
+- **Rate limits**: per-IP (keyed on `Fly-Client-IP`, not per-user — there is
+  no auth yet), generous burst with a slow refill (`server-restructure` issue
+  08). `429` + `Retry-After`, same `{ "error": "rate_limited", "message": ... }`
+  shape as every other error. `/healthcheck` is exempt. Phase 2 write
+  endpoints (§5) will need their own, tighter, per-user limits — this ticket
+  only covers the shipped public reads.
 - **CORS**: allowlist built from `CORS_ALLOWED_ORIGINS` (`Config`, `server-restructure`
   issue 06) — no origin configured means no origin allowed, not a permissive
   fallback. Local dev sets it to the Vite dev origin (`.env.example`).

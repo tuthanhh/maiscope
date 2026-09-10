@@ -2,6 +2,7 @@ mod config;
 mod domain;
 mod error;
 mod queries;
+mod rate_limit;
 mod routes;
 mod state;
 mod types;
@@ -67,6 +68,14 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         "listening"
     );
 
-    axum::serve(listener, app).await?;
+    // Rate limiting's key extractor (rate_limit.rs) falls back to the peer
+    // address when there's no Fly-Client-IP/X-Forwarded-For header (local
+    // dev, or anything not behind Fly) — that fallback only exists if the
+    // server actually records connection info per request.
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await?;
     Ok(())
 }

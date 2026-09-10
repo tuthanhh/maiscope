@@ -5,13 +5,28 @@ mod sheets;
 mod songs;
 mod sync;
 
+use std::time::Duration;
+
 use axum::Router;
 use axum::http::{HeaderValue, Method};
 use tower_http::cors::CorsLayer;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use tracing::Level;
 
+use crate::rate_limit;
 use crate::state::AppState;
+
+// Generous, uniform across every rate-limited route: burst of 30 requests,
+// refilling 1/second after that. A legitimate browser session rarely does
+// more than a handful of these per minute — repeat /catalog visits mostly
+// hit the ticket-07 cache/304 path instead of a fresh fetch, and
+// search-as-you-type on /sheets/search is the busiest realistic case, which
+// this burst comfortably absorbs. A script looping on /catalog starts
+// getting 429s after 30 requests and is capped to ~1 req/s after that — the
+// "blast radius" this ticket is about, not a defence against a determined
+// abuser (that's caching, ticket 07, and this being generous by design).
+const RATE_LIMIT_BURST_SIZE: u32 = 30;
+const RATE_LIMIT_PERIOD: Duration = Duration::from_secs(1);
 
 pub fn router(state: AppState) -> Router {
     // Unparseable entries are dropped, not a startup error: a CORS
@@ -25,16 +40,22 @@ pub fn router(state: AppState) -> Router {
         .filter_map(|origin| origin.parse().ok())
         .collect();
 
+    // Rate-limited routes only — healthcheck stays exempt (uptime probes
+    // shouldn't compete with real traffic for a bucket) by never passing
+    // through this layer at all, rather than trying to special-case it
+    // inside the limiter.
+    let limited = Router::new()
+        .merge(sync::router())
+        .merge(catalog::router())
+        .merge(songs::router())
+        .merge(sheets::router())
+        .merge(charts::router())
+        .layer(rate_limit::layer(RATE_LIMIT_BURST_SIZE, RATE_LIMIT_PERIOD));
+
     Router::new()
         .nest(
             "/api/v1",
-            Router::new()
-                .merge(health::router())
-                .merge(sync::router())
-                .merge(catalog::router())
-                .merge(songs::router())
-                .merge(sheets::router())
-                .merge(charts::router()),
+            Router::new().merge(health::router()).merge(limited),
         )
         // Both default to DEBUG; DEFAULT_LOG_FILTER (config.rs) is
         // "info,tower_http=info", so both need bumping to INFO or they're

@@ -16,3 +16,8 @@ sha2 = "0.10"
 unicode-normalization = "0.1"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
+tower_governor = { version = "0.8.0", default-features = false, features = ["axum", "tracing"] }
+governor = "0.10.4"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }

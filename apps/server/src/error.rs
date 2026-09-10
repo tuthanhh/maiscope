@@ -21,6 +21,9 @@ pub enum AppError {
     BadRequest(String),
     /// `/sync/delta`'s `since` predates the last full reload (contract §3).
     SnapshotRequired,
+    /// Per-IP rate limit tripped (ticket 08). `retry_after_secs` comes from
+    /// `tower_governor`'s own wait-time calculation.
+    RateLimited { retry_after_secs: u64 },
 }
 
 impl IntoResponse for AppError {
@@ -49,6 +52,15 @@ impl IntoResponse for AppError {
             AppError::SnapshotRequired => (
                 StatusCode::CONFLICT,
                 Json(json!({ "error": "snapshot_required" })),
+            )
+                .into_response(),
+            AppError::RateLimited { retry_after_secs } => (
+                StatusCode::TOO_MANY_REQUESTS,
+                [(axum::http::header::RETRY_AFTER, retry_after_secs.to_string())],
+                Json(json!({
+                    "error": "rate_limited",
+                    "message": format!("rate limit exceeded, retry after {retry_after_secs}s")
+                })),
             )
                 .into_response(),
         }
@@ -113,6 +125,26 @@ mod tests {
         assert_eq!(
             body_json(response).await,
             json!({ "error": "snapshot_required" })
+        );
+    }
+
+    #[tokio::test]
+    async fn rate_limited_is_429_with_retry_after_header_and_body() {
+        let response = AppError::RateLimited {
+            retry_after_secs: 42,
+        }
+        .into_response();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(
+            response
+                .headers()
+                .get(axum::http::header::RETRY_AFTER)
+                .unwrap(),
+            "42"
+        );
+        assert_eq!(
+            body_json(response).await,
+            json!({ "error": "rate_limited", "message": "rate limit exceeded, retry after 42s" })
         );
     }
 }
