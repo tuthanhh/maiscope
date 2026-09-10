@@ -65,8 +65,10 @@ exists.
 
 ## Testing
 
-Six `#[sqlx::test]` handler tests live in `apps/server/src/main.rs`. `engine/` and
-`apps/host/` have no tests yet — growing that is tracked in
+`#[sqlx::test]` tests live per-module next to the code they cover
+(`apps/server/src/routes/*.rs` for handlers, `apps/server/src/queries/*.rs` for
+queries), not centralized in `main.rs`. `engine/` and `apps/host/` have no tests
+yet — growing that is tracked in
 [`docs/work/test-foundation/`](docs/work/test-foundation/).
 
 ## Conventions
