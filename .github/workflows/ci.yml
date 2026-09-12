@@ -75,10 +75,16 @@ jobs:
         with:
           tool: sqlx-cli
 
-      # `-- --all-targets` must match how .sqlx/ was generated (ticket 01), or
-      # this compiles fewer targets than the cache covers and calls it stale.
+      # Flags must match how .sqlx/ is generated (ticket 01), or this compiles a
+      # different set of targets than the cache covers and calls it stale.
+      #
+      # `--workspace` selects the root-level cache; `-p server` restricts the
+      # underlying `cargo check` to the only crate holding query macros. Without
+      # `-p`, the check compiles `engine` natively and needs Bevy's ALSA/X11/
+      # Wayland headers — which is exactly what this workflow avoids by linting
+      # the engine on the wasm target instead.
       - name: Offline query cache is current
-        run: cargo sqlx prepare --check --workspace -- --all-targets
+        run: cargo sqlx prepare --check --workspace -- -p server --all-targets
 
       - name: cargo clippy
         run: cargo clippy -p server -p shared --all-targets -- -D warnings

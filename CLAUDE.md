@@ -65,12 +65,14 @@ inside `#[cfg(test)]` — breaks the next build until the cache is regenerated:*
 ```sh
 # from the repo root, with Postgres up and migrations applied
 set -a; . apps/server/.env; set +a
-cargo sqlx prepare --workspace -- --all-targets
+cargo sqlx prepare --workspace -- -p server --all-targets
 ```
 
-Both flags matter. `--workspace` writes one cache at the repo root covering the
-`bin/` tools; `-- --all-targets` extends `cargo check` to test targets, without
-which `cargo test` cannot compile offline. CI runs the same invocation with
+Every flag matters. `--workspace` writes one cache at the repo root covering the
+`bin/` tools. `-p server` restricts the underlying `cargo check` to the only crate
+with query macros — omit it and the check compiles `engine` natively, which needs
+Bevy's ALSA/X11/Wayland headers. `--all-targets` extends the check to test targets,
+without which `cargo test` cannot compile offline. CI runs the same invocation with
 `--check`, which exits non-zero on a stale or incomplete cache.
 
 ### Engine

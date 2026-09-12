@@ -42,11 +42,17 @@ caches only what its internal `cargo check` compiles, which excludes
 arguments after `--` straight to `cargo check`, the fix is:
 
 ```sh
-cargo sqlx prepare --workspace -- --all-targets
+cargo sqlx prepare --workspace -- -p server --all-targets
 ```
 
+**`-p server` was added later, in issue 04.** Without it the underlying
+`cargo check` compiles the whole workspace including `engine`, which needs Bevy's
+ALSA/X11/Wayland headers natively — CI failed on `wayland-client` until the scope
+was narrowed. `server` holds every query macro in the repo, so the cache is
+byte-identical either way (verified: 43 files, no diff).
+
 **Issue 04 must use the same flags.** `prepare --check` compares against whatever
-the flags cause to be compiled, so a `--check` without `-- --all-targets` would
+the flags cause to be compiled, so a `--check` with a different scope would
 disagree with this cache.
 
 **Decision: `SQLX_OFFLINE=true` in `.cargo/config.toml`, not left unset.**

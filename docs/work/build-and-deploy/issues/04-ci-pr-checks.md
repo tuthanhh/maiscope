@@ -19,7 +19,7 @@ ticket just makes what exists run automatically.
 - [x] clippy under `-D warnings` — **scoped**, see Comments:
       `-p server -p shared --all-targets` natively, plus
       `-p maiscope-viewer --target wasm32-unknown-unknown`
-- [x] `cargo sqlx prepare --check --workspace -- --all-targets`
+- [x] `cargo sqlx prepare --check --workspace -- -p server --all-targets`
 - [x] `cargo test -p server -p shared` — **scoped**, see Comments. Covers all 69
       tests; `engine` has none
 - [x] wasm breakage caught — by the engine clippy run above rather than a separate
@@ -96,7 +96,7 @@ filter never reports, and GitHub blocks the merge waiting for it.
 **`sqlx prepare --check` must carry issue 01's flags exactly:**
 
 ```sh
-cargo sqlx prepare --check --workspace -- --all-targets
+cargo sqlx prepare --check --workspace -- -p server --all-targets
 ```
 
 Without `-- --all-targets` the check compiles fewer targets than the committed
