@@ -13,22 +13,58 @@ Use a tiny `bin/migrate.rs` wrapping `sqlx::migrate!()` rather than installing
 
 **Blocked by:** 02
 
-**Status:** todo
+**Status:** in-progress
 
-- [ ] `apps/server/src/bin/migrate.rs` — connect, `sqlx::migrate!().run()`, log
+- [x] `apps/server/src/bin/migrate.rs` — connect, `sqlx::migrate!().run()`, log
       applied versions, exit non-zero on failure
-- [ ] Migrator binary included in the runtime image (issue 02)
-- [ ] `fly.toml` **at the repo root**: app name, region,
-      `release_command = "/app/migrate"`, and
-      `[build] dockerfile = "apps/server/Dockerfile"` — the Dockerfile moved under
-      `apps/server/` (issue 02), and this path resolves relative to `fly.toml`
-- [ ] `DATABASE_URL` for Neon carries `?sslmode=require` — `sqlx` now has TLS via
-      `tls-rustls-ring-webpki`, added while closing issue 02
-- [ ] `auto_stop_machines` / `auto_start_machines` on, `min_machines_running = 0`
-- [ ] Memory sized small (256MB) and recorded; raise only with evidence
-- [ ] `[[services]]` health check pointed at `/api/v1/healthcheck`
-- [ ] `DATABASE_URL` set via `fly secrets`, never in `fly.toml`
+- [x] Migrator binary included in the runtime image (issue 02)
+- [x] `fly.toml` **at the repo root**: `app = "maiscope-api"`,
+      `primary_region = "sin"`, `release_command = "/app/migrate"`, and
+      `[build] dockerfile = "apps/server/Dockerfile"`
+- [x] `?sslmode=require` documented in `fly.toml`'s header for the Neon URL
+- [x] `auto_stop_machines = "stop"` / `auto_start_machines = true`,
+      `min_machines_running = 0`
+- [x] Memory 256MB, `shared` CPU — recorded here; raise only with evidence
+- [x] Health check on `/api/v1/healthcheck` (`[[http_service.checks]]`; the old
+      `[[services]]` syntax is superseded)
+- [x] `DATABASE_URL` kept out of `fly.toml` — verified by parsing the file and
+      asserting the string does not appear
+- [ ] **Fly app created and secret set** — needs a Fly account; not done from the
+      agent session (see the repo rule about never touching production)
 - [ ] Verified: a deliberately broken migration aborts the deploy and the previous
       version keeps serving
-- [ ] Documented rule: destructive migrations are **not** deployed this way
-      (expand-and-contract — see spec.md)
+- [x] Documented rule: destructive migrations are **not** deployed this way
+      (expand-and-contract) — stated in both `fly.toml` and `migrate.rs`
+
+## Comments
+
+**Migrator verified locally, all four paths:**
+
+| Case | Result |
+|---|---|
+| empty database | applies all 5, logs each `version description` |
+| already current | `schema already current (5 migration(s) applied previously)`, exit 0 |
+| bad credentials | `migrate: failed: …`, **exit 1** |
+| `DATABASE_URL` unset | `migrate: failed: DATABASE_URL is not set`, **exit 1** |
+
+Exit 1 is the whole mechanism: Fly aborts the deploy on a non-zero release
+command, so a failed migration leaves the previous version serving. Tested
+against a throwaway `maiscope_migrate_probe` database, then dropped.
+
+**Uses the runtime `sqlx::query_scalar` function, not the macro**, for the
+"which versions were already applied" snapshot. That keeps `migrate.rs` out of
+`.sqlx/` entirely — one less thing to regenerate, and the binary stays buildable
+even if the cache is stale.
+
+**`migrate!()` yields both directions** for reversible migrations, so the log
+filters on `migration_type.is_up_migration()`. Without it every version would be
+reported twice.
+
+**CI now uses this binary instead of `sqlx-cli`** (issue 04). The migration step
+is `cargo run --bin migrate`, so CI exercises the same code path as the deploy
+rather than a second implementation, and no extra tool is installed on the runner.
+
+**Still owed, and only the repo owner can do it:** `flyctl` is not installed here,
+and creating the app, setting `DATABASE_URL` via `fly secrets`, and proving that a
+deliberately broken migration aborts a deploy all require a real Fly account and
+a real database. Those two boxes stay open.

@@ -1,0 +1,55 @@
+# Fly deployment for the API. Lives at the repo root because flyctl expects it
+# there and resolves `[build] dockerfile` relative to it — see the layout rule in
+# CLAUDE.md ("root describes the system, apps/<x>/ describes one app").
+#
+# Deploy:
+#   flyctl deploy                      # from the repo root
+#
+# DATABASE_URL is NOT here. It is a secret:
+#   flyctl secrets set DATABASE_URL='postgres://...@...neon.tech/maiscope?sslmode=require'
+#
+# Neon requires TLS on every connection; `sqlx` gained it via
+# `tls-rustls-ring-webpki`. Omitting `?sslmode=require` fails at connect time.
+
+app = "maiscope-api"
+primary_region = "sin" # pair with a Neon project in ap-southeast-1
+
+[build]
+dockerfile = "apps/server/Dockerfile"
+
+[deploy]
+# Migrations run here, before the new machine takes traffic. A failure fails the
+# deploy: Fly aborts and the previous version keeps serving. At startup instead,
+# the new machine would boot, panic and restart — a crash loop, not a rollback.
+#
+# Expand-and-contract: additive migrations may ride a deploy. DROP COLUMN and
+# DROP TABLE are a separate, deliberate, manual step — Postgres holds the only
+# copy of chart text. See docs/work/build-and-deploy/spec.md.
+release_command = "/app/migrate"
+
+[env]
+# PORT is injected by Fly; config.rs falls back to 3000 only for `cargo run`.
+LOG_JSON = "true"
+
+[http_service]
+internal_port = 3000
+force_https = true
+
+# Scale to zero. A browse-only catalog has long idle stretches, and the migrator
+# already keeps schema work off the cold-start path.
+auto_stop_machines = "stop"
+auto_start_machines = true
+min_machines_running = 0
+
+[[http_service.checks]]
+interval = "30s"
+timeout = "5s"
+grace_period = "10s"
+method = "GET"
+path = "/api/v1/healthcheck"
+
+[[vm]]
+# Deliberately small; raise only with evidence from real traffic.
+memory = "256mb"
+cpu_kind = "shared"
+cpus = 1

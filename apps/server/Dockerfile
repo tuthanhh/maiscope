@@ -51,8 +51,10 @@ RUN cargo chef cook --release --recipe-path recipe.json -p server
 COPY . .
 # `--locked` fails the build rather than silently resolving newer patch versions,
 # so the image stays a function of the commit.
-# Ticket 03 adds `--bin migrate` here.
-RUN cargo build --release --locked -p server --bin server
+#
+# Two binaries only. `ingest`, `seed_chart` and `seed_songs` are operator tools
+# and stay out of the serving image.
+RUN cargo build --release --locked -p server --bin server --bin migrate
 
 # --- Runtime ------------------------------------------------------------------
 FROM debian:${DEBIAN_RELEASE}-slim AS runtime
@@ -66,7 +68,11 @@ RUN apt-get update \
 
 RUN useradd --system --user-group --no-create-home --uid 10001 maiscope
 
+# The migrator runs as fly.toml's release_command, before the new machine takes
+# traffic. sqlx::migrate!() embedded the SQL at compile time, so no migrations/
+# directory is needed here.
 COPY --from=builder /build/target/release/server /app/server
+COPY --from=builder /build/target/release/migrate /app/migrate
 
 USER maiscope
 WORKDIR /app
