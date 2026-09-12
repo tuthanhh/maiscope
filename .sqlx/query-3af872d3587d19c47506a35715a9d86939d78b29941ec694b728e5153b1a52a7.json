@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT to_char(update_time, 'YYYY-MM-DD') AS \"update_time!\", revision AS \"revision!\"\n               FROM catalog_meta LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "update_time!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "revision!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "catalog_meta",
+            "name": "revision"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      false
+    ]
+  },
+  "hash": "3af872d3587d19c47506a35715a9d86939d78b29941ec694b728e5153b1a52a7"
+}

@@ -1,0 +1,155 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, song_id, category, title, artist, bpm, image_name, version,\n                  to_char(release_date, 'YYYY-MM-DD') AS release_date, is_new, is_locked, comment\n           FROM songs WHERE song_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "song_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "song_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "category",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "category"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "artist",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "artist"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "bpm",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "bpm"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "image_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "image_name"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "version",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "release_date",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "is_new",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "is_new"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "is_locked",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "is_locked"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "comment",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "comment"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      null,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "64cb55384c362cce484a808034ed3f577eb94db59f2b12f34c2eba5f4609653c"
+}

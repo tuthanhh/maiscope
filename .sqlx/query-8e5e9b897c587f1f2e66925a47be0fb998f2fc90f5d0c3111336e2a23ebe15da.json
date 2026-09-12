@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT so.id AS \"id!\" FROM songs so\n           LEFT JOIN sheets s ON s.song_id_fk = so.id\n           WHERE so.revision > $1 OR s.revision > $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "8e5e9b897c587f1f2e66925a47be0fb998f2fc90f5d0c3111336e2a23ebe15da"
+}

@@ -35,6 +35,24 @@ cargo run                          # API on :3000
 cargo run --bin seed_songs         # load chart text, keyed by sheet_expr
 ```
 
+#### Offline sqlx cache
+
+`.cargo/config.toml` sets `SQLX_OFFLINE=true` for the whole workspace, so builds
+type-check the 64 `sqlx::query!` call sites against the committed `.sqlx/` cache
+instead of a live Postgres. **Any change to SQL — including test fixture queries
+inside `#[cfg(test)]` — breaks the next build until the cache is regenerated:**
+
+```sh
+# from the repo root, with Postgres up and migrations applied
+set -a; . apps/server/.env; set +a
+cargo sqlx prepare --workspace -- --all-targets
+```
+
+Both flags matter. `--workspace` writes one cache at the repo root covering the
+`bin/` tools; `-- --all-targets` extends `cargo check` to test targets, without
+which `cargo test` cannot compile offline. CI runs the same invocation with
+`--check`, which exits non-zero on a stale or incomplete cache.
+
 ### Engine
 
 ```sh

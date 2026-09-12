@@ -1,0 +1,152 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n            s.song_id_fk,\n            s.type,\n            s.difficulty,\n            s.level,\n            s.level_value,\n            s.internal_level,\n            s.internal_level_value,\n            s.note_designer,\n            s.is_special,\n            EXISTS (\n                SELECT 1 FROM charts c WHERE c.sheet_id = s.id AND c.content IS NOT NULL\n            ) AS \"has_chart!\",\n            (SELECT json_object_agg(key, value) FROM sheet_note_counts WHERE sheet_id = s.id)\n                AS \"note_counts: NoteCountsJson\",\n            (SELECT json_object_agg(region, available) FROM sheet_regions WHERE sheet_id = s.id)\n                AS \"regions: RegionsJson\",\n            (SELECT json_object_agg(region, json_build_object(\n                'level', level, 'levelValue', level_value,\n                'internalLevel', internal_level, 'internalLevelValue', internal_level_value,\n                'noteDesigner', note_designer\n            )) FROM sheet_region_overrides WHERE sheet_id = s.id)\n                AS \"region_overrides: RegionOverridesJson\"\n           FROM sheets s\n           WHERE s.song_id_fk = $1\n           ORDER BY s.source_index",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "song_id_fk",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "song_id_fk"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "type"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "difficulty",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "difficulty"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "level",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "level"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "level_value",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "level_value"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "internal_level",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "internal_level"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "internal_level_value",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "internal_level_value"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "note_designer",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "note_designer"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "is_special",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "is_special"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "has_chart!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "note_counts: NoteCountsJson",
+        "type_info": "Json",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "regions: RegionsJson",
+        "type_info": "Json",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 12,
+        "name": "region_overrides: RegionOverridesJson",
+        "type_info": "Json",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "b6a10942d624cbb3cb9256152ec0eba8ca598efa51736378a6cbfa72289743ad"
+}

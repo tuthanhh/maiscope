@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO sheet_regions (sheet_id, region, available) VALUES ($1, 'jp', true)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9d3449a30fefe719172397af17745ffaf14c1c94410e9f922bae6f3a254f6523"
+}

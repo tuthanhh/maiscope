@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT last_full_reload_revision AS \"v!\" FROM catalog_meta LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "v!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "catalog_meta",
+            "name": "last_full_reload_revision"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "41ddfe7ee623b10210a1e8de75754e64c929f196ee77992523ee0ef05d9a46a3"
+}

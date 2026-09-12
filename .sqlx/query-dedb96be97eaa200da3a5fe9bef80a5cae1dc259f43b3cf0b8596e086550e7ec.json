@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO sheets (song_id_fk, sheet_expr, type, difficulty, source_index)\n             VALUES ($1, $2, 'dx', 'expert', 1) RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "dedb96be97eaa200da3a5fe9bef80a5cae1dc259f43b3cf0b8596e086550e7ec"
+}

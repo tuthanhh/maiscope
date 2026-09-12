@@ -1,0 +1,74 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT type AS \"type: String\", name, abbr, icon_url, icon_height\n           FROM types ORDER BY ordinal",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "type: String",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "types",
+            "name": "type"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "types",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "abbr",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "types",
+            "name": "abbr"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "icon_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "types",
+            "name": "icon_url"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "icon_height",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "types",
+            "name": "icon_height"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "df4b22d80f71c0424609d568bc057039eb4a29c694f74385bb36281429c97f9d"
+}

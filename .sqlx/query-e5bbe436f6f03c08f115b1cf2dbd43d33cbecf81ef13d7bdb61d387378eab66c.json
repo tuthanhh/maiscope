@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT revision AS \"v!\" FROM catalog_meta LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "v!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "catalog_meta",
+            "name": "revision"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e5bbe436f6f03c08f115b1cf2dbd43d33cbecf81ef13d7bdb61d387378eab66c"
+}

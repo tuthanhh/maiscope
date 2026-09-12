@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE catalog_meta SET revision = revision + 1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "c92ea59f80c6f453355d438d756d75ad413e8a0d4f34d300165a0702f8d14446"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO catalog_meta (id, update_time) VALUES (true, now())",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "b368a74f460eaf967a6ee6da22a27f0549965fe7221aeadc0fd042ad16378f2b"
+}

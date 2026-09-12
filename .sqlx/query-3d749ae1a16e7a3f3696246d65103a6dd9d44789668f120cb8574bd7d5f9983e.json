@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT to_char(update_time, 'YYYY-MM-DD') AS \"update_time!\" FROM catalog_meta LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "update_time!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "3d749ae1a16e7a3f3696246d65103a6dd9d44789668f120cb8574bd7d5f9983e"
+}

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT sheet_expr AS \"v!\" FROM deleted_sheets WHERE revision > $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "v!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "deleted_sheets",
+            "name": "sheet_expr"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "91af859334465cccfabec19d98a1794d5a431593a2bbbbeb82901c4b8a5ff914"
+}

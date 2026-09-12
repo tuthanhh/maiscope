@@ -23,3 +23,31 @@ ticket just makes what exists run automatically.
 - [ ] `pnpm install --frozen-lockfile && pnpm build` (`vue-tsc --noEmit` + build)
 - [ ] Rust and pnpm caching so runs stay under a few minutes
 - [ ] Branch protection: these checks required before merge
+
+## Comments
+
+**Pre-existing failures this ticket inherits**, measured while closing issue 01.
+Both need a cleanup commit *before* the workflow is added, or the first CI run is
+red for reasons unrelated to CI:
+
+- `cargo fmt --check` — exits 1, **57 hunks across 14 files**, heaviest in
+  `queries/sheets.rs`, `chart_revision.rs`, and `routes/catalog.rs`. One
+  mechanical `cargo fmt` commit, kept separate from anything else.
+- `cargo clippy -- -D warnings` — `apps/server/src/error.rs:21`, `variant
+  BadRequest is never constructed`. Either construct it, `#[allow(dead_code)]` it,
+  or drop the variant.
+
+**`sqlx prepare --check` must carry issue 01's flags exactly:**
+
+```sh
+cargo sqlx prepare --check --workspace -- --all-targets
+```
+
+Without `-- --all-targets` the check compiles fewer targets than the committed
+cache covers and disagrees with it. Verified to exit 1 on an incomplete cache and
+0 on a clean one.
+
+**`cargo test` still needs the Postgres service**, even though `.cargo/config.toml`
+sets `SQLX_OFFLINE=true`. Offline mode removes the database from the *compile*
+step only; `#[sqlx::test]` creates a throwaway database per test at runtime and
+requires a reachable `DATABASE_URL`.
