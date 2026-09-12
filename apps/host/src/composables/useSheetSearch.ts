@@ -1,6 +1,7 @@
 import { ref } from "vue";
 import { useDebounceFn } from "@vueuse/core";
 import { GAME } from "~/app/game";
+import { fetchJson } from "~/utils/api";
 import { decorateSheetFields } from "~/utils/data";
 import type { Filters, Sheet } from "~/types";
 
@@ -38,7 +39,7 @@ export default function useSheetSearch() {
     loading.value = true;
     try {
       const url = buildSearchUrl(filters, page, pageSize);
-      const data: SearchResponse = await (await fetch(url)).json();
+      const data = await fetchJson<SearchResponse>(url);
 
       for (const sheet of data.sheets) {
         decorateSheetFields(sheet, GAME.dataSourceUrl);

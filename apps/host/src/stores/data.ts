@@ -3,6 +3,7 @@ import { defineStore } from "pinia";
 import LoadingStatus from "~/enums/LoadingStatus";
 import { GAME } from "~/app/game";
 import { buildEmptyData, preprocessData } from "~/utils";
+import { fetchJson } from "~/utils/api";
 import type { Data, Sheet } from "~/types";
 
 // eslint-disable-next-line import/prefer-default-export
@@ -47,7 +48,7 @@ export const useDataStore = defineStore("data", () => {
       // legacy CloudFront data.json. Shape is byte-identical, so preprocessData
       // is unchanged. Cover images/icons still live on dataSourceUrl.
       const catalogUrl = `${GAME.apiBaseUrl}/catalog`;
-      const data: Data = await (await fetch(catalogUrl)).json();
+      const data = await fetchJson<Data>(catalogUrl);
 
       preprocessData(data, GAME.dataSourceUrl, GAME.gameCode);
 

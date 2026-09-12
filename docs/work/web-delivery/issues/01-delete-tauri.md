@@ -59,9 +59,26 @@ contribution UI"**, which [ADR-0002](../../../adr/0002-chart-data-only-no-audio-
 cut. Left alone deliberately: that is product copy, not a Tauri removal, and
 whether v1 still advertises contributions as forthcoming is a decision, not a typo.
 
-**Deliberately not fixed here: neither fetch call checks `response.ok`.**
-`await (await fetch(url)).json()` parses an error body as if it were data, so the
-`/catalog` 500 that production currently returns
-(`prod-data-and-infra` 06) would surface as a confusing failure inside
-`preprocessData` rather than "the server errored". Pre-existing on the browser
-path, so it is not a regression from this ticket — but it is now the *only* path.
+**Both calls now go through `utils/api.ts:fetchJson`, which checks
+`response.ok`.** Previously `await (await fetch(url)).json()` parsed an error body
+as if it were data, so the `/catalog` 500 production currently returns
+(`prod-data-and-infra` 06) surfaced as a confusing failure inside `preprocessData`.
+Pre-existing on the browser path rather than a regression from this ticket — but
+collapsing the transports made it the *only* path, so it was worth closing here.
+
+Non-2xx throws `ApiError`, carrying `status` so callers can branch later. The body
+is read exactly once (it is a stream), and the parse is guarded with `.catch`
+because a failure is not guaranteed to be JSON — a Fly 502 or a cold-start timeout
+returns HTML or nothing, and an unguarded `json()` would replace the real failure
+with a parse error. Verified against the live 500: the user-visible message becomes
+`internal error` rather than a crash.
+
+**Two follow-ups this exposes, both left open deliberately:**
+
+- `internal error` is the server's intentionally opaque text, and `stores/data.ts`
+  renders it verbatim. Wrapping it with context ("Couldn't load the song catalog")
+  is a UI-copy decision, not part of removing Tauri.
+- `useSheetSearch.runSearch` has only a `finally`, so a throw now propagates as an
+  unhandled rejection and leaves stale results on screen. Previously it failed
+  silently with garbage data. More honest, still not handled — whether search
+  surfaces its own error state is a UX decision.
