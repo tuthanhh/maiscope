@@ -21,14 +21,47 @@ With the target now web + PWA, the proxy has no reason to exist.
 - [x] `Cargo.toml` workspace members updated — `apps/host/src-tauri` removed
       (the stale member was breaking `cargo metadata` outright; fixed while
       closing `build-and-deploy` 02)
-- [ ] `isTauri()` branches removed from `stores/data.ts:7,51` and
-      `composables/useSheetSearch.ts:3,42`; plain `fetch` everywhere
-- [ ] `@tauri-apps/api` removed from `apps/host/package.json` — **blocked on the
-      branch removal above**, since both files still import `invoke, isTauri`
-      from `@tauri-apps/api/core`. `@tauri-apps/plugin-opener`, `@tauri-apps/cli`
-      and the dead `"tauri": "tauri"` script were already removed; they had no
-      remaining references
-- [ ] `tauri.conf.json`, `capabilities/`, Tauri icons removed
-- [ ] `pnpm tauri dev` / `tauri build` references removed from README and CLAUDE.md
-- [ ] `cargo build --workspace` still green with the member gone
-- [ ] Server CORS allowlist (`server-restructure` issue 06) covers the Pages origin and local dev
+- [x] `isTauri()` branches removed from `stores/data.ts` and
+      `composables/useSheetSearch.ts`; plain `fetch` everywhere
+- [x] `@tauri-apps/api` removed from `apps/host/package.json`, along with
+      `@tauri-apps/plugin-opener`, `@tauri-apps/cli` and the dead
+      `"tauri": "tauri"` script. No `@tauri-apps/*` dependency remains
+- [x] `tauri.conf.json`, `capabilities/`, Tauri icons removed
+- [x] No Tauri references left in README, CLAUDE.md or `docs/guides/` — there were
+      none by this point. `vite.config.ts` lost its `TAURI_DEV_HOST` binding, HMR
+      block and `src-tauri` watch exclusion
+- [x] `cargo build --workspace` green with the member gone; CI has been green on it since `56a9412`
+- [x] Server CORS allowlist covers **local dev** — `http://localhost:1420` in both
+      `apps/server/.env` and `fly.toml`. The Pages origin does not exist yet and is
+      tracked as a checkbox on `web-delivery` 03
+
+
+## Comments
+
+**The Tauri path was only ever a CORS workaround.** Both branches invoked a Rust
+command that fetched the *same* URL the browser path fetches — `load_chart_data`
+for `/catalog`, `search_sheets` for `/sheets/search`. With the server's CORS
+allowlist in place (`server-restructure` 06) the proxy has nothing left to do, so
+collapsing it is a pure deletion with no behaviour change.
+
+**`vite.config.ts` keeps `port: 1420` / `strictPort: true`** — no longer because
+Tauri demands a fixed port, but because that origin is allowlisted in
+`apps/server/.env` and in `fly.toml`. A port shuffle would silently break every
+cross-origin request. The comment now says so.
+
+Removing `host: host || false` does not widen exposure: with `TAURI_DEV_HOST`
+unset it evaluated to `false`, and Vite's default is localhost either way.
+
+**`about.vue` advertised the dropped architecture.** Its roadmap listed "Local
+SQLite cache (tauri-plugin-sql)", now reworded to the actual plan (ETag, then
+IndexedDB — `web-delivery` 02). Note item **C3 still promises "GitHub login +
+contribution UI"**, which [ADR-0002](../../../adr/0002-chart-data-only-no-audio-hosting.md)
+cut. Left alone deliberately: that is product copy, not a Tauri removal, and
+whether v1 still advertises contributions as forthcoming is a decision, not a typo.
+
+**Deliberately not fixed here: neither fetch call checks `response.ok`.**
+`await (await fetch(url)).json()` parses an error body as if it were data, so the
+`/catalog` 500 that production currently returns
+(`prod-data-and-infra` 06) would surface as a confusing failure inside
+`preprocessData` rather than "the server errored". Pre-existing on the browser
+path, so it is not a regression from this ticket — but it is now the *only* path.

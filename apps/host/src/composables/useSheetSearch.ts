@@ -1,6 +1,5 @@
 import { ref } from "vue";
 import { useDebounceFn } from "@vueuse/core";
-import { invoke, isTauri } from "@tauri-apps/api/core";
 import { GAME } from "~/app/game";
 import { decorateSheetFields } from "~/utils/data";
 import type { Filters, Sheet } from "~/types";
@@ -39,9 +38,7 @@ export default function useSheetSearch() {
     loading.value = true;
     try {
       const url = buildSearchUrl(filters, page, pageSize);
-      const data: SearchResponse = isTauri()
-        ? await invoke<SearchResponse>("search_sheets", { searchUrl: url })
-        : await (await fetch(url)).json();
+      const data: SearchResponse = await (await fetch(url)).json();
 
       for (const sheet of data.sheets) {
         decorateSheetFields(sheet, GAME.dataSourceUrl);

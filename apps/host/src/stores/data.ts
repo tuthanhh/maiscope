@@ -4,7 +4,6 @@ import LoadingStatus from "~/enums/LoadingStatus";
 import { GAME } from "~/app/game";
 import { buildEmptyData, preprocessData } from "~/utils";
 import type { Data, Sheet } from "~/types";
-import { invoke, isTauri } from "@tauri-apps/api/core";
 
 // eslint-disable-next-line import/prefer-default-export
 export const useDataStore = defineStore("data", () => {
@@ -48,9 +47,7 @@ export const useDataStore = defineStore("data", () => {
       // legacy CloudFront data.json. Shape is byte-identical, so preprocessData
       // is unchanged. Cover images/icons still live on dataSourceUrl.
       const catalogUrl = `${GAME.apiBaseUrl}/catalog`;
-      const data = isTauri()
-        ? await invoke<Data>("load_chart_data", { catalogUrl })
-        : await (await fetch(catalogUrl)).json();
+      const data: Data = await (await fetch(catalogUrl)).json();
 
       preprocessData(data, GAME.dataSourceUrl, GAME.gameCode);
 

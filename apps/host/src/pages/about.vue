@@ -13,7 +13,7 @@ const roadmap = [
     },
     {
         id: "C2",
-        text: "Local SQLite cache (tauri-plugin-sql) + offline-first + delta sync via manifest",
+        text: "Client-side catalog cache (ETag, then IndexedDB) + offline-first + delta sync via manifest",
     },
     {
         id: "C3",
