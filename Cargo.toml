@@ -2,8 +2,8 @@
 resolver = "2"
 members = [
     "apps/server",
-    "apps/host/src-tauri",
-    "engine", "shared"
+    "engine",
+    "shared",
 ]
 
 # Share core dependencies across the workspace to speed up compile times
