@@ -18,7 +18,12 @@ Use a tiny `bin/migrate.rs` wrapping `sqlx::migrate!()` rather than installing
 - [ ] `apps/server/src/bin/migrate.rs` — connect, `sqlx::migrate!().run()`, log
       applied versions, exit non-zero on failure
 - [ ] Migrator binary included in the runtime image (issue 02)
-- [ ] `fly.toml`: app name, region, `release_command = "/app/migrate"`
+- [ ] `fly.toml` **at the repo root**: app name, region,
+      `release_command = "/app/migrate"`, and
+      `[build] dockerfile = "apps/server/Dockerfile"` — the Dockerfile moved under
+      `apps/server/` (issue 02), and this path resolves relative to `fly.toml`
+- [ ] `DATABASE_URL` for Neon carries `?sslmode=require` — `sqlx` now has TLS via
+      `tls-rustls-ring-webpki`, added while closing issue 02
 - [ ] `auto_stop_machines` / `auto_start_machines` on, `min_machines_running = 0`
 - [ ] Memory sized small (256MB) and recorded; raise only with evidence
 - [ ] `[[services]]` health check pointed at `/api/v1/healthcheck`

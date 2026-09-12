@@ -28,11 +28,31 @@ The frontend is a port of [zetaraku/arcade-songs](https://github.com/zetaraku/ar
 ### Backend (`apps/server`)
 
 ```sh
-docker compose up -d               # Postgres on :5432
-sqlx migrate run
+docker compose up -d               # Postgres on :5432 — from the repo root
+sqlx migrate run                   # the rest from apps/server
 cargo run --bin ingest             # load catalog into canonical tables
 cargo run                          # API on :3000
 cargo run --bin seed_songs         # load chart text, keyed by sheet_expr
+```
+
+#### Where infrastructure files live
+
+**Root describes the system; `apps/<x>/` describes how one app is built.** The
+dev database is shared by the server, `bin/ingest` and the test suite, so
+`docker-compose.yml` is at the root. The server image is one app's build, so
+`apps/server/Dockerfile` sits with it.
+
+Two deliberate exceptions, both forced by tooling:
+
+- `.dockerignore` stays at the root — Docker resolves it against the build
+  *context*, not against the Dockerfile
+- `fly.toml` stays at the root — `flyctl` assumes it there, and its
+  `[build] dockerfile` path resolves relative to it
+
+The Cargo workspace spans the repo, so the build context is always the root:
+
+```sh
+docker build -f apps/server/Dockerfile -t maiscope-server:dev .
 ```
 
 #### Offline sqlx cache

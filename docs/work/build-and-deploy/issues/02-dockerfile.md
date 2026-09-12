@@ -17,7 +17,8 @@ Notes specific to this repo:
 
 **Status:** in-progress
 
-- [x] Multi-stage `Dockerfile` at repo root (workspace context)
+- [x] Multi-stage `Dockerfile` at `apps/server/Dockerfile`, built with the repo
+      root as context (the ticket allowed either location)
 - [x] Builder stage pins the Rust version to match `edition = "2024"` needs —
       `rust:1.97-slim-trixie` (edition 2024 needs ≥ 1.85)
 - [x] Dependency layer cached separately from source — `cargo-chef`, three stages
@@ -63,6 +64,31 @@ sources after the copy, or cargo reuses the stub build — a silent failure mode
 and `engine/Cargo.toml` are deliberately kept: `engine` is still a workspace member,
 so cargo parses its manifest and infers its `[lib]` target even though `-p server`
 never compiles it.
+
+**Layout rule: root describes the system, `apps/<x>/` describes how one app is
+built.** The Dockerfile started at the repo root and the dev-Postgres compose file
+under `apps/server/`, which put two container files at two levels for no reason.
+Resolved by moving both: `apps/server/Dockerfile` (one app's build) and a root
+`docker-compose.yml` (a database shared by the server, `bin/ingest` and the test
+suite — it was never a child of `apps/server`).
+
+Two files stay at the root against that rule, both forced by tooling:
+`.dockerignore`, which Docker resolves against the build *context* rather than the
+Dockerfile; and `fly.toml` (issue 03), which `flyctl` expects at the root.
+
+Rejected: putting everything under `deploy/`. It reads tidy but every command grows
+a flag, and `.dockerignore` would have to stay at the root regardless — so infra
+would still be split across two levels, defeating the point. Also rejected: a
+matching `apps/host/Dockerfile`. The frontend ships via Cloudflare Pages
+(`web-delivery` 03), and containerising it would mean paying Fly egress on a 40MB+
+wasm download — the exact cost ADR-0003 rejected.
+
+The build context is the repo root either way, because the Cargo workspace spans
+it:
+
+```sh
+docker build -f apps/server/Dockerfile -t maiscope-server:dev .
+```
 
 **Verification without Docker.** Docker was unavailable (daemon inactive, user not
 in the `docker` group), so the builder stage was reproduced by hand: the surviving

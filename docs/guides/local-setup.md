@@ -13,13 +13,17 @@
 ## 1. Backend
 
 ```sh
+docker compose up -d          # Postgres on :5432, from the repo root
 cd apps/server
-cp .env.example .env          # values must match docker-compose.yml
-docker compose up -d          # Postgres on :5432
-sqlx migrate run
+cp .env.example .env          # values must match the root docker-compose.yml
+sqlx migrate run              # reads migrations/ relative to apps/server
 cargo run --bin ingest        # load the catalog
 cargo run                     # API on :3000
 ```
+
+The database is declared at the repo root because it is shared — ingest, the
+tests and the server all use it. `sqlx` commands stay in `apps/server`, which is
+where `migrations/` and `.env` live.
 
 ## 2. Engine
 

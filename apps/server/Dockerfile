@@ -1,5 +1,13 @@
 # syntax=docker/dockerfile:1
 
+# Build from the REPO ROOT, not from this directory — the Cargo workspace spans
+# the repo, so the context must be the root even though this file lives here:
+#
+#   docker build -f apps/server/Dockerfile -t maiscope-server:dev .
+#
+# `.dockerignore` stays at the root for the same reason: it is resolved against
+# the context, not against this file.
+#
 # Builds only the `server` package out of the Cargo workspace. `engine` pulls in
 # the whole Bevy tree, so `--workspace` here would multiply the build by an order
 # of magnitude for code the image never runs.

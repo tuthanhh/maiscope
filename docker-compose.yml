@@ -1,8 +1,15 @@
-# Local Postgres for the maiscope global backend (step 1).
+# Local Postgres, shared by the whole repo — the server, `bin/ingest` and the
+# `#[sqlx::test]` suite all connect to it. It lives at the root rather than under
+# apps/server for that reason: root describes the system, apps/<x>/ describes how
+# one app is built.
+#
 # Creds here MUST match apps/server/.env DATABASE_URL.
 #   docker compose up -d      # start
 #   docker compose down       # stop (keeps volume)
 #   docker compose down -v    # stop + wipe data
+#
+# Deliberately does not run the server itself: that would rebuild the image on
+# every code change, which is a far worse inner loop than `cargo run`.
 services:
   db:
     image: postgres:17
