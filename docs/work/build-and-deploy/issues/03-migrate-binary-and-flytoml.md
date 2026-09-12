@@ -29,8 +29,11 @@ Use a tiny `bin/migrate.rs` wrapping `sqlx::migrate!()` rather than installing
       `[[services]]` syntax is superseded)
 - [x] `DATABASE_URL` kept out of `fly.toml` — verified by parsing the file and
       asserting the string does not appear
-- [ ] **Fly app created and secret set** — needs a Fly account; not done from the
-      agent session (see the repo rule about never touching production)
+- [x] **Fly app created and secret set**, plus Shared IPv4 + Dedicated IPv6
+      assigned (a UI deploy with a prebuilt image does not allocate them, unlike
+      a first `fly deploy`)
+- [x] **Deployed and serving** — `GET https://maiscope-api.fly.dev/api/v1/healthcheck`
+      returns 200 `{"status":"good"}` in ~160ms, schema at `20260907110000`
 - [ ] Verified: a deliberately broken migration aborts the deploy and the previous
       version keeps serving
 - [x] Documented rule: destructive migrations are **not** deployed this way
@@ -85,6 +88,13 @@ exactly like a healthy app boot. `bin/migrate` never ran on Fly at all.
 
 Fixed by using `CMD ["/app/server"]` in `apps/server/Dockerfile`. **Any image whose
 release command must be overridable has to use CMD, not ENTRYPOINT.**
+
+**The abort path was observed four times, accidentally.** Every failed deploy left
+nothing serving and created no app machine — Fly aborted before any machine took
+traffic, which is the property the release command exists for. It is not the
+ticket's test though: the failures were the wrong binary running, not a bad
+migration, and there was no previous version to keep serving. That test is only
+meaningful now that a good version is live.
 
 **Still owed.** The Neon side is done (project live in `ap-southeast-1`, schema
 applied). What remains needs a Fly account: create the `maiscope-api` app, set
