@@ -20,12 +20,16 @@ domain is in place.**
 
 **Blocked by:** 01
 
-**Status:** todo
+**Status:** in-progress
 
-- [ ] Pages project connected to the repo; build command `pnpm build`, output `dist`
-- [ ] `VITE_API_BASE_URL` set to the Fly origin in Pages env vars
-- [ ] SPA fallback/rewrite configured so Vue Router history mode does not 404 on
-      deep links
+- [x] **Deployed by wrangler from GitHub Actions, not by Pages' git integration** —
+      `.github/workflows/deploy-web.yml`. See Comments; the git-connected build was
+      tried and failed
+- [x] `VITE_API_BASE_URL` set to the Fly origin — in the workflow, not in Pages env
+      vars, since Pages no longer runs the build
+- [x] SPA fallback **not needed**: the router is on `createWebHashHistory`
+      (`router.ts:39`), so every route is a fragment and the server only ever serves
+      `/`. Deep links cannot 404. Revisit if the router moves to history mode
 - [ ] Preview deployments on PRs (their origins must not be in the CORS allowlist
       unless deliberately added)
 - [ ] **Production origin added to `CORS_ALLOWED_ORIGINS` in `fly.toml`** and
@@ -38,8 +42,9 @@ domain is in place.**
       consequence written down
 - [x] **The wasm artifact fits what Pages will accept** — 17MB after the profile
       fix below, under the 25 MiB cap. Was 43MB; see Comments
-- [ ] `pnpm build` wired to the release wasm — `build-wasm.sh` defaults to `dev`,
-      which emits the 143MB artifact. Whatever builds for Pages must pass `release`
+- [x] `pnpm build` wired to the release wasm — the workflow runs
+      `./scripts/build-wasm.sh release`, and a guard step fails the build if any
+      asset exceeds 25 MiB rather than letting wrangler discover it
 
 ## Comments
 
@@ -105,3 +110,37 @@ number is known.
 from Fly means metered egress per cold visitor, which is the exact cost
 [ADR-0003](../../../adr/0003-web-pwa-drop-tauri.md) and this ticket rejected. The
 size problem makes Pages *more* attractive, not less.
+
+
+## Deployment mechanism
+
+**Pages' git integration cannot build this project.** Tried it; the build failed at
+`vue-tsc` with the two `TS2307` errors for `~/wasm/maiscope_viewer.js`. The Pages
+image provides `pnpm@10.33.0` and `nodejs@24.18.0` and no Rust, while
+`apps/host/src/wasm/` is gitignored and produced by `scripts/build-wasm.sh` —
+which needs Rust, `wasm-bindgen` 0.2.122, and a fat-LTO Bevy build that takes
+**2m55s locally with a warm cargo cache**. Installing Rust in the build command
+would work in principle but starts cold every time.
+
+So `.github/workflows/deploy-web.yml` builds on a runner — reusing the same pinned
+toolchain and the same `Swatinem/rust-cache` key as `ci.yml`'s `wasm-web` job — and
+deploys with `wrangler pages deploy`. The Pages project is therefore a **Direct
+Upload** project, not connected to git.
+
+Consequences accepted: PR preview deployments are not automatic any more (wrangler
+can produce them via `--branch`, not yet wired), and two secrets are needed —
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+
+**Shipped artifact sizes**, measured end to end:
+
+| Build | Largest asset |
+|---|---|
+| `build-wasm.sh` (dev, the default) | 139 MiB — would be rejected |
+| `build-wasm.sh release` → `wasm-bindgen` → `vite build` | **13.9 MiB**, gzip 3.9 MB |
+
+`wasm-bindgen` shrinks the 17MB `wasm-release` binary to 14MB by dropping unused
+exports, so there is ~44% headroom under the 25 MiB cap.
+
+**Noted, not acted on:** the generated `maiscope_viewer.js` uses `eval`, which rollup
+warns about. Harmless today, but it will conflict with a strict `Content-Security-Policy`
+— relevant when `web-delivery` 04 adds the service worker and headers.

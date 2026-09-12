@@ -1,0 +1,149 @@
+name: deploy-web
+
+# Cloudflare Pages, deployed by wrangler from a runner rather than by Pages'
+# own git integration.
+#
+# Why not the git integration: `pnpm build` needs apps/host/src/wasm/, which is
+# gitignored and produced by scripts/build-wasm.sh — Rust, wasm-bindgen 0.2.122
+# and a fat-LTO Bevy build. Pages' build image ships Node and pnpm only, and even
+# with Rust installed each build would start with a cold cargo cache. A
+# git-connected build was tried and failed on exactly that (two TS2307 errors for
+# the missing wasm module).
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Commit SHA or branch to deploy (must have green CI)"
+        required: false
+        default: master
+
+concurrency:
+  group: deploy-web
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  PAGES_PROJECT: maiscope
+  API_BASE_URL: https://maiscope-api.fly.dev/api/v1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    # `checks: read` for the CI gate; naming any permission zeroes the rest, so
+    # `contents: read` is needed for checkout.
+    permissions:
+      contents: read
+      checks: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Resolve the commit being deployed
+        id: sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Require green CI on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.sha.outputs.sha }}
+        run: |
+          set -euo pipefail
+          runs=$(gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs" \
+            --jq '.check_runs[] | "\(.name)\t\(.status)\t\(.conclusion // "pending")"')
+          echo "$runs"
+
+          fail=0
+          for job in rust wasm-web; do
+            line=$(printf '%s\n' "$runs" | awk -F'\t' -v j="$job" '$1 == j' | head -1)
+            if [ -z "$line" ]; then
+              echo "::error::No '$job' check run found for $SHA — CI has not run on this commit."
+              fail=1
+              continue
+            fi
+            conclusion=$(printf '%s' "$line" | cut -f3)
+            if [ "$conclusion" != "success" ]; then
+              echo "::error::Check '$job' is '$conclusion' for $SHA — refusing to deploy."
+              fail=1
+            fi
+          done
+          [ "$fail" -eq 0 ] || exit 1
+
+      - name: Install the pinned toolchain
+        run: rustup show
+
+      # Same key as ci.yml's wasm-web job, so the two share one cargo cache.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: wasm
+
+      - name: Install wasm-bindgen-cli
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@0.2.122
+
+      # `release`, not the default `dev`. Dev emits a 143MB artifact; the
+      # wasm-release profile produces 17MB, under Pages' 25 MiB per-file cap.
+      - name: Build wasm bindings (release)
+        run: ./scripts/build-wasm.sh release
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/host/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: apps/host/pnpm-lock.yaml
+
+      - name: pnpm install
+        working-directory: apps/host
+        run: pnpm install --frozen-lockfile
+
+      - name: pnpm build
+        working-directory: apps/host
+        env:
+          VITE_API_BASE_URL: ${{ env.API_BASE_URL }}
+        run: pnpm build
+
+      # Guard the cap rather than discovering it in wrangler's error output.
+      - name: Check no file exceeds Cloudflare's 25 MiB limit
+        run: |
+          set -euo pipefail
+          limit=$((25 * 1024 * 1024))
+          biggest=$(find apps/host/dist -type f -printf '%s\t%p\n' | sort -rn | head -1)
+          size=$(printf '%s' "$biggest" | cut -f1)
+          path=$(printf '%s' "$biggest" | cut -f2)
+          echo "largest asset: $path ($((size / 1024 / 1024)) MiB)"
+          if [ "$size" -gt "$limit" ]; then
+            echo "::error::$path is over Cloudflare Pages' 25 MiB per-file limit."
+            exit 1
+          fi
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: >-
+            pages deploy apps/host/dist
+            --project-name=${{ env.PAGES_PROJECT }}
+            --branch=master
+
+      - name: Summary
+        if: always()
+        env:
+          SHA: ${{ steps.sha.outputs.sha }}
+        run: |
+          {
+            echo "### Web deploy ${{ job.status }}"
+            echo ""
+            echo "- project: \`${PAGES_PROJECT}\`"
+            echo "- commit: \`${SHA}\`"
+            echo "- API base: ${API_BASE_URL}"
+          } >> "$GITHUB_STEP_SUMMARY"
