@@ -73,7 +73,7 @@ impl ChartPlayback {
                         bpm,
                     });
                     let per_comma = absolute_comma_length
-                        .unwrap_or_else(|| DEFAULT_BPM as f64 / bpm as f64 / resolution as f64);
+                        .unwrap_or_else(|| DEFAULT_BPM / bpm as f64 / resolution as f64);
                     current_time += per_comma;
                 }
             }

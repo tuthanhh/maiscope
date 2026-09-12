@@ -99,7 +99,7 @@ fn parse_chained_slide_segments(
     start_btn: usize,
     pattern_str: &str,
 ) -> Result<(Vec<(SlideShape, Duration)>, bool), String> {
-    let clean_str = pattern_str.trim_end_matches(|c| c == 'b' || c == 'x' || c == 'f');
+    let clean_str = pattern_str.trim_end_matches(['b', 'x', 'f']);
 
     let segments =
         tokenize_slide_pattern(clean_str).map_err(|e| format!("{} in '{}'", e, pattern_str))?;

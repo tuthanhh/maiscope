@@ -231,10 +231,10 @@ pub fn get_transform_at_distance(points: &[Vec2], target_distance: f32) -> (Vec2
 /// Append `next_segment` to `base`, skipping the first point if it duplicates
 /// the last point of `base` (within 1.0 units).
 pub(super) fn append_path_dedup(base: &mut Vec<Vec2>, mut next_segment: Vec<Vec2>) {
-    if let (Some(last), Some(first)) = (base.last(), next_segment.first()) {
-        if last.distance(*first) < 1.0 {
-            next_segment.remove(0);
-        }
+    if let (Some(last), Some(first)) = (base.last(), next_segment.first())
+        && last.distance(*first) < 1.0
+    {
+        next_segment.remove(0);
     }
     base.extend(next_segment);
 }

@@ -4,7 +4,6 @@
 use super::note::parse_note;
 use crate::systems::component::{ChartEvent, Note};
 use regex::Regex;
-use std::path::Path;
 use std::sync::LazyLock;
 
 // Pre-compiled regexes for performance (avoids recompilation on every call)
@@ -65,31 +64,31 @@ fn strip_meta_tokens(token: &str, events: &mut Vec<ChartEvent>) -> String {
     loop {
         let mut found = false;
 
-        if let Some(caps) = ABS_LEN_REGEX.captures(&current_str) {
-            if let Ok(seconds) = caps[1].parse::<f64>() {
-                events.push(ChartEvent::AbsoluteLength(seconds));
-                let m = caps.get(0).unwrap();
-                current_str = format!("{}{}", &current_str[..m.start()], &current_str[m.end()..]);
-                found = true;
-            }
+        if let Some(caps) = ABS_LEN_REGEX.captures(&current_str)
+            && let Ok(seconds) = caps[1].parse::<f64>()
+        {
+            events.push(ChartEvent::AbsoluteLength(seconds));
+            let m = caps.get(0).unwrap();
+            current_str = format!("{}{}", &current_str[..m.start()], &current_str[m.end()..]);
+            found = true;
         }
 
-        if let Some(caps) = BPM_REGEX.captures(&current_str) {
-            if let Ok(bpm) = caps[1].parse::<f32>() {
-                events.push(ChartEvent::BpmChange(bpm));
-                let m = caps.get(0).unwrap();
-                current_str = format!("{}{}", &current_str[..m.start()], &current_str[m.end()..]);
-                found = true;
-            }
+        if let Some(caps) = BPM_REGEX.captures(&current_str)
+            && let Ok(bpm) = caps[1].parse::<f32>()
+        {
+            events.push(ChartEvent::BpmChange(bpm));
+            let m = caps.get(0).unwrap();
+            current_str = format!("{}{}", &current_str[..m.start()], &current_str[m.end()..]);
+            found = true;
         }
 
-        if let Some(caps) = RES_REGEX.captures(&current_str) {
-            if let Ok(resolution) = caps[1].parse::<u32>() {
-                events.push(ChartEvent::ResolutionChange(resolution));
-                let m = caps.get(0).unwrap();
-                current_str = format!("{}{}", &current_str[..m.start()], &current_str[m.end()..]);
-                found = true;
-            }
+        if let Some(caps) = RES_REGEX.captures(&current_str)
+            && let Ok(resolution) = caps[1].parse::<u32>()
+        {
+            events.push(ChartEvent::ResolutionChange(resolution));
+            let m = caps.get(0).unwrap();
+            current_str = format!("{}{}", &current_str[..m.start()], &current_str[m.end()..]);
+            found = true;
         }
 
         if !found {

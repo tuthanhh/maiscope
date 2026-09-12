@@ -100,11 +100,11 @@ pub(super) fn grow_slide(
 ) {
     let Some(children) = children else { return };
     for child in children.iter() {
-        if let Ok((mut transform, el, _, _, head_children)) = slide_elements.get_mut(child) {
-            if matches!(*el, SlideElement::Head) {
-                transform.scale = Vec3::splat(t);
-                scale_note_halo(&transform, head_children, note_halos);
-            }
+        if let Ok((mut transform, el, _, _, head_children)) = slide_elements.get_mut(child)
+            && matches!(*el, SlideElement::Head)
+        {
+            transform.scale = Vec3::splat(t);
+            scale_note_halo(&transform, head_children, note_halos);
         }
         if let Ok((sprite, shape, _)) = slide_arrows.get_mut(child) {
             set_arrow_alpha(sprite, shape, t);
@@ -147,6 +147,7 @@ pub(super) fn move_tap(transform: &mut Transform, kind: &NoteKind, t: f32, layou
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn move_taphold(
     kind: &NoteKind,
     t: f32,
@@ -196,18 +197,16 @@ pub(super) fn move_slide(
 ) {
     let Some(children) = children else { return };
     for child in children.iter() {
-        if let Ok((mut transform, el, _, _, head_children)) = slide_elements.get_mut(child) {
-            if matches!(*el, SlideElement::Head) {
-                if let NoteKind::Slide {
-                    head_button: id, ..
-                } = kind
-                {
-                    // Land on the outer rim, coinciding with the path start.
-                    let (spawn, hit) = travel_endpoints(layout, *id);
-                    transform.translation = spawn.lerp(hit, t).extend(2.0);
-                    scale_note_halo(&transform, head_children, note_halos);
-                }
-            }
+        if let Ok((mut transform, el, _, _, head_children)) = slide_elements.get_mut(child)
+            && matches!(*el, SlideElement::Head)
+            && let NoteKind::Slide {
+                head_button: id, ..
+            } = kind
+        {
+            // Land on the outer rim, coinciding with the path start.
+            let (spawn, hit) = travel_endpoints(layout, *id);
+            transform.translation = spawn.lerp(hit, t).extend(2.0);
+            scale_note_halo(&transform, head_children, note_halos);
         }
     }
 }
@@ -215,10 +214,10 @@ pub(super) fn move_slide(
 pub(super) fn hide_slide_head(children: Option<&Children>, slide_elements: &mut SlideElementQuery) {
     let Some(children) = children else { return };
     for child in children.iter() {
-        if let Ok((_t, el, mut vis, _s, _)) = slide_elements.get_mut(child) {
-            if matches!(*el, SlideElement::Head) {
-                *vis = Visibility::Hidden;
-            }
+        if let Ok((_t, el, mut vis, _s, _)) = slide_elements.get_mut(child)
+            && matches!(*el, SlideElement::Head)
+        {
+            *vis = Visibility::Hidden;
         }
     }
 }
@@ -235,11 +234,11 @@ pub(super) fn move_triangles(
     let Some(children) = children else { return };
     let current_dist = shapes::touch_triangle_start_distance(NOTE_RADIUS) * (1.0 - t);
     for child in children.iter() {
-        if let Ok((mut tf, element)) = triangles.get_mut(child) {
-            if matches!(element, TouchElement::Triangle) {
-                let dir = tf.translation.truncate().normalize_or_zero();
-                tf.translation = (dir * current_dist).extend(-0.1);
-            }
+        if let Ok((mut tf, element)) = triangles.get_mut(child)
+            && matches!(element, TouchElement::Triangle)
+        {
+            let dir = tf.translation.truncate().normalize_or_zero();
+            tf.translation = (dir * current_dist).extend(-0.1);
         }
     }
 }
@@ -284,6 +283,7 @@ pub(super) fn animate_touch_spark(
 
 // ── Holding phase ────────────────────────────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn hold_tap(
     kind: &NoteKind,
     t: f32,
@@ -367,12 +367,12 @@ pub(super) fn wait_slide(
 ) {
     let Some(children) = children else { return };
     for child in children.iter() {
-        if let Ok((mut transform, el, mut vis, mut shape, _)) = slide_elements.get_mut(child) {
-            if matches!(*el, SlideElement::TraceStar(_)) {
-                *vis = Visibility::Visible;
-                transform.scale = Vec3::splat(t);
-                set_alpha(&mut shape, t);
-            }
+        if let Ok((mut transform, el, mut vis, mut shape, _)) = slide_elements.get_mut(child)
+            && matches!(*el, SlideElement::TraceStar(_))
+        {
+            *vis = Visibility::Visible;
+            transform.scale = Vec3::splat(t);
+            set_alpha(&mut shape, t);
         }
     }
 }
@@ -390,17 +390,17 @@ pub(super) fn slide_trace(
     let dist = frac * path.total_length;
     let (pos, angle) = slide_path::get_transform_at_distance(&path.waypoints, dist);
     for child in children.iter() {
-        if let Ok((mut transform, el, _vis, mut shape, _)) = slide_elements.get_mut(child) {
-            if matches!(*el, SlideElement::TraceStar(_)) {
-                set_alpha(&mut shape, 1.0);
-                transform.translation = pos.extend(3.0);
-                transform.rotation = Quat::from_rotation_z(angle);
-            }
+        if let Ok((mut transform, el, _vis, mut shape, _)) = slide_elements.get_mut(child)
+            && matches!(*el, SlideElement::TraceStar(_))
+        {
+            set_alpha(&mut shape, 1.0);
+            transform.translation = pos.extend(3.0);
+            transform.rotation = Quat::from_rotation_z(angle);
         }
-        if let Ok((_, _, arrow)) = slide_arrows.get_mut(child) {
-            if arrow.distance_along_path <= dist {
-                commands.entity(child).despawn();
-            }
+        if let Ok((_, _, arrow)) = slide_arrows.get_mut(child)
+            && arrow.distance_along_path <= dist
+        {
+            commands.entity(child).despawn();
         }
     }
 }
@@ -417,15 +417,14 @@ pub(super) fn fan_trace(
 ) {
     let Some(children) = children else { return };
     for child in children.iter() {
-        if let Ok((mut transform, el, _vis, mut shape, _)) = slide_elements.get_mut(child) {
-            if let SlideElement::TraceStar(lane) = *el {
-                let len = fan.lengths.get(lane).copied().unwrap_or(0.0);
-                let (pos, angle) =
-                    slide_path::get_transform_at_distance(&fan.lanes[lane], frac * len);
-                set_alpha(&mut shape, 1.0);
-                transform.translation = pos.extend(3.0);
-                transform.rotation = Quat::from_rotation_z(angle);
-            }
+        if let Ok((mut transform, el, _vis, mut shape, _)) = slide_elements.get_mut(child)
+            && let SlideElement::TraceStar(lane) = *el
+        {
+            let len = fan.lengths.get(lane).copied().unwrap_or(0.0);
+            let (pos, angle) = slide_path::get_transform_at_distance(&fan.lanes[lane], frac * len);
+            set_alpha(&mut shape, 1.0);
+            transform.translation = pos.extend(3.0);
+            transform.rotation = Quat::from_rotation_z(angle);
         }
         if let Ok((_, _, arrow)) = slide_arrows.get_mut(child) {
             let len = fan.lengths.get(arrow.lane).copied().unwrap_or(0.0);

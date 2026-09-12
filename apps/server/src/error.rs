@@ -18,6 +18,8 @@ pub enum AppError {
         kind: &'static str,
         key: String,
     },
+
+    #[allow(dead_code)]
     BadRequest(String),
     /// `/sync/delta`'s `since` predates the last full reload (contract §3).
     SnapshotRequired,

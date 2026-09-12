@@ -502,7 +502,7 @@ mod tests {
         // handler (a later ticket) is responsible for still emitting the song
         // with an empty sheets: [] array; fetch_all_sheets just doesn't
         // produce a key for songs with zero matching sheets.
-        assert!(grouped_kr.get(&song_pk).is_none());
+        assert!(!grouped_kr.contains_key(&song_pk));
         Ok(())
     }
 

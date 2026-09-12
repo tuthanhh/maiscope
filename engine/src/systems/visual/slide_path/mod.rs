@@ -12,7 +12,7 @@ mod trace;
 
 // Public API in active use by spawning / movement.
 pub use geometry::get_transform_at_distance;
-pub use trace::{build_slide_trace, trace_distance, trace_total_secs};
+pub use trace::{build_slide_trace, trace_total_secs};
 
 // Part of the module's public surface, but not yet wired into spawning.
 #[allow(unused_imports)]

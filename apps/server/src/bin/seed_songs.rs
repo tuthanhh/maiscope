@@ -65,15 +65,15 @@ fn parse_maidata(text: &str) -> HashMap<String, String> {
     let mut buf: Vec<&str> = Vec::new();
 
     for line in text.lines() {
-        if let Some(rest) = line.strip_prefix('&') {
-            if let Some((key, first_value_line)) = rest.split_once('=') {
-                if let Some(prev_key) = current_key.take() {
-                    out.insert(prev_key, buf.join("\n"));
-                }
-                current_key = Some(key.to_string());
-                buf = vec![first_value_line];
-                continue;
+        if let Some(rest) = line.strip_prefix('&')
+            && let Some((key, first_value_line)) = rest.split_once('=')
+        {
+            if let Some(prev_key) = current_key.take() {
+                out.insert(prev_key, buf.join("\n"));
             }
+            current_key = Some(key.to_string());
+            buf = vec![first_value_line];
+            continue;
         }
         if current_key.is_some() {
             buf.push(line);

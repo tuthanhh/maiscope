@@ -162,6 +162,8 @@ type TouchSparkQuery<'w, 's> = Query<
     ),
 >;
 
+#[allow(clippy::type_complexity)]
+#[allow(clippy::too_many_arguments)]
 pub fn update_movement(
     mut commands: Commands,
     mut entity_query: Query<(

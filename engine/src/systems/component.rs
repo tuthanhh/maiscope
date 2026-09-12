@@ -39,6 +39,7 @@ pub struct SlideSegment {
     pub shape: SlideShape,
     pub duration: Duration,
     /// The break modifier for the specific tracing path (independent of the star).
+    #[allow(dead_code)]
     pub is_break: bool,
 }
 
@@ -60,6 +61,7 @@ pub enum NoteKind {
     },
 
     /// A star head with NO path. Acts like a Tap, but is visually a star.
+    #[allow(dead_code)]
     SlideStar(ButtonId),
 
     /// A slide path with NO star head. (e.g., a path you just trace without an initial tap).

@@ -7,12 +7,12 @@ use super::{
     note_colors,
     resources::{ButtonLayout, NoteAssets},
     shapes::{
-        CHEVRON_ROT_OFFSET, COUNTDOWN_EDGE_COLORS, COUNTDOWN_EDGES, COUNTDOWN_SWEEP_S,
-        NORMAL_HALO_DOT_OFFSET, chevron_shape, chevron_sprite, countdown_edge, hold_beam_sprite,
-        hold_cap_sprite, hold_end_dot_sprite, normal_halo_sprite, star_break_sprite,
-        star_ex_sprite, star_sprite, tap_break_sprite, tap_ex_sprite, tap_sprite,
-        touch_circle_sprite, touch_effect_sprite, touch_effect_star_sprite,
-        touch_hold_triangle_sprite, touch_triangle_sprite, touch_triangle_start_distance,
+        CHEVRON_ROT_OFFSET, COUNTDOWN_EDGE_COLORS, COUNTDOWN_SWEEP_S, NORMAL_HALO_DOT_OFFSET,
+        chevron_shape, chevron_sprite, countdown_edge, hold_beam_sprite, hold_cap_sprite,
+        hold_end_dot_sprite, normal_halo_sprite, star_break_sprite, star_ex_sprite, star_sprite,
+        tap_break_sprite, tap_ex_sprite, tap_sprite, touch_circle_sprite, touch_effect_sprite,
+        touch_effect_star_sprite, touch_hold_triangle_sprite, touch_triangle_sprite,
+        touch_triangle_start_distance,
     },
     slide_path,
 };
@@ -118,6 +118,7 @@ pub fn apply_commands(
 
 // ── Per-note spawning ──────────────────────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_note(
     commands: &mut Commands,
     note: &Note,
@@ -398,10 +399,10 @@ fn spawn_hold_children(
 fn spawn_touch_hold_countdown(parent: &mut RelatedSpawnerCommands<ChildOf>) {
     // The coloured diamond border, one entity per edge. Each starts empty and is
     // drawn in clockwise (revealed by `hold_touch` as the countdown progresses).
-    for edge in 0..COUNTDOWN_EDGES {
+    for (edge, color) in COUNTDOWN_EDGE_COLORS.iter().enumerate() {
         parent.spawn((
             ShapeBuilder::with(&countdown_edge(edge, COUNTDOWN_SWEEP_S, 0.0))
-                .stroke((COUNTDOWN_EDGE_COLORS[edge], NOTE_RADIUS * 0.18))
+                .stroke((*color, NOTE_RADIUS * 0.18))
                 .build(),
             Transform::from_xyz(0.0, 0.0, 5.0),
             Visibility::Hidden,
