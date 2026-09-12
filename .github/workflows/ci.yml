@@ -1,0 +1,139 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+# Deliberately no `paths:` filter, unlike docs.yml. A required status check that
+# is skipped by a path filter never reports at all, and GitHub then blocks the
+# merge forever waiting for it.
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Native Rust: everything that ships as a server binary.
+  #
+  # Scoped to `server` and `shared` rather than `--workspace` on purpose. The
+  # workspace also holds `engine` (Bevy), which would add ~300 crates, a
+  # multi-gigabyte cache, and an apt install of ALSA/X11/Wayland headers — for a
+  # native build that is never shipped and currently has zero tests. `engine` is
+  # gated by clippy in the wasm-web job instead, on the target it actually runs on.
+  rust:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17 # matches the root docker-compose.yml
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: maiscope
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d maiscope"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/maiscope
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Reads rust-toolchain.toml, so the version lives in one place.
+      - name: Install the pinned toolchain
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: native
+
+      - name: cargo fmt
+        run: cargo fmt --check
+
+      # Only `sqlx prepare --check` needs a migrated database: `#[sqlx::test]`
+      # creates a throwaway database per test and applies migrations itself.
+      # Ticket 03's `bin/migrate` will make this step a plain `cargo run`, and
+      # this sqlx-cli install can be dropped then.
+      - name: Install sqlx-cli
+        uses: taiki-e/install-action@v2
+        with:
+          tool: sqlx-cli
+
+      - name: Apply migrations
+        working-directory: apps/server
+        run: sqlx migrate run
+
+      # `-- --all-targets` must match how .sqlx/ was generated (ticket 01), or
+      # this compiles fewer targets than the cache covers and calls it stale.
+      - name: Offline query cache is current
+        run: cargo sqlx prepare --check --workspace -- --all-targets
+
+      - name: cargo clippy
+        run: cargo clippy -p server -p shared --all-targets -- -D warnings
+
+      - name: cargo test
+        run: cargo test -p server -p shared
+
+  # The engine and the frontend are one job because they are one dependency
+  # chain: `pnpm build` fails without the wasm bindings, since useEngine.ts
+  # imports ~/wasm/maiscope_viewer.js and apps/host/src/wasm/ is gitignored.
+  # Keeping them together also lets the clippy run's dependency rlibs feed the
+  # wasm build from the same target/ directory, instead of shipping a ~140MB
+  # artifact between two jobs.
+  wasm-web:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the pinned toolchain
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: wasm
+
+      # Must equal the wasm-bindgen crate version in engine/Cargo.toml exactly,
+      # or bindgen fails on a schema mismatch.
+      - name: Install wasm-bindgen-cli
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@0.2.122
+
+      # Compiling is checking, so this also covers "does engine still build for
+      # wasm" — no separate `cargo build --target ...` step is needed.
+      - name: cargo clippy (engine, wasm target)
+        run: cargo clippy -p maiscope-viewer --target wasm32-unknown-unknown -- -D warnings
+
+      - name: Build wasm bindings
+        run: ./scripts/build-wasm.sh
+
+      - uses: pnpm/action-setup@v4
+        with:
+          # There is no root package.json; the version comes from the host app's
+          # packageManager field.
+          package_json_file: apps/host/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: apps/host/pnpm-lock.yaml
+
+      - name: pnpm install
+        working-directory: apps/host
+        run: pnpm install --frozen-lockfile
+
+      # vue-tsc --noEmit && vite build
+      - name: pnpm build
+        working-directory: apps/host
+        run: pnpm build

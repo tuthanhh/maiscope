@@ -10,19 +10,26 @@ ticket just makes what exists run automatically.
 
 **Blocked by:** 01
 
-**Status:** todo
+**Status:** in-progress
 
-- [ ] `.github/workflows/ci.yml`, triggered on `pull_request` and pushes to master
-- [ ] Postgres service container, migrations applied before tests
-- [ ] `cargo fmt --check`
-- [ ] `cargo clippy --workspace -- -D warnings` (expect an initial cleanup pass)
-- [ ] `cargo sqlx prepare --check` — catches a changed query with a stale `.sqlx/`
-- [ ] `cargo test --workspace`
-- [ ] `cargo build --target wasm32-unknown-unknown -p engine` — catches wasm-only
-      breakage without running `wasm-bindgen`
-- [ ] `pnpm install --frozen-lockfile && pnpm build` (`vue-tsc --noEmit` + build)
-- [ ] Rust and pnpm caching so runs stay under a few minutes
-- [ ] Branch protection: these checks required before merge
+- [x] `.github/workflows/ci.yml`, triggered on `pull_request` and pushes to master
+- [x] Postgres service container (`postgres:17`, matching `docker-compose.yml`),
+      migrations applied before the checks that need them
+- [x] `cargo fmt --check`
+- [x] clippy under `-D warnings` — **scoped**, see Comments:
+      `-p server -p shared --all-targets` natively, plus
+      `-p maiscope-viewer --target wasm32-unknown-unknown`
+- [x] `cargo sqlx prepare --check --workspace -- --all-targets`
+- [x] `cargo test -p server -p shared` — **scoped**, see Comments. Covers all 69
+      tests; `engine` has none
+- [x] wasm breakage caught — by the engine clippy run above rather than a separate
+      `cargo build --target …`. Clippy compiles, so the build step was redundant
+- [x] `pnpm install --frozen-lockfile && pnpm build`
+- [x] Rust (`Swatinem/rust-cache`, one key per job) and pnpm
+      (`setup-node cache: pnpm`) caching
+- [ ] Verified on a real PR — every job green, timings recorded
+- [ ] Branch protection: these checks required before merge (GitHub UI; check
+      names only appear after the workflow has run once)
 
 ## Comments
 
@@ -48,6 +55,43 @@ Both gates now exit 0.
 `apps/server/src/main.rs:484+`, which no longer holds after `server-restructure`
 04 split the modules. Actual count as of 2026-09-13: **69 tests across 11 binaries**,
 all passing. Still nothing in `apps/host`.
+
+**Two jobs, not three, and clippy/test scoped to `server` + `shared`.**
+
+Measured before deciding: `server` resolves 229 crates, `engine` 309; `engine` has
+**0 tests**. So `--workspace` would add ~300 crates, a multi-gigabyte `target/`
+cache against a 10GB per-repo Actions budget, and an apt install of
+`libasound2-dev libudev-dev libx11-dev libxkbcommon-dev libwayland-dev pkg-config`
+(`bevy_kira_audio` → cpal → ALSA, plus the `x11`/`wayland` features) — all to lint
+a native build of a crate that only ever ships as wasm, and to run zero tests.
+
+Instead `engine` is gated by
+`cargo clippy -p maiscope-viewer --target wasm32-unknown-unknown -- -D warnings`,
+which needs no system libraries (ALSA/X11/Wayland are `cfg`-ed out on `wasm32`),
+lints the target that actually ships, and — since clippy compiles — subsumes the
+separate `cargo build --target …` step. Verified locally: passes clean in 45s.
+
+Rejected: `--workspace`, for the costs above. The trade accepted is that
+`engine`'s native-only code paths go unlinted; revisit if a native viewer build
+ever becomes real. Note the package is named **`maiscope-viewer`**, not `engine`.
+
+**The frontend cannot be its own job.** `pnpm build` fails without the wasm
+bindings — `useEngine.ts:13,67` import `~/wasm/maiscope_viewer.js`, and
+`apps/host/src/wasm/` is gitignored, so a bare checkout gives two `TS2307` errors.
+The engine and frontend are therefore one `wasm-web` job: clippy → `build-wasm.sh`
+→ `pnpm build`. Keeping them together also lets clippy's dependency rlibs feed the
+wasm build from the same `target/`, instead of passing a ~140MB artifact between
+jobs.
+
+**Pins added, because CI is where unpinned versions bite.** `rust-toolchain.toml`
+(channel 1.97, `rustfmt`/`clippy`, `wasm32-unknown-unknown`) so one file drives
+local, CI and `apps/server/Dockerfile`; CI just runs `rustup show`. And
+`packageManager: pnpm@10.33.0` in `apps/host/package.json`, which
+`pnpm/action-setup` reads via `package_json_file` — there is no root
+`package.json` for it to find.
+
+**No `paths:` filter**, unlike `docs.yml`. A required check skipped by a path
+filter never reports, and GitHub blocks the merge waiting for it.
 
 **`sqlx prepare --check` must carry issue 01's flags exactly:**
 

@@ -1,0 +1,10 @@
+# Single source of truth for the Rust version, shared by local builds, CI and
+# the server image. `apps/server/Dockerfile` pins the same 1.97 in its builder
+# stage — keep the two in step.
+#
+# edition = "2024" needs >= 1.85; the wasm target is here so `rustup show` in CI
+# installs everything scripts/build-wasm.sh needs without a separate step.
+[toolchain]
+channel = "1.97"
+components = ["rustfmt", "clippy"]
+targets = ["wasm32-unknown-unknown"]
