@@ -15,13 +15,19 @@ With the target now web + PWA, the proxy has no reason to exist.
 
 **Blocked by:** None (independent of server work)
 
-**Status:** todo
+**Status:** in-progress
 
-- [ ] `apps/host/src-tauri/` deleted, including `data.rs` and `search.rs`
-- [ ] `Cargo.toml` workspace members updated — `apps/host/src-tauri` removed
-- [ ] `isTauri()` branches removed from `stores/data.ts` and
-      `composables/useSheetSearch.ts`; plain `fetch` everywhere
-- [ ] `@tauri-apps/*` dependencies removed from `apps/host/package.json`
+- [x] `apps/host/src-tauri/` deleted, including `data.rs` and `search.rs`
+- [x] `Cargo.toml` workspace members updated — `apps/host/src-tauri` removed
+      (the stale member was breaking `cargo metadata` outright; fixed while
+      closing `build-and-deploy` 02)
+- [ ] `isTauri()` branches removed from `stores/data.ts:7,51` and
+      `composables/useSheetSearch.ts:3,42`; plain `fetch` everywhere
+- [ ] `@tauri-apps/api` removed from `apps/host/package.json` — **blocked on the
+      branch removal above**, since both files still import `invoke, isTauri`
+      from `@tauri-apps/api/core`. `@tauri-apps/plugin-opener`, `@tauri-apps/cli`
+      and the dead `"tauri": "tauri"` script were already removed; they had no
+      remaining references
 - [ ] `tauri.conf.json`, `capabilities/`, Tauri icons removed
 - [ ] `pnpm tauri dev` / `tauri build` references removed from README and CLAUDE.md
 - [ ] `cargo build --workspace` still green with the member gone
