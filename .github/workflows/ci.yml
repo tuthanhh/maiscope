@@ -62,11 +62,18 @@ jobs:
       # Only `sqlx prepare --check` needs a migrated database: `#[sqlx::test]`
       # creates a throwaway database per test and applies migrations itself.
       #
-      # Uses the same migrator that runs as Fly's release command, so CI
-      # exercises the deploy path instead of a second implementation via
-      # sqlx-cli — and CI needs no extra tool installed.
+      # Migrations are applied by the same binary that runs as Fly's release
+      # command, so CI exercises the deploy path rather than a second
+      # implementation via `sqlx migrate run`.
       - name: Apply migrations
         run: cargo run --bin migrate
+
+      # sqlx-cli is still required: `prepare --check` is one of its subcommands,
+      # and bin/migrate only replaces `sqlx migrate run`.
+      - name: Install sqlx-cli
+        uses: taiki-e/install-action@v2
+        with:
+          tool: sqlx-cli
 
       # `-- --all-targets` must match how .sqlx/ was generated (ticket 01), or
       # this compiles fewer targets than the cache covers and calls it stale.

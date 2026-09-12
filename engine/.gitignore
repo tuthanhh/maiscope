@@ -1,3 +1,10 @@
 /target
-/assets
 /.claude
+
+# Sprites and system sounds ARE tracked: `audio.rs` include_bytes! the WAVs at
+# compile time, and build-wasm.sh copies the sprites into apps/host/public/.
+# Without them in the repo, a clean clone cannot build the engine at all.
+#
+# Sample songs stay out — 83MB of chart and audio data used only for local
+# testing, and nothing in the build reads them.
+/assets/songs
