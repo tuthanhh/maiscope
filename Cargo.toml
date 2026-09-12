@@ -10,3 +10,23 @@ members = [
 [workspace.dependencies]
 serde = { version = "1.0", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
+
+# Profiles are workspace-global: one build cannot compile a shared dependency two
+# ways, so a [profile] in a member manifest is ignored with a warning. `engine`
+# carried one for months that never applied — which is why the "release" wasm was
+# built at stock opt-level 3 with no LTO and no strip.
+[profile.release]
+# Debug symbols are worth real megabytes in the server image and buy nothing in
+# production, where panics are reported through tracing. Deliberately NOT
+# `panic = "abort"`: a panicking handler should kill its task, not the process.
+strip = true
+
+# Size-optimised profile for the wasm bundle only, so these settings cannot leak
+# into the server. Used by scripts/build-wasm.sh release.
+[profile.wasm-release]
+inherits = "release"
+opt-level = 'z'   # optimise for size ('s' is the less aggressive option)
+lto = true        # drop dead code across crate boundaries
+codegen-units = 1 # maximise optimisation at the cost of compile time
+strip = true
+panic = 'abort'   # no unwinding tables; the browser gets an aborted module anyway

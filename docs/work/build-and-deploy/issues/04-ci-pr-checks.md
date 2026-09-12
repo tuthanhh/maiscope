@@ -27,9 +27,12 @@ ticket just makes what exists run automatically.
 - [x] `pnpm install --frozen-lockfile && pnpm build`
 - [x] Rust (`Swatinem/rust-cache`, one key per job) and pnpm
       (`setup-node cache: pnpm`) caching
-- [ ] Verified on a real PR — every job green, timings recorded
-- [ ] Branch protection: these checks required before merge (GitHub UI; check
-      names only appear after the workflow has run once)
+- [x] Verified green on `master` — `rust` 6m53s, `wasm-web` 1m31s (warm cache)
+- [ ] Verified on a real PR — deferred with branch protection below; `pull_request`
+      and `push` expose different contexts, so this is not covered by the master run
+- [ ] Branch protection: **deliberately deferred.** Work continues directly on
+      `master` until the backend is deployed and working; requiring checks before
+      merge only bites once there are PRs to gate. Revisit when ticket 05 lands.
 
 ## Comments
 

@@ -32,8 +32,10 @@ domain is in place.**
 - [ ] Recorded: the exact production origin, since it becomes the PWA identity
 - [ ] Ticket opened for the custom-domain migration, with the install-orphaning
       consequence written down
-- [ ] **The wasm artifact fits what Pages will accept** — see Comments; at today's
-      size it does not
+- [x] **The wasm artifact fits what Pages will accept** — 17MB after the profile
+      fix below, under the 25 MiB cap. Was 43MB; see Comments
+- [ ] `pnpm build` wired to the release wasm — `build-wasm.sh` defaults to `dev`,
+      which emits the 143MB artifact. Whatever builds for Pages must pass `release`
 
 ## Comments
 
@@ -59,6 +61,28 @@ but at 43 MB the release build is ~70% over and the dev build is not close.
 the build pipeline distinguishes "what I test locally" from "what ships".
 `scripts/build-wasm.sh` runs `wasm-bindgen` but no `wasm-opt`, so there is no
 size-optimisation pass at all today.
+
+**Resolved: 43MB → 17MB, and the cause was a config bug.** `engine/Cargo.toml`
+carried a `[profile.release]` with `opt-level='z'`, `lto`, `codegen-units=1`,
+`strip` and `panic='abort'` — **none of which ever applied.** Cargo profiles are
+workspace-global, so a `[profile]` in a member manifest is ignored with a warning
+printed on every build. The "release" wasm was therefore built at stock
+`opt-level = 3` with no LTO and no strip.
+
+Moved to the workspace root as `[profile.wasm-release]` (inheriting `release`), and
+`build-wasm.sh release` now builds with `--profile wasm-release`. Deliberately a
+separate profile rather than the root `[profile.release]`: `panic = 'abort'` would
+otherwise apply to the server too, turning a panicking handler from "one killed
+task" into "process death and a Fly restart".
+
+| Artifact | Before | After |
+|---|---|---|
+| release wasm | 43 MB | **17 MB** |
+| build time | ~1m | 2m55s (fat LTO) |
+
+17MB clears the 25 MiB cap, so option (1) below is done and **option (2) is no
+longer needed for v1.0**. Keep it in mind only if the engine grows: the margin is
+8 MiB, and `bevy_kira_audio` plus a few more sprites could eat that.
 
 Two ways out, not mutually exclusive:
 

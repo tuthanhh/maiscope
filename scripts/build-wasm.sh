@@ -19,8 +19,11 @@ PROFILE="${1:-dev}" # dev (fast) | release (size-optimized, slow)
 TARGET_ROOT="$WORKSPACE_DIR/target/wasm32-unknown-unknown"
 
 if [ "$PROFILE" = "release" ]; then
-  CARGO_FLAGS="--release"
-  TARGET_SUBDIR="release"
+  # `wasm-release` (workspace root manifest) inherits release and adds
+  # opt-level=z, fat LTO, strip and panic=abort. Cargo puts custom-profile output
+  # in target/<triple>/<profile-name>/, not release/.
+  CARGO_FLAGS="--profile wasm-release"
+  TARGET_SUBDIR="wasm-release"
 else
   CARGO_FLAGS=""
   TARGET_SUBDIR="debug"

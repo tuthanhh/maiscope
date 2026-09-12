@@ -1,3 +1,16 @@
+engine/assets/ contains sprite images and system sounds derived from maimai, a
+product of SEGA. They are included because the engine requires them as build
+inputs — `engine/src/systems/audio.rs` embeds the WAVs at compile time, and
+`scripts/build-wasm.sh` copies the sprites into the web bundle. No ownership is
+claimed over them and no licence is asserted; SEGA retains all rights. maiscope is
+an unofficial, non-commercial tool and is not affiliated with or endorsed by SEGA.
+On request from a rights holder these assets will be removed and replaced.
+
+(`engine/assets/songs/` — sample chart and audio data — is deliberately NOT in the
+repository.)
+
+---
+
 apps/host is a port of zetaraku/arcade-songs (https://github.com/zetaraku/arcade-songs),
 originally Nuxt 2 + Vuetify 2, rebuilt on native Vue 3 for maimai only. That
 project is MIT-licensed:

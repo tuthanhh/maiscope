@@ -22,10 +22,10 @@ Notes specific to this repo:
 - [x] Builder stage pins the Rust version to match `edition = "2024"` needs —
       `rust:1.97-slim-trixie` (edition 2024 needs ≥ 1.85)
 - [x] Dependency layer cached separately from source — `cargo-chef`, three stages
-- [x] `cargo build -p server --release --bin server` only
+- [x] `cargo build -p server --release --bin server --bin migrate` only
 - [x] `SQLX_OFFLINE=true` in the builder
 - [x] Slim runtime base (`debian:trixie-slim`), non-root user (uid 10001),
-      CA certificates. **One** binary for now — the migrator arrives with issue 03
+      CA certificates, and both binaries (`/app/server`, `/app/migrate`)
 - [x] `.dockerignore` — also excludes `engine/assets/` (89MB) and any `.env`
 - [x] Final image size recorded in this ticket — **150MB**
 - [x] Verified: image builds on a machine with **no** Postgres reachable
@@ -111,3 +111,8 @@ service and the gap is not on any critical path. If it is ever worth chasing, th
 cheap first check is `docker history maiscope-server:dev`, which attributes the
 bytes per layer; the likely candidates are the base image being larger than assumed
 and the release binary carrying debug symbols (no `strip` is configured).
+
+**Partly addressed later.** A root `[profile.release]` with `strip = true` was
+added while fixing the wasm size (`web-delivery` 03): the server binary went
+11MB → 8.2MB and the migrator is 4.7MB. Expect roughly 150MB → 147MB — the base
+image dominates, as suspected. Not re-measured; it will show on the next build.

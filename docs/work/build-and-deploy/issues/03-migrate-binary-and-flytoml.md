@@ -64,7 +64,17 @@ reported twice.
 is `cargo run --bin migrate`, so CI exercises the same code path as the deploy
 rather than a second implementation, and no extra tool is installed on the runner.
 
-**Still owed, and only the repo owner can do it:** `flyctl` is not installed here,
-and creating the app, setting `DATABASE_URL` via `fly secrets`, and proving that a
-deliberately broken migration aborts a deploy all require a real Fly account and
-a real database. Those two boxes stay open.
+**Verified against real Neon**, not just local Postgres (2026-09-13). Against an
+empty `neondb` in `ap-southeast-1`, over
+`?sslmode=require&channel_binding=require`: `sqlx migrate info` connected and
+listed all 5 as pending, `cargo run --bin migrate` applied all 5 and exited 0, and
+a second run reported `schema already current`. That also confirms the
+`tls-rustls-ring-webpki` change was both necessary and sufficient — the same
+connection would have failed outright before it.
+
+**Still owed.** The Neon side is done (project live in `ap-southeast-1`, schema
+applied). What remains needs a Fly account: create the `maiscope-api` app, set
+`DATABASE_URL` as a secret, and prove a deliberately broken migration aborts a
+deploy while the previous version keeps serving. `flyctl` is deliberately not
+installed locally — ticket 05 runs it on a GitHub runner instead, so the app can be
+created and the secret set from the Fly dashboard.

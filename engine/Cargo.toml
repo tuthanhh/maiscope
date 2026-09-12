@@ -29,9 +29,5 @@ regex = "1.12.3"
 wasm-bindgen = "=0.2.122" # pinned to match installed wasm-bindgen CLI (schema must match exactly)
 
 
-[profile.release]
-opt-level = 'z'     # Optimize for size ('s' is also an option, 'z' is usually smaller)
-lto = true          # Enable Link Time Optimization (drops dead code across crates)
-codegen-units = 1   # Maximize optimization at the cost of slower compile times
-strip = true        # Strip symbols from the binary (huge size reduction)
-panic = 'abort'     # Remove stack-unwinding code (saves space, but you lose tracebacks on panics)
+# Profiles live in the workspace root manifest — see [profile.wasm-release] there.
+# Cargo ignores [profile] in a member manifest and warns on every build.
