@@ -26,16 +26,28 @@ ticket just makes what exists run automatically.
 
 ## Comments
 
-**Pre-existing failures this ticket inherits**, measured while closing issue 01.
-Both need a cleanup commit *before* the workflow is added, or the first CI run is
-red for reasons unrelated to CI:
+**Pre-existing failures this ticket inherited — now cleared** (`eddf006`,
+`831f225`), so CI's first run can be red only for things CI actually catches:
 
-- `cargo fmt --check` — exits 1, **57 hunks across 14 files**, heaviest in
-  `queries/sheets.rs`, `chart_revision.rs`, and `routes/catalog.rs`. One
-  mechanical `cargo fmt` commit, kept separate from anything else.
-- `cargo clippy -- -D warnings` — `apps/server/src/error.rs:21`, `variant
-  BadRequest is never constructed`. Either construct it, `#[allow(dead_code)]` it,
-  or drop the variant.
+- `cargo fmt --check` exited 1 on **57 hunks across 14 files**. Fixed by one
+  mechanical `cargo fmt` commit, deliberately isolated so it does not bury the
+  lint fixes.
+- `cargo clippy --workspace --all-targets -- -D warnings` failed on **four**
+  lints, not the one spotted from `apps/server` alone — running clippy across the
+  workspace surfaced two more in `engine`. Two were silenced with `#[allow]`
+  (`AppError::BadRequest`, `SlideElement::is_break`, `NoteKind::SlideStar` as
+  deliberately-unused API surface; `too_many_arguments` on `spawn_note`), two
+  fixed properly (`collapsible_if` → Rust 2024 let-chain in `seed_songs.rs`;
+  `get(&k).is_none()` → `!contains_key(&k)` in `sheets.rs`; loop-counter indexing
+  of `COUNTDOWN_EDGE_COLORS` → `.iter().enumerate()`).
+
+Both gates now exit 0.
+
+**Correction to this ticket's premise.** The body says the test surface is "six
+`#[sqlx::test]` handler tests … and nothing in `engine` or `apps/host`", and cites
+`apps/server/src/main.rs:484+`, which no longer holds after `server-restructure`
+04 split the modules. Actual count as of 2026-09-13: **69 tests across 11 binaries**,
+all passing. Still nothing in `apps/host`.
 
 **`sqlx prepare --check` must carry issue 01's flags exactly:**
 
