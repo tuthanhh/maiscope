@@ -25,12 +25,43 @@ use sqlx::postgres::PgPoolOptions;
 
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!();
 
+/// Whole-run budget. A release command that hangs is worse than one that fails:
+/// Fly waits, the deploy neither aborts nor completes, and there is nothing in the
+/// log to read. `MIGRATOR.run()` takes a Postgres advisory lock and waits
+/// indefinitely if another session holds it — a connect timeout alone does not
+/// bound that. Override with `MIGRATE_TIMEOUT_SECS`.
+const DEFAULT_TIMEOUT_SECS: u64 = 120;
+
 #[tokio::main]
 async fn main() {
-    if let Err(e) = run().await {
+    let timeout_secs = std::env::var("MIGRATE_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(DEFAULT_TIMEOUT_SECS);
+
+    match tokio::time::timeout(Duration::from_secs(timeout_secs), run()).await {
+        Ok(Ok(())) => {}
         // Never print the connection string — it carries the password.
-        eprintln!("migrate: failed: {e}");
-        std::process::exit(1);
+        Ok(Err(e)) => {
+            eprintln!("migrate: failed: {e}");
+            std::process::exit(1);
+        }
+        Err(_) => {
+            eprintln!(
+                "migrate: failed: timed out after {timeout_secs}s. The last \
+                 'migrate:' line above says which step hung; a stall at 'applying' \
+                 usually means another session holds the migration advisory lock."
+            );
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Host and database only — never the credentials.
+fn redact(url: &str) -> String {
+    match url.split_once('@') {
+        Some((_, rest)) => rest.split('?').next().unwrap_or(rest).to_string(),
+        None => "***".to_string(),
     }
 }
 
@@ -38,13 +69,17 @@ async fn run() -> Result<(), Box<dyn Error>> {
     dotenvy::dotenv().ok();
     let database_url = std::env::var("DATABASE_URL").map_err(|_| "DATABASE_URL is not set")?;
 
-    // One connection is enough, and a bounded timeout means an unreachable
-    // database fails the deploy promptly instead of hanging the release step.
+    // Progress lines exist so a stalled release command shows *where* it stalled.
+    // Without them a hang is indistinguishable from a machine that never started.
+    println!("migrate: connecting to {}", redact(&database_url));
+
     let pool = PgPoolOptions::new()
         .max_connections(1)
         .acquire_timeout(Duration::from_secs(30))
         .connect(&database_url)
         .await?;
+
+    println!("migrate: connected");
 
     // Snapshot what is already applied, so the log names only what this run did.
     // On a fresh database the table does not exist yet; treat any read failure as
@@ -57,6 +92,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
         .into_iter()
         .collect();
 
+    println!("migrate: applying (takes the migration advisory lock)");
     MIGRATOR.run(&pool).await?;
 
     // `migrate!()` yields both directions for reversible migrations; only the up
