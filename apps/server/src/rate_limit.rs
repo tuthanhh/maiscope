@@ -74,10 +74,7 @@ fn peer_addr<T>(req: &Request<T>) -> Option<IpAddr> {
 /// every IP ever seen. `governor` does no such collection itself — without
 /// this the map only grows, and varying the `Fly-Client-IP` header is enough
 /// to grow it on purpose.
-pub(crate) fn spawn_reaper(
-    limiter: SharedRateLimiter<IpAddr, NoOpMiddleware>,
-    every: Duration,
-) {
+pub(crate) fn spawn_reaper(limiter: SharedRateLimiter<IpAddr, NoOpMiddleware>, every: Duration) {
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(every).await;
@@ -244,7 +241,11 @@ mod tests {
             .layer(layer(1, Duration::from_secs(1)).0);
 
         assert_eq!(
-            app.clone().oneshot(request_from("203.0.113.5")).await.unwrap().status(),
+            app.clone()
+                .oneshot(request_from("203.0.113.5"))
+                .await
+                .unwrap()
+                .status(),
             StatusCode::OK
         );
 
@@ -277,16 +278,33 @@ mod tests {
             .route("/", get(|| async { "ok" }))
             .layer(layer(1, Duration::from_secs(60)).0);
 
-        let first = app.clone().oneshot(request_from("203.0.113.1")).await.unwrap();
+        let first = app
+            .clone()
+            .oneshot(request_from("203.0.113.1"))
+            .await
+            .unwrap();
         assert_eq!(first.status(), StatusCode::OK);
 
-        let second = app.clone().oneshot(request_from("203.0.113.1")).await.unwrap();
+        let second = app
+            .clone()
+            .oneshot(request_from("203.0.113.1"))
+            .await
+            .unwrap();
         assert_eq!(second.status(), StatusCode::TOO_MANY_REQUESTS);
-        assert!(second.headers().get(axum::http::header::RETRY_AFTER).is_some());
+        assert!(
+            second
+                .headers()
+                .get(axum::http::header::RETRY_AFTER)
+                .is_some()
+        );
 
         // A different IP has its own bucket — still succeeds even though
         // .1's bucket is exhausted.
-        let third = app.clone().oneshot(request_from("203.0.113.2")).await.unwrap();
+        let third = app
+            .clone()
+            .oneshot(request_from("203.0.113.2"))
+            .await
+            .unwrap();
         assert_eq!(third.status(), StatusCode::OK);
     }
 }

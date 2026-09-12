@@ -63,12 +63,20 @@ mod tests {
 
     #[sqlx::test]
     async fn fetch_categories_orders_by_ordinal(pool: PgPool) -> sqlx::Result<()> {
-        sqlx::query!("INSERT INTO categories (category, ordinal) VALUES ($1, $2)", "maimai", 1)
-            .execute(&pool)
-            .await?;
-        sqlx::query!("INSERT INTO categories (category, ordinal) VALUES ($1, $2)", "pops", 0)
-            .execute(&pool)
-            .await?;
+        sqlx::query!(
+            "INSERT INTO categories (category, ordinal) VALUES ($1, $2)",
+            "maimai",
+            1
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query!(
+            "INSERT INTO categories (category, ordinal) VALUES ($1, $2)",
+            "pops",
+            0
+        )
+        .execute(&pool)
+        .await?;
 
         let result = fetch_categories(&pool).await.unwrap();
 

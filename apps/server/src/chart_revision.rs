@@ -154,17 +154,20 @@ mod tests {
         let (sheet_id, sheet_expr) = seed_song_with_sheet(&pool).await;
 
         let mut tx = pool.begin().await?;
-        let first = apply_chart_revision(&mut tx, sheet_id, &sheet_expr, "maimai-simai", "v1").await?;
+        let first =
+            apply_chart_revision(&mut tx, sheet_id, &sheet_expr, "maimai-simai", "v1").await?;
         tx.commit().await?;
         assert_eq!(first, ChartRevisionOutcome::Applied);
 
         let mut tx = pool.begin().await?;
-        let repeat = apply_chart_revision(&mut tx, sheet_id, &sheet_expr, "maimai-simai", "v1").await?;
+        let repeat =
+            apply_chart_revision(&mut tx, sheet_id, &sheet_expr, "maimai-simai", "v1").await?;
         tx.commit().await?;
         assert_eq!(repeat, ChartRevisionOutcome::Unchanged);
 
         let mut tx = pool.begin().await?;
-        let changed = apply_chart_revision(&mut tx, sheet_id, &sheet_expr, "maimai-simai", "v2").await?;
+        let changed =
+            apply_chart_revision(&mut tx, sheet_id, &sheet_expr, "maimai-simai", "v2").await?;
         tx.commit().await?;
         assert_eq!(changed, ChartRevisionOutcome::Applied);
         Ok(())
@@ -205,13 +208,11 @@ mod tests {
         let (sheet_id, sheet_expr) = seed_song_with_sheet(&pool).await;
 
         let mut tx = pool.begin().await?;
-        apply_chart_revision(&mut tx, sheet_id, &sheet_expr, "maimai-simai", "v1")
-            .await?;
+        apply_chart_revision(&mut tx, sheet_id, &sheet_expr, "maimai-simai", "v1").await?;
         tx.commit().await?;
 
         let mut tx = pool.begin().await?;
-        apply_chart_revision(&mut tx, sheet_id, &sheet_expr, "maimai-simai", "v2")
-            .await?;
+        apply_chart_revision(&mut tx, sheet_id, &sheet_expr, "maimai-simai", "v2").await?;
         tx.commit().await?;
 
         let chart_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM charts")
@@ -220,8 +221,14 @@ mod tests {
         let revision_row_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM chart_revisions")
             .fetch_one(&pool)
             .await?;
-        assert_eq!(chart_count, 1, "UNIQUE(sheet_id, format) — second call updates, not inserts");
-        assert_eq!(revision_row_count, 2, "append-only — both calls add a history row");
+        assert_eq!(
+            chart_count, 1,
+            "UNIQUE(sheet_id, format) — second call updates, not inserts"
+        );
+        assert_eq!(
+            revision_row_count, 2,
+            "append-only — both calls add a history row"
+        );
         Ok(())
     }
 
@@ -236,8 +243,7 @@ mod tests {
         let before = catalog_meta_revision(&pool).await;
 
         let mut tx = pool.begin().await?;
-        apply_chart_revision(&mut tx, sheet_id, &sheet_expr, "maimai-simai", "v1")
-            .await?;
+        apply_chart_revision(&mut tx, sheet_id, &sheet_expr, "maimai-simai", "v1").await?;
         tx.commit().await?;
 
         let after = catalog_meta_revision(&pool).await;
@@ -262,15 +268,13 @@ mod tests {
         let (sheet_id, sheet_expr) = seed_song_with_sheet(&pool).await;
 
         let mut tx = pool.begin().await?;
-        apply_chart_revision(&mut tx, sheet_id, &sheet_expr, "maimai-simai", "v1")
-            .await?;
+        apply_chart_revision(&mut tx, sheet_id, &sheet_expr, "maimai-simai", "v1").await?;
         tx.commit().await?;
         let revision_after_first = catalog_meta_revision(&pool).await;
 
         // Same hash — re-seeding identical bytes shouldn't churn anything.
         let mut tx = pool.begin().await?;
-        apply_chart_revision(&mut tx, sheet_id, &sheet_expr, "maimai-simai", "v1")
-            .await?;
+        apply_chart_revision(&mut tx, sheet_id, &sheet_expr, "maimai-simai", "v1").await?;
         tx.commit().await?;
 
         let revision_after_second = catalog_meta_revision(&pool).await;

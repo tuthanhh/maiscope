@@ -164,7 +164,10 @@ mod tests {
             .await
             .unwrap();
         let etag = full.headers().get(header::ETAG).unwrap().clone();
-        assert_eq!(full.headers().get(header::CACHE_CONTROL).unwrap(), "no-cache");
+        assert_eq!(
+            full.headers().get(header::CACHE_CONTROL).unwrap(),
+            "no-cache"
+        );
 
         let mut conditional = HeaderMap::new();
         conditional.insert(header::IF_NONE_MATCH, etag.clone());
@@ -183,16 +186,31 @@ mod tests {
     // catalogHash in the body and the ETag are the same value, one quoted:
     // the contract (§1/§3) promises a client can compare them directly.
     #[sqlx::test]
-    async fn manifest_catalog_hash_matches_the_unquoted_etag(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    async fn manifest_catalog_hash_matches_the_unquoted_etag(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
         seed_catalog_meta(&pool).await;
 
-        let response = sync_manifest(HeaderMap::new(), AxumState(pool)).await.unwrap();
-        let etag = response.headers().get(header::ETAG).unwrap().to_str().unwrap().to_string();
+        let response = sync_manifest(HeaderMap::new(), AxumState(pool))
+            .await
+            .unwrap();
+        let etag = response
+            .headers()
+            .get(header::ETAG)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let json: Value = serde_json::from_slice(&body).unwrap();
 
-        assert_eq!(format!("\"{}\"", json["catalogHash"].as_str().unwrap()), etag);
+        assert_eq!(
+            format!("\"{}\"", json["catalogHash"].as_str().unwrap()),
+            etag
+        );
         Ok(())
     }
 }

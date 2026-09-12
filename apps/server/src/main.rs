@@ -27,7 +27,10 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     // `Arc::new(config)` move below.
     let filter = tracing_subscriber::EnvFilter::new(&config.log_filter);
     if config.log_json {
-        tracing_subscriber::fmt().with_env_filter(filter).json().init();
+        tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            .json()
+            .init();
     } else {
         tracing_subscriber::fmt().with_env_filter(filter).init();
     }

@@ -61,21 +61,27 @@ pub async fn search_sheets(
         .as_deref()
         .filter(|r| params.use_region_override && !r.starts_with('!'));
 
-    fn build_where(qb: &mut QueryBuilder<sqlx::Postgres>, params: &SheetSearchParams, effective_region: Option<&str>) {
+    fn build_where(
+        qb: &mut QueryBuilder<sqlx::Postgres>,
+        params: &SheetSearchParams,
+        effective_region: Option<&str>,
+    ) {
         qb.push(" WHERE 1=1 ");
 
         if let Some(title) = &params.title {
             if params.match_exact_title {
                 qb.push(" AND so.title = ").push_bind(title.clone());
             } else {
-                qb.push(" AND so.title ILIKE ").push_bind(format!("%{title}%"));
+                qb.push(" AND so.title ILIKE ")
+                    .push_bind(format!("%{title}%"));
             }
         }
         if let Some(artist) = &params.artist {
             if params.match_exact_artist {
                 qb.push(" AND so.artist = ").push_bind(artist.clone());
             } else {
-                qb.push(" AND so.artist ILIKE ").push_bind(format!("%{artist}%"));
+                qb.push(" AND so.artist ILIKE ")
+                    .push_bind(format!("%{artist}%"));
             }
         }
         if !params.categories.is_empty() {
@@ -83,13 +89,19 @@ pub async fn search_sheets(
                 .push_bind(params.categories.clone());
         }
         if !params.versions.is_empty() {
-            qb.push(" AND so.version = ANY(").push_bind(params.versions.clone()).push(")");
+            qb.push(" AND so.version = ANY(")
+                .push_bind(params.versions.clone())
+                .push(")");
         }
         if !params.types.is_empty() {
-            qb.push(" AND s.type = ANY(").push_bind(params.types.clone()).push(")");
+            qb.push(" AND s.type = ANY(")
+                .push_bind(params.types.clone())
+                .push(")");
         }
         if !params.difficulties.is_empty() {
-            qb.push(" AND s.difficulty = ANY(").push_bind(params.difficulties.clone()).push(")");
+            qb.push(" AND s.difficulty = ANY(")
+                .push_bind(params.difficulties.clone())
+                .push(")");
         }
         if !params.note_designers.is_empty() {
             let designer_col = if effective_region.is_some() {
@@ -97,7 +109,11 @@ pub async fn search_sheets(
             } else {
                 "s.note_designer"
             };
-            qb.push(" AND ").push(designer_col).push(" = ANY(").push_bind(params.note_designers.clone()).push(")");
+            qb.push(" AND ")
+                .push(designer_col)
+                .push(" = ANY(")
+                .push_bind(params.note_designers.clone())
+                .push(")");
         }
         let level_col = match (params.use_internal_level, effective_region.is_some()) {
             (true, true) => "COALESCE(sro.internal_level_value, s.internal_level_value)",
@@ -106,10 +122,16 @@ pub async fn search_sheets(
             (false, false) => "s.level_value",
         };
         if let Some(min_level) = params.min_level_value {
-            qb.push(" AND ").push(level_col).push(" >= ").push_bind(min_level);
+            qb.push(" AND ")
+                .push(level_col)
+                .push(" >= ")
+                .push_bind(min_level);
         }
         if let Some(max_level) = params.max_level_value {
-            qb.push(" AND ").push(level_col).push(" <= ").push_bind(max_level);
+            qb.push(" AND ")
+                .push(level_col)
+                .push(" <= ")
+                .push_bind(max_level);
         }
         if let Some(min_bpm) = params.min_bpm {
             qb.push(" AND so.bpm >= ").push_bind(min_bpm);
@@ -133,10 +155,16 @@ pub async fn search_sheets(
         }
     }
 
-    fn build_joins(qb: &mut QueryBuilder<sqlx::Postgres>, params: &SheetSearchParams, effective_region: Option<&str>) {
+    fn build_joins(
+        qb: &mut QueryBuilder<sqlx::Postgres>,
+        params: &SheetSearchParams,
+        effective_region: Option<&str>,
+    ) {
         if let Some(region) = effective_region {
-            qb.push(" LEFT JOIN sheet_region_overrides sro ON sro.sheet_id = s.id AND sro.region = ")
-                .push_bind(region.to_string());
+            qb.push(
+                " LEFT JOIN sheet_region_overrides sro ON sro.sheet_id = s.id AND sro.region = ",
+            )
+            .push_bind(region.to_string());
         }
         if let Some(region) = &params.region {
             if let Some(excluded) = region.strip_prefix('!') {
@@ -181,7 +209,8 @@ pub async fn search_sheets(
     // itself instead of relying on a reversal step that no longer runs).
     qb.push(" ORDER BY so.source_index DESC, s.source_index ");
     qb.push(" LIMIT ").push_bind(params.page_size);
-    qb.push(" OFFSET ").push_bind((params.page - 1).max(0) * params.page_size);
+    qb.push(" OFFSET ")
+        .push_bind((params.page - 1).max(0) * params.page_size);
 
     let rows = qb.build_query_as::<SearchRow>().fetch_all(pool).await?;
 
@@ -318,7 +347,8 @@ pub async fn fetch_sheet_by_expr(
 
 type NoteCountsJson = sqlx::types::Json<std::collections::BTreeMap<String, Option<i64>>>;
 type RegionsJson = sqlx::types::Json<std::collections::BTreeMap<String, bool>>;
-type RegionOverridesJson = sqlx::types::Json<std::collections::BTreeMap<String, crate::types::RegionOverride>>;
+type RegionOverridesJson =
+    sqlx::types::Json<std::collections::BTreeMap<String, crate::types::RegionOverride>>;
 
 pub async fn fetch_all_sheets(
     pool: &PgPool,
@@ -498,8 +528,14 @@ mod tests {
         .await?;
 
         let sheets = fetch_sheets_for_song(&pool, song_pk).await.unwrap();
-        let a = sheets.iter().find(|s| s.difficulty.as_deref() == Some("master")).unwrap();
-        let b = sheets.iter().find(|s| s.difficulty.as_deref() == Some("expert")).unwrap();
+        let a = sheets
+            .iter()
+            .find(|s| s.difficulty.as_deref() == Some("master"))
+            .unwrap();
+        let b = sheets
+            .iter()
+            .find(|s| s.difficulty.as_deref() == Some("expert"))
+            .unwrap();
 
         assert!(a.has_chart);
         assert!(!b.has_chart);
@@ -532,7 +568,9 @@ mod tests {
         .execute(&pool)
         .await?;
 
-        let result = fetch_sheet_by_expr(&pool, "maimai_song|dx|master").await.unwrap();
+        let result = fetch_sheet_by_expr(&pool, "maimai_song|dx|master")
+            .await
+            .unwrap();
 
         let (song, sheet) = result.expect("sheet should be found");
         assert_eq!(song.title.as_deref(), Some("Example Song"));
@@ -544,15 +582,31 @@ mod tests {
         sqlx::query!(
             "INSERT INTO songs (song_id, title, artist, category, version, bpm, source_index)
              VALUES ($1, $2, $3, $4, $5, $6, $7)",
-            "song_a", "Fire Flower", "Composer A", "pops", "maimai DX", 180.0_f64, 0
+            "song_a",
+            "Fire Flower",
+            "Composer A",
+            "pops",
+            "maimai DX",
+            180.0_f64,
+            0
         )
-        .execute(pool).await.unwrap();
+        .execute(pool)
+        .await
+        .unwrap();
         sqlx::query!(
             "INSERT INTO songs (song_id, title, artist, category, version, bpm, source_index)
              VALUES ($1, $2, $3, $4, $5, $6, $7)",
-            "song_b", "Ice Crystal", "Composer B", "anime", "maimai DX", 140.0_f64, 1
+            "song_b",
+            "Ice Crystal",
+            "Composer B",
+            "anime",
+            "maimai DX",
+            140.0_f64,
+            1
         )
-        .execute(pool).await.unwrap();
+        .execute(pool)
+        .await
+        .unwrap();
         sqlx::query!(
             "INSERT INTO sheets (song_id_fk, sheet_expr, type, difficulty, level_value, source_index)
              SELECT id, $1, 'dx', 'master', 13.5, 0 FROM songs WHERE song_id = $2",
@@ -571,7 +625,10 @@ mod tests {
     async fn search_sheets_filters_by_title_substring(pool: PgPool) -> sqlx::Result<()> {
         seed_two_songs_for_search(&pool).await;
 
-        let params = SheetSearchParams { title: Some("fire".to_string()), ..Default::default() };
+        let params = SheetSearchParams {
+            title: Some("fire".to_string()),
+            ..Default::default()
+        };
         let (rows, total) = search_sheets(&pool, &params).await.unwrap();
 
         assert_eq!(total, 1);
@@ -584,7 +641,10 @@ mod tests {
     async fn search_sheets_filters_by_level_range(pool: PgPool) -> sqlx::Result<()> {
         seed_two_songs_for_search(&pool).await;
 
-        let params = SheetSearchParams { min_level_value: Some(12.0), ..Default::default() };
+        let params = SheetSearchParams {
+            min_level_value: Some(12.0),
+            ..Default::default()
+        };
         let (rows, total) = search_sheets(&pool, &params).await.unwrap();
 
         assert_eq!(total, 1);
@@ -596,7 +656,11 @@ mod tests {
     async fn search_sheets_paginates_and_reports_total(pool: PgPool) -> sqlx::Result<()> {
         seed_two_songs_for_search(&pool).await;
 
-        let params = SheetSearchParams { page: 1, page_size: 1, ..Default::default() };
+        let params = SheetSearchParams {
+            page: 1,
+            page_size: 1,
+            ..Default::default()
+        };
         let (rows, total) = search_sheets(&pool, &params).await.unwrap();
 
         assert_eq!(total, 2); // total matches regardless of page_size
@@ -613,7 +677,9 @@ mod tests {
         // convention itself, since results here aren't reversed client-side.
         seed_two_songs_for_search(&pool).await;
 
-        let (rows, _total) = search_sheets(&pool, &SheetSearchParams::default()).await.unwrap();
+        let (rows, _total) = search_sheets(&pool, &SheetSearchParams::default())
+            .await
+            .unwrap();
 
         assert_eq!(rows[0].0.title.as_deref(), Some("Ice Crystal"));
         assert_eq!(rows[1].0.title.as_deref(), Some("Fire Flower"));
@@ -624,17 +690,26 @@ mod tests {
     async fn search_sheets_matches_pipe_delimited_category(pool: PgPool) -> sqlx::Result<()> {
         sqlx::query!(
             "INSERT INTO songs (song_id, title, category, source_index) VALUES ($1, $2, $3, $4)",
-            "song_c", "Dual Genre", "pops|anime", 0
+            "song_c",
+            "Dual Genre",
+            "pops|anime",
+            0
         )
-        .execute(&pool).await?;
+        .execute(&pool)
+        .await?;
         sqlx::query!(
             "INSERT INTO sheets (song_id_fk, sheet_expr, source_index)
              SELECT id, $1, 0 FROM songs WHERE song_id = $2",
-            "song_c|dx|master", "song_c"
+            "song_c|dx|master",
+            "song_c"
         )
-        .execute(&pool).await?;
+        .execute(&pool)
+        .await?;
 
-        let params = SheetSearchParams { categories: vec!["anime".to_string()], ..Default::default() };
+        let params = SheetSearchParams {
+            categories: vec!["anime".to_string()],
+            ..Default::default()
+        };
         let (rows, total) = search_sheets(&pool, &params).await.unwrap();
 
         assert_eq!(total, 1);
@@ -643,18 +718,25 @@ mod tests {
     }
 
     #[sqlx::test]
-    async fn search_sheets_applies_region_override_before_level_filter(pool: PgPool) -> sqlx::Result<()> {
+    async fn search_sheets_applies_region_override_before_level_filter(
+        pool: PgPool,
+    ) -> sqlx::Result<()> {
         sqlx::query!(
             "INSERT INTO songs (song_id, title, source_index) VALUES ($1, $2, $3)",
-            "song_d", "Region Song", 0
+            "song_d",
+            "Region Song",
+            0
         )
-        .execute(&pool).await?;
+        .execute(&pool)
+        .await?;
         let sheet_pk: i64 = sqlx::query_scalar!(
             "INSERT INTO sheets (song_id_fk, sheet_expr, level_value, source_index)
              SELECT id, $1, 10.0, 0 FROM songs WHERE song_id = $2 RETURNING id",
-            "song_d|dx|master", "song_d"
+            "song_d|dx|master",
+            "song_d"
         )
-        .fetch_one(&pool).await?;
+        .fetch_one(&pool)
+        .await?;
         // In the "jp" region this sheet is actually level 14.0.
         sqlx::query!(
             "INSERT INTO sheet_region_overrides (sheet_id, region, level_value) VALUES ($1, 'jp', 14.0)",
@@ -663,7 +745,10 @@ mod tests {
         .execute(&pool).await?;
 
         // Without the override: min_level_value 12 excludes it (base is 10.0).
-        let base_params = SheetSearchParams { min_level_value: Some(12.0), ..Default::default() };
+        let base_params = SheetSearchParams {
+            min_level_value: Some(12.0),
+            ..Default::default()
+        };
         let (_, total_base) = search_sheets(&pool, &base_params).await.unwrap();
         assert_eq!(total_base, 0);
 

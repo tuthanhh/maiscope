@@ -23,7 +23,9 @@ pub enum AppError {
     SnapshotRequired,
     /// Per-IP rate limit tripped (ticket 08). `retry_after_secs` comes from
     /// `tower_governor`'s own wait-time calculation.
-    RateLimited { retry_after_secs: u64 },
+    RateLimited {
+        retry_after_secs: u64,
+    },
     /// A server-side failure that isn't a database error — currently only the
     /// rate limiter's unreachable key-extraction arm. The `&'static str` names
     /// the origin for the log line; the client never sees it.
@@ -68,7 +70,10 @@ impl IntoResponse for AppError {
             }
             AppError::RateLimited { retry_after_secs } => (
                 StatusCode::TOO_MANY_REQUESTS,
-                [(axum::http::header::RETRY_AFTER, retry_after_secs.to_string())],
+                [(
+                    axum::http::header::RETRY_AFTER,
+                    retry_after_secs.to_string(),
+                )],
                 Json(json!({
                     "error": "rate_limited",
                     "message": format!("rate limit exceeded, retry after {retry_after_secs}s")

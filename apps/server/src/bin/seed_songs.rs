@@ -103,8 +103,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             songs_dir_arg = Some(PathBuf::from(arg));
         }
     }
-    let songs_dir = songs_dir_arg
-        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../songs"));
+    let songs_dir =
+        songs_dir_arg.unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../songs"));
 
     let pool = PgPoolOptions::new()
         .max_connections(4)
@@ -112,9 +112,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .await?;
 
     // song title (as stored) -> song id, loaded once and matched by NFC form.
-    let songs: Vec<(i64, String)> = sqlx::query_as("SELECT id, title FROM songs WHERE title IS NOT NULL")
-        .fetch_all(&pool)
-        .await?;
+    let songs: Vec<(i64, String)> =
+        sqlx::query_as("SELECT id, title FROM songs WHERE title IS NOT NULL")
+            .fetch_all(&pool)
+            .await?;
     let mut song_by_title: HashMap<String, i64> = HashMap::new();
     for (id, title) in songs {
         song_by_title.insert(nfc(&title), id);
@@ -139,7 +140,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     for song_dir in entries {
         let maidata_path = song_dir.join("maidata.txt");
-        let dir_name = song_dir.file_name().unwrap_or_default().to_string_lossy().to_string();
+        let dir_name = song_dir
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
         let Ok(text) = std::fs::read_to_string(&maidata_path) else {
             continue; // no maidata.txt in this directory — not a song folder
         };
@@ -158,7 +163,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         };
 
         for (slot, difficulty) in SLOT_DIFFICULTIES {
-            let Some(inote) = kv.get(&format!("inote_{slot}")) else { continue };
+            let Some(inote) = kv.get(&format!("inote_{slot}")) else {
+                continue;
+            };
             if inote.trim().is_empty() {
                 continue;
             }

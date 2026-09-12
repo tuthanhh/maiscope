@@ -140,7 +140,9 @@ mod tests {
     }
 
     #[sqlx::test]
-    async fn catalog_returns_304_when_if_none_match_matches(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    async fn catalog_returns_304_when_if_none_match_matches(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
         seed_minimal_catalog(&pool).await;
 
         let first = catalog(
@@ -181,7 +183,9 @@ mod tests {
     // revalidation — the cached copy goes stale again immediately and the
     // next visit re-revalidates instead of being served locally.
     #[sqlx::test]
-    async fn catalog_304_repeats_the_etag_and_cache_control(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    async fn catalog_304_repeats_the_etag_and_cache_control(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
         seed_minimal_catalog(&pool).await;
 
         let full = catalog(
@@ -191,7 +195,11 @@ mod tests {
         )
         .await
         .unwrap();
-        let etag = full.headers().get(axum::http::header::ETAG).unwrap().clone();
+        let etag = full
+            .headers()
+            .get(axum::http::header::ETAG)
+            .unwrap()
+            .clone();
         let cache_control = full
             .headers()
             .get(axum::http::header::CACHE_CONTROL)
@@ -215,7 +223,9 @@ mod tests {
             Some(&etag)
         );
         assert_eq!(
-            not_modified.headers().get(axum::http::header::CACHE_CONTROL),
+            not_modified
+                .headers()
+                .get(axum::http::header::CACHE_CONTROL),
             Some(&cache_control)
         );
         Ok(())
@@ -256,7 +266,9 @@ mod tests {
     }
 
     #[sqlx::test]
-    async fn catalog_etag_changes_when_catalog_meta_changes(pool: sqlx::PgPool) -> sqlx::Result<()> {
+    async fn catalog_etag_changes_when_catalog_meta_changes(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
         seed_minimal_catalog(&pool).await;
 
         let first = catalog(

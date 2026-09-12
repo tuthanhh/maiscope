@@ -32,7 +32,9 @@ mod tests {
 
     #[sqlx::test]
     async fn fetch_song_by_song_id_returns_none_when_missing(pool: PgPool) -> sqlx::Result<()> {
-        let result = fetch_song_by_song_id(&pool, "does_not_exist").await.unwrap();
+        let result = fetch_song_by_song_id(&pool, "does_not_exist")
+            .await
+            .unwrap();
         assert!(result.is_none());
         Ok(())
     }
@@ -50,7 +52,10 @@ mod tests {
 
         let result = fetch_song_by_song_id(&pool, "maimai_song").await.unwrap();
 
-        assert_eq!(result.map(|r| r.title), Some(Some("Example Song".to_string())));
+        assert_eq!(
+            result.map(|r| r.title),
+            Some(Some("Example Song".to_string()))
+        );
         Ok(())
     }
 
@@ -58,13 +63,17 @@ mod tests {
     async fn fetch_all_songs_orders_by_source_index(pool: PgPool) -> sqlx::Result<()> {
         sqlx::query!(
             "INSERT INTO songs (song_id, title, source_index) VALUES ($1, $2, $3)",
-            "second", "Second", 1
+            "second",
+            "Second",
+            1
         )
         .execute(&pool)
         .await?;
         sqlx::query!(
             "INSERT INTO songs (song_id, title, source_index) VALUES ($1, $2, $3)",
-            "first", "First", 0
+            "first",
+            "First",
+            0
         )
         .execute(&pool)
         .await?;

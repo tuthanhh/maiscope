@@ -161,7 +161,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     ingest(&pool, &data).await?;
 
     let total_sheets: i64 = data.songs.iter().map(|s| s.sheets.len() as i64).sum();
-    println!("ingested {} songs, {} sheets", data.songs.len(), total_sheets);
+    println!(
+        "ingested {} songs, {} sheets",
+        data.songs.len(),
+        total_sheets
+    );
     Ok(())
 }
 

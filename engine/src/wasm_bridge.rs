@@ -25,10 +25,10 @@ pub fn load_chart(chart: String) {
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn load_song(chart: String, audio: Vec<u8>) {
-    INBOX
-        .lock()
-        .unwrap()
-        .push(SongPayload { chart, audio: Some(audio) });
+    INBOX.lock().unwrap().push(SongPayload {
+        chart,
+        audio: Some(audio),
+    });
 }
 
 pub fn take_songs() -> Vec<SongPayload> {

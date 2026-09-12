@@ -38,14 +38,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .await?;
 
     // Resolve the sheet; bail clearly if the expr doesn't match the catalog.
-    let sheet_id: Option<i64> =
-        sqlx::query_scalar("SELECT id FROM sheets WHERE sheet_expr = $1")
-            .bind(&sheet_expr)
-            .fetch_optional(&pool)
-            .await?;
-    let sheet_id = sheet_id.ok_or_else(|| {
-        format!("no sheet matches sheet_expr '{sheet_expr}' (run ingest first?)")
-    })?;
+    let sheet_id: Option<i64> = sqlx::query_scalar("SELECT id FROM sheets WHERE sheet_expr = $1")
+        .bind(&sheet_expr)
+        .fetch_optional(&pool)
+        .await?;
+    let sheet_id = sheet_id
+        .ok_or_else(|| format!("no sheet matches sheet_expr '{sheet_expr}' (run ingest first?)"))?;
 
     // Upsert canonical chart; bump version on replace.
     sqlx::query(
