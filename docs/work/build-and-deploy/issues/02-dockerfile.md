@@ -27,9 +27,10 @@ Notes specific to this repo:
 - [x] Slim runtime base (`debian:trixie-slim`), non-root user (uid 10001),
       CA certificates. **One** binary for now — the migrator arrives with issue 03
 - [x] `.dockerignore` — also excludes `engine/assets/` (89MB) and any `.env`
-- [ ] Final image size recorded in this ticket — blocked on Docker access
-- [ ] Verified: image builds on a machine with **no** Postgres reachable —
-      simulated (see Comments), not yet run through `docker build`
+- [x] Final image size recorded in this ticket — **150MB**
+- [x] Verified: image builds on a machine with **no** Postgres reachable
+- [ ] Verified: container serves — `docker run` + `GET /api/v1/healthcheck`
+      returns 200, and the process is non-root
 
 ## Comments
 
@@ -99,3 +100,10 @@ build, and no database is touched. The resulting binary is **11MB** and links on
 `libgcc_s`, `libm`, `libc` — no `libssl`, confirming the pure-rustls tree. Expect a
 final image around 95MB. This does **not** substitute for a real `docker build`;
 layer caching, `cargo-chef` behaviour and the runtime stage are all still untested.
+
+**Actual image: 150MB**, against the ~95MB predicted from an 11MB binary on
+`debian:trixie-slim`. Not investigated — 150MB is acceptable for a scale-to-zero
+service and the gap is not on any critical path. If it is ever worth chasing, the
+cheap first check is `docker history maiscope-server:dev`, which attributes the
+bytes per layer; the likely candidates are the base image being larger than assumed
+and the release binary carrying debug symbols (no `strip` is configured).
