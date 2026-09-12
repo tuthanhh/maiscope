@@ -1,0 +1,37 @@
+# Build context for the server image. Measured before writing this: the bare
+# repo is ~700MB, almost all of it irrelevant to `cargo build -p server`.
+#
+# Deliberately NOT excluded, because the build depends on them:
+#   .sqlx/     committed offline query cache (the build has no database)
+#   .cargo/    sets SQLX_OFFLINE=true for the workspace
+#   engine/    a workspace member, so cargo parses its manifest and infers its
+#              lib target even though `-p server` never compiles it
+
+# Build output
+target/
+**/target/
+
+# Frontend — not part of the Cargo workspace since src-tauri was removed
+apps/host/
+
+# Large data the server build never reads
+songs/
+engine/assets/
+
+# Repo furniture
+.git/
+.github/
+.gitignore
+docs/
+scripts/
+*.md
+LICENSE*
+
+# Agent / local tooling
+.claude/
+.superpowers/
+
+# Never bake local credentials into the image
+**/.env
+**/.env.*
+!**/.env.example
