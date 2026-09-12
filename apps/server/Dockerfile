@@ -68,6 +68,13 @@ RUN apt-get update \
 
 RUN useradd --system --user-group --no-create-home --uid 10001 maiscope
 
+# Commit the image was built from, surfaced in the startup log so a running
+# machine can be tied back to a commit. Passed by the deploy workflow as
+# `--build-arg GIT_SHA=...`; defaults to "unknown" for local builds. Declared
+# late so changing it invalidates only these last layers, not the Rust build.
+ARG GIT_SHA=unknown
+ENV GIT_SHA=${GIT_SHA}
+
 # The migrator runs as fly.toml's release_command, before the new machine takes
 # traffic. sqlx::migrate!() embedded the SQL at compile time, so no migrations/
 # directory is needed here.

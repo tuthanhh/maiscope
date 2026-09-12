@@ -60,8 +60,14 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             .fetch_one(&state.pool)
             .await?;
 
+    // Build metadata rather than configuration, so it stays out of `Config`:
+    // the deploy workflow bakes it in as a Docker build arg. Without it there is
+    // no way to tell which commit a running machine came from.
+    let git_sha = std::env::var("GIT_SHA").unwrap_or_else(|_| "unknown".to_string());
+
     tracing::info!(
         addr = %listener.local_addr()?,
+        git_sha = %git_sha,
         log_filter = %state.config.log_filter,
         log_json = state.config.log_json,
         database_url = %config::redact_database_url(&state.config.database_url),

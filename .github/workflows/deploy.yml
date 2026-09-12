@@ -1,0 +1,117 @@
+name: deploy
+
+# Manual only, deliberately. The recorded progression is
+# manual dispatch -> tag-triggered -> auto-on-merge (docs/work/build-and-deploy/spec.md).
+# Auto-on-merge is only safe once expand-and-contract is habit, because a merge
+# would otherwise apply schema changes with nobody watching.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Commit SHA or branch to deploy (must have green CI)"
+        required: false
+        default: master
+
+# Never let two deploys overlap: Fly would run two release commands against the
+# same database, and the second would block on the first's migration advisory
+# lock. `cancel-in-progress: false` because cancelling a deploy midway is worse
+# than queueing behind it.
+concurrency:
+  group: deploy-maiscope-api
+  cancel-in-progress: false
+
+env:
+  FLY_APP: maiscope-api
+  HEALTHCHECK_URL: https://maiscope-api.fly.dev/api/v1/healthcheck
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Configure required reviewers on this environment in repo settings to add a
+    # human approval step before any deploy runs.
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Resolve the commit being deployed
+        id: sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      # Refuse to deploy a commit CI has not passed. Queries check-runs for the
+      # exact SHA rather than "was the last run green", so deploying an older or
+      # unrelated ref cannot borrow another commit's green tick.
+      - name: Require green CI on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.sha.outputs.sha }}
+        run: |
+          set -euo pipefail
+          echo "Checking CI status for $SHA"
+          runs=$(gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs" \
+            --jq '.check_runs[] | "\(.name)\t\(.status)\t\(.conclusion // "pending")"')
+          echo "$runs"
+
+          fail=0
+          for job in rust wasm-web; do
+            line=$(printf '%s\n' "$runs" | awk -F'\t' -v j="$job" '$1 == j' | head -1)
+            if [ -z "$line" ]; then
+              echo "::error::No '$job' check run found for $SHA — CI has not run on this commit."
+              fail=1
+              continue
+            fi
+            conclusion=$(printf '%s' "$line" | cut -f3)
+            if [ "$conclusion" != "success" ]; then
+              echo "::error::Check '$job' is '$conclusion' for $SHA — refusing to deploy."
+              fail=1
+            fi
+          done
+          [ "$fail" -eq 0 ] || exit 1
+          echo "CI is green on $SHA"
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      # `--remote-only` builds on Fly's builder, so the runner needs no Docker.
+      # fly.toml lives at the repo root and points [build] dockerfile at
+      # apps/server/Dockerfile; migrations run as its release_command, and a
+      # non-zero exit there aborts the deploy with the old version still serving.
+      - name: flyctl deploy
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          SHA: ${{ steps.sha.outputs.sha }}
+        run: flyctl deploy --remote-only --build-arg GIT_SHA="$SHA"
+
+      # A green deploy is not the same as a serving app: the release command can
+      # pass and the machine still fail to boot or bind.
+      - name: Smoke check
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 12); do
+            code=$(curl -s -o /tmp/body -w '%{http_code}' --max-time 30 "$HEALTHCHECK_URL" || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "healthcheck 200 on attempt $attempt: $(cat /tmp/body)"
+              exit 0
+            fi
+            echo "attempt $attempt: status=$code, retrying in 5s"
+            sleep 5
+          done
+          echo "::error::Healthcheck never returned 200. The deploy completed but the app is not serving."
+          exit 1
+
+      - name: Summary
+        if: always()
+        env:
+          SHA: ${{ steps.sha.outputs.sha }}
+        run: |
+          {
+            echo "### Deploy ${{ job.status }}"
+            echo ""
+            echo "- app: \`${FLY_APP}\`"
+            echo "- commit: \`${SHA}\`"
+            echo "- healthcheck: ${HEALTHCHECK_URL}"
+            echo ""
+            echo "The running machine logs this SHA as \`git_sha\` at startup."
+          } >> "$GITHUB_STEP_SUMMARY"
