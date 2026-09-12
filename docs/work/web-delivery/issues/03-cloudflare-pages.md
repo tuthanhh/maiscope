@@ -28,6 +28,10 @@ domain is in place.**
       deep links
 - [ ] Preview deployments on PRs (their origins must not be in the CORS allowlist
       unless deliberately added)
+- [ ] **Production origin added to `CORS_ALLOWED_ORIGINS` in `fly.toml`** and
+      deployed. It currently lists only `http://localhost:1420`; the allowlist
+      matches exactly, with no wildcards, so the API rejects every browser call
+      from Pages until this is done
 - [ ] Brotli confirmed on `.js`/`.wasm`
 - [ ] Recorded: the exact production origin, since it becomes the PWA identity
 - [ ] Ticket opened for the custom-domain migration, with the install-orphaning
