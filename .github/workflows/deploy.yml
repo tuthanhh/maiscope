@@ -27,6 +27,14 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
+    # The default GITHUB_TOKEN is contents-read only, and the check-runs API used
+    # by the CI gate needs `checks: read` — without it the gate 403s. Naming any
+    # permission drops every unnamed scope to none, so `contents: read` has to be
+    # listed too for checkout.
+    permissions:
+      contents: read
+      checks: read
     # Configure required reviewers on this environment in repo settings to add a
     # human approval step before any deploy runs.
     environment: production
