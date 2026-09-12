@@ -81,4 +81,11 @@ WORKDIR /app
 # 0.0.0.0, so Fly's injected PORT is honoured without changing anything here.
 EXPOSE 3000
 
-ENTRYPOINT ["/app/server"]
+# CMD, deliberately not ENTRYPOINT. Fly implements `release_command` by setting
+# the machine's *cmd*, and under Docker semantics cmd becomes arguments to the
+# entrypoint. With `ENTRYPOINT ["/app/server"]` the release machine ran
+# `/app/server /app/migrate` — the server ignored the stray argument, bound :3000
+# and served forever, so the machine never exited, the release command never
+# finished, and every deploy aborted. CMD is replaced outright, so
+# release_command actually runs the migrator.
+CMD ["/app/server"]

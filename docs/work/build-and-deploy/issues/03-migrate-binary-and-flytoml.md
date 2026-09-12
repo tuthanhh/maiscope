@@ -72,6 +72,20 @@ a second run reported `schema already current`. That also confirms the
 `tls-rustls-ring-webpki` change was both necessary and sufficient — the same
 connection would have failed outright before it.
 
+**`ENTRYPOINT` broke `release_command` — four failed deploys.** Fly implements
+`release_command` by setting the machine's **cmd**, and Docker appends cmd to the
+entrypoint as arguments. With `ENTRYPOINT ["/app/server"]` the release machine ran
+`/app/server /app/migrate`: the server ignored the extra argument, bound `:3000`
+and served forever, so the machine never exited and flyctl aborted every deploy.
+
+The symptoms were misleading. The first attempt exited 1 (that was the *server*
+failing on an unset `DATABASE_URL`, not the migrator); later attempts hung; and the
+release machine emitted a `listening 0.0.0.0:3000 … schema_version` line that looked
+exactly like a healthy app boot. `bin/migrate` never ran on Fly at all.
+
+Fixed by using `CMD ["/app/server"]` in `apps/server/Dockerfile`. **Any image whose
+release command must be overridable has to use CMD, not ENTRYPOINT.**
+
 **Still owed.** The Neon side is done (project live in `ap-southeast-1`, schema
 applied). What remains needs a Fly account: create the `maiscope-api` app, set
 `DATABASE_URL` as a secret, and prove a deliberately broken migration aborts a
