@@ -112,14 +112,18 @@ jobs:
         run: pnpm build
 
       # Guard the cap rather than discovering it in wrangler's error output.
+      #
+      # Single awk pass, deliberately: `find | sort -rn | head -1` fails under
+      # `pipefail` because head exits after one line and sort dies on EPIPE.
       - name: Check no file exceeds Cloudflare's 25 MiB limit
         run: |
           set -euo pipefail
           limit=$((25 * 1024 * 1024))
-          biggest=$(find apps/host/dist -type f -printf '%s\t%p\n' | sort -rn | head -1)
-          size=$(printf '%s' "$biggest" | cut -f1)
-          path=$(printf '%s' "$biggest" | cut -f2)
-          echo "largest asset: $path ($((size / 1024 / 1024)) MiB)"
+          biggest=$(find apps/host/dist -type f -printf '%s\t%p\n' \
+            | awk -F'\t' '$1 > max { max = $1; path = $2 } END { print max "\t" path }')
+          size=${biggest%%$'\t'*}
+          path=${biggest#*$'\t'}
+          echo "largest asset: $path ($((size / 1024 / 1024)) MiB of 25)"
           if [ "$size" -gt "$limit" ]; then
             echo "::error::$path is over Cloudflare Pages' 25 MiB per-file limit."
             exit 1
