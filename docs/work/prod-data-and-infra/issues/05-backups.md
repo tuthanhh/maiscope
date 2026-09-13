@@ -15,7 +15,41 @@ directly to production — and the loss would be silent during a restore.
 
 **Blocked by:** 01
 
-**Status:** todo
+**Status:** in progress — `.github/workflows/backup-database.yml` written
+2026-09-13; restore rehearsed locally, not yet on Neon
+
+## Assessment (2026-09-13)
+
+**Destination decided: the private chart-data repo, under `backups/`.** The spec
+offered "private repo, or object storage"; the sizes make the repo the obvious
+pick, and it satisfies "outlives any single vendor account" without adding a third
+provider or another credential.
+
+Measured against a fully seeded database (1845 songs / 7348 sheets / 6571 charts):
+
+| | size |
+|---|---|
+| `pg_dump -Fc -Z9` | **8.13MB** |
+| live database | 37MB |
+
+Revisit the destination if a dump passes ~100MB.
+
+**Retention: last 7 daily, plus one per ISO week for 8 weeks**, enforced by
+pruning files in the working tree. Git history still holds every dump ever
+committed, which is the advantage of a repo over expiring artifact storage.
+
+**Restore rehearsed for real, but locally.** On 2026-09-13 the 8.13MB dump was
+restored with `pg_restore --no-owner` into a scratch database: no errors, and the
+restored copy matched the source exactly (1845/7348/6571). Procedure written into
+[`runbook.md`](../runbook.md), including the `--no-owner` requirement and the
+delta-sync `409` consequence.
+
+**Still outstanding:** the rehearsal must be repeated into a real Neon branch, and
+Neon's actual free-tier restore window measured and recorded — that number is what
+decides whether "we can roll back the data" is a fact. Both need Neon access.
+
+**Scheduled an hour before `sync-catalog`** (18:00 vs 19:00 UTC), so the dump
+captures the state *before* the nightly sync rather than after it.
 
 - [ ] Scheduled workflow running `pg_dump` (custom format, compressed)
 - [ ] Destination decided and documented: private repo, or object storage with

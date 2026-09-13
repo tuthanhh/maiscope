@@ -1,0 +1,165 @@
+name: backup-database
+
+# Scheduled pg_dump of production, committed to the private chart-data repo.
+# See docs/work/prod-data-and-infra/issues/05-backups.md.
+#
+# WHY THIS EXISTS ALONGSIDE NEON'S RESTORE WINDOW: they cover different failures.
+# Neon's window handles "I dropped a column an hour ago". It does not survive
+# account suspension, a free-tier policy change, or a project deleted by mistake.
+# A dump in a repo you control does, and outlives any single vendor account.
+#
+# Explicitly NOT relying on "the laptop songs/ folder is the backup". That holds
+# only until the first chart is added directly to production, and the loss would
+# be silent during a restore.
+#
+# Measured 2026-09-13 against a fully seeded database (1845 songs / 7348 sheets /
+# 6571 charts): pg_dump -Fc -Z9 is 8.1MB, live database 37MB. Cheap to keep, and
+# small enough that git history is a reasonable home. Revisit the destination if
+# the dump passes ~100MB.
+on:
+  schedule:
+    # 18:00 UTC = 01:00 Asia/Ho_Chi_Minh, an hour before sync-catalog so the
+    # backup captures the state *before* the nightly sync rather than after it.
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: backup-database
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+    timeout-minutes: 20
+
+    steps:
+      # Only the data repo is needed — no build, no server code.
+      - name: Check out the chart-data repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.CHART_DATA_REPO }}
+          token: ${{ secrets.CHART_DATA_TOKEN }}
+          path: chart-data
+          # Full history so the retention prune below can see prior backups.
+          fetch-depth: 0
+
+      # Neon runs Postgres 17; ubuntu-24.04 ships the 16 client, and pg_dump
+      # refuses a newer server than itself ("server version mismatch").
+      - name: Install the Postgres 17 client
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+          pg_dump --version
+
+      - name: Dump the database
+        id: dump
+        env:
+          PGURL: ${{ secrets.SEED_DATABASE_URL || secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          [ -n "$PGURL" ] || { echo "::error::Neither SEED_DATABASE_URL nor DATABASE_URL is set."; exit 1; }
+          stamp=$(date -u +%Y%m%d)
+          out="chart-data/backups/maiscope-${stamp}.dump"
+          mkdir -p chart-data/backups
+          pg_dump -Fc -Z9 -d "$PGURL" -f "$out"
+
+          bytes=$(stat -c '%s' "$out")
+          echo "dump: $out ($bytes bytes)"
+          # A dump that suddenly collapses is the signal that matters: an empty or
+          # near-empty file would otherwise overwrite nothing and look like success,
+          # and the failure would only surface during a restore.
+          if [ "$bytes" -lt 100000 ]; then
+            echo "::error::Dump is only ${bytes} bytes — implausibly small for a seeded"
+            echo "::error::catalog. Refusing to commit it. Check the database is populated."
+            exit 1
+          fi
+          echo "path=$out" >> "$GITHUB_OUTPUT"
+          echo "stamp=$stamp" >> "$GITHUB_OUTPUT"
+          echo "bytes=$bytes" >> "$GITHUB_OUTPUT"
+
+      # Verify the dump is readable before trusting it. pg_restore --list parses
+      # the archive's table of contents without needing a server, so a truncated
+      # or corrupt file fails here rather than during an emergency.
+      - name: Verify the dump is a readable archive
+        run: |
+          set -euo pipefail
+          entries=$(pg_restore --list "${{ steps.dump.outputs.path }}" | grep -c '^[0-9]' || true)
+          echo "archive table-of-contents entries: $entries"
+          [ "$entries" -gt 0 ] || { echo "::error::pg_restore could not read the dump."; exit 1; }
+
+      # Retention: keep the last 7 dailies, plus one per ISO week for 8 weeks.
+      # Enforced by deleting files, so the working tree is the policy — git history
+      # still holds everything, which is the point of committing rather than
+      # uploading to expiring artifact storage.
+      - name: Prune old backups
+        run: |
+          set -euo pipefail
+          cd chart-data/backups
+          keep=$(mktemp)
+          ls -1 maiscope-*.dump 2>/dev/null | sort -r | head -7 >> "$keep" || true
+          # One per ISO week, most recent first, for the last 8 distinct weeks.
+          for f in $(ls -1 maiscope-*.dump 2>/dev/null | sort -r); do
+            d=${f#maiscope-}; d=${d%.dump}
+            wk=$(date -u -d "$d" +%G-W%V 2>/dev/null) || continue
+            grep -qx "$wk" /tmp/weeks 2>/dev/null && continue
+            echo "$wk" >> /tmp/weeks
+            echo "$f" >> "$keep"
+            [ "$(sort -u /tmp/weeks | wc -l)" -ge 8 ] && break
+          done
+          sort -u "$keep" > /tmp/keep.txt
+          echo "keeping:"; cat /tmp/keep.txt
+          for f in $(ls -1 maiscope-*.dump 2>/dev/null); do
+            grep -qx "$f" /tmp/keep.txt || { echo "pruning $f"; rm -f "$f"; }
+          done
+
+      - name: Commit the backup
+        env:
+          STAMP: ${{ steps.dump.outputs.stamp }}
+          BYTES: ${{ steps.dump.outputs.bytes }}
+        run: |
+          set -euo pipefail
+          cd chart-data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A backups
+          if git diff --cached --quiet; then
+            echo "Nothing to commit — today's dump is byte-identical to the stored one."
+            exit 0
+          fi
+          git commit -m "backup: maiscope ${STAMP} (${BYTES} bytes)"
+          git push
+
+      # Belt and braces: the run also keeps its own copy, so a backup exists even
+      # if the push fails (revoked token, protected branch).
+      - name: Upload the dump as an artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maiscope-dump-${{ steps.dump.outputs.stamp }}
+          path: chart-data/backups/maiscope-*.dump
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### backup-database ${{ job.status }}"
+            echo ""
+            echo "- dump: \`maiscope-${{ steps.dump.outputs.stamp }}.dump\`"
+            echo "- size: \`${{ steps.dump.outputs.bytes }}\` bytes"
+            echo "- destination: \`${{ vars.CHART_DATA_REPO }}\` under \`backups/\`"
+            echo "- retention: last 7 daily + 1 per ISO week for 8 weeks"
+            echo ""
+            echo "Restore procedure: docs/work/prod-data-and-infra/runbook.md"
+          } >> "$GITHUB_STEP_SUMMARY"

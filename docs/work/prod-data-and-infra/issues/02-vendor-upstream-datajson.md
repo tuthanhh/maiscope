@@ -16,7 +16,27 @@ artifact serves as seed input and as backup.
 
 **Blocked by:** None (independent of the server restructure)
 
-**Status:** todo
+**Status:** obsolete — see Assessment
+
+## Assessment (2026-09-13)
+
+**Skip this ticket.** Every line of its rationale is about `bin/ingest.rs`, which
+no longer exists: it was replaced by the differential `bin/sync_catalog`. The
+failure this ticket exists to prevent is now architecturally impossible.
+
+| This ticket's concern | Status under `sync_catalog` |
+|---|---|
+| `TRUNCATE`s before reloading | Never truncates, never deletes — enforced by the module doc in `catalog_sync.rs` |
+| An outage or malformed file "wipes the catalog and reloads garbage" | Cannot: nothing is deleted, and a failed run rolls back one transaction |
+| "Sanity checks before `TRUNCATE`: parses, count within a sane delta, non-empty" | Already implemented as `catalog_sync::sanity_check` — rejects an empty payload and any payload below 90% of the current row count, before any write |
+
+The vendored-snapshot machinery, the private data repo for the snapshot, and the
+`--fetch` flag all existed to make a destructive full reload safe. There is no
+destructive full reload.
+
+**What survives is one thing, and it belongs to ticket 03:** the early-warning
+signal for an upstream retitle silently orphaning chart text. That does not need
+a vendored 4.7MB file to detect — see 03's assessment.
 
 - [ ] `ingest` takes a path argument; upstream fetching moves behind an explicit
       `--fetch` flag or a separate binary

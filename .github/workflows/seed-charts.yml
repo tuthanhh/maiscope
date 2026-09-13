@@ -1,0 +1,211 @@
+name: seed-charts
+
+# Load chart text into production. v1 has no write endpoint (contributions were
+# cut, ADR-0002), so this workflow is the only sanctioned way a chart reaches
+# production — see docs/work/prod-data-and-infra/issues/04-seed-workflows.md.
+#
+# WHY A WORKFLOW AND NOT A LAPTOP COMMAND: production credentials stop living on
+# disk next to a dev .env, and every run leaves a timestamp, an actor and full
+# output. "When did this chart change, and who changed it" becomes answerable.
+#
+# NON-DESTRUCTIVE. seed_songs only inserts and updates, keyed by sheet_expr, and
+# identical chart text is a no-op that writes nothing. There is no truncating
+# counterpart to this workflow: bin/ingest was replaced by the differential
+# bin/sync_catalog (.github/workflows/sync-catalog.yml), which never deletes.
+# Ticket 04's `reload-catalog.yml` is obsolete for that reason.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Commit SHA or branch of THIS repo to run from"
+        required: false
+        default: master
+      data_ref:
+        description: "Branch/SHA of the chart-text data repo to seed from"
+        required: false
+        default: main
+      allow_unmatched:
+        description: >-
+          Pass --allow-unmatched. Leave FALSE unless you know why: an unmatched
+          title or difficulty is a chart that has quietly stopped loading.
+        type: boolean
+        required: false
+        default: false
+
+# Two concurrent seeds would race on the same sheet_expr rows and on
+# catalog_meta.revision, which apply_chart_revision bumps. Queue instead of
+# cancelling — a cancelled seed leaves a partial revision bump behind.
+concurrency:
+  group: seed-charts
+  cancel-in-progress: false
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    # Configure required reviewers on this environment in repo settings so a
+    # human approves before anything writes to production.
+    environment: production
+    permissions:
+      contents: read
+    # Generous: the seed itself is ~16s locally, but a cold cargo build plus the
+    # data checkout dominates. Well under GitHub's 6h default so a hung run
+    # cannot sit on the concurrency group all day.
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out the server code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      # The chart text lives in a separate private repo so this public repo stays
+      # free of it. Only maidata.txt is needed: seed_songs never opens track.mp3,
+      # pv.mp4 or bg.jpg, so the data repo carries ~17.5MB of chart text rather
+      # than the ~16GB full song collection. That is what makes a plain git repo
+      # viable here — no LFS, no object storage.
+      - name: Check out the chart text
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.CHART_DATA_REPO }}
+          ref: ${{ inputs.data_ref }}
+          token: ${{ secrets.CHART_DATA_TOKEN }}
+          path: chart-data
+
+      # seed_songs expects <songs-dir>/<song>/maidata.txt — one level deep. It
+      # does NOT recurse, so a <version>/<song>/ layout silently matches nothing:
+      # read_dir finds version directories, none contains a maidata.txt, and every
+      # one is skipped. scripts/flatten-songs.sh produces the layout this needs.
+      - name: Verify the data layout before touching the database
+        id: layout
+        run: |
+          set -euo pipefail
+          dir="chart-data/${CHART_DATA_SUBDIR:-songs}"
+          [ -d "$dir" ] || { echo "::error::No such directory: $dir"; exit 1; }
+
+          flat=$(find "$dir" -mindepth 1 -maxdepth 1 -type d -exec test -e '{}/maidata.txt' \; -print | wc -l)
+          nested=$(find "$dir" -mindepth 1 -maxdepth 1 -type d ! -exec test -e '{}/maidata.txt' \; -print | wc -l)
+          echo "seedable song directories: $flat"
+          echo "directories with no maidata.txt: $nested"
+
+          if [ "$flat" -eq 0 ]; then
+            echo "::error::No song directory contains a maidata.txt. If the tree is"
+            echo "::error::<version>/<song>/, flatten it first (scripts/flatten-songs.sh)."
+            exit 1
+          fi
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+          echo "flat=$flat" >> "$GITHUB_OUTPUT"
+        env:
+          CHART_DATA_SUBDIR: ${{ vars.CHART_DATA_SUBDIR }}
+
+      - name: Install the pinned toolchain
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: native
+
+      # Neon runs Postgres 17; ubuntu-24.04 ships the 16 client, and pg_dump
+      # refuses a newer server than itself ("server version mismatch").
+      - name: Install the Postgres 17 client
+        run: |
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+          pg_dump --version
+
+      # A pre-mutation dump, per issue 05. Retained as a run artifact rather than
+      # pushed anywhere: this is the "undo this specific seed" copy, distinct from
+      # the scheduled backup that exists to outlive the vendor account.
+      - name: Dump the database before mutating it
+        env:
+          # Prefer the lower-privilege seeding role once issue 01 splits the roles.
+          # Falls back to DATABASE_URL so this works against the current
+          # single-role setup without editing the workflow.
+          PGURL: ${{ secrets.SEED_DATABASE_URL || secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          [ -n "$PGURL" ] || { echo "::error::Neither SEED_DATABASE_URL nor DATABASE_URL is set."; exit 1; }
+          stamp=$(date -u +%Y%m%dT%H%M%SZ)
+          pg_dump -Fc -Z9 -d "$PGURL" -f "pre-seed-${stamp}.dump"
+          ls -l "pre-seed-${stamp}.dump"
+          echo "PRE_SEED_DUMP=pre-seed-${stamp}.dump" >> "$GITHUB_ENV"
+
+      - name: Upload the pre-seed dump
+        uses: actions/upload-artifact@v4
+        with:
+          name: pre-seed-dump
+          path: ${{ env.PRE_SEED_DUMP }}
+          retention-days: 30
+          if-no-files-found: error
+
+      # seed_songs matches each maidata's &title= against songs.title, so the
+      # catalog must already be populated — run sync-catalog first on a fresh
+      # database, or every title is "unmatched" and nothing seeds.
+      - name: Refuse to seed an unsynced catalog
+        env:
+          PGURL: ${{ secrets.SEED_DATABASE_URL || secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          songs=$(psql -tAX -d "$PGURL" -c "SELECT COUNT(*) FROM songs")
+          echo "catalog songs: $songs"
+          if [ "$songs" -eq 0 ]; then
+            echo "::error::The catalog is empty. seed_songs matches on songs.title, so"
+            echo "::error::every chart would be skipped. Run the sync-catalog workflow first."
+            exit 1
+          fi
+
+      # Exits non-zero on any unmatched title or difficulty unless
+      # --allow-unmatched is passed. That is the point: an unmatched entry is a
+      # chart that silently stopped loading, and this job is where it surfaces.
+      - name: Seed the charts
+        id: seed
+        env:
+          DATABASE_URL: ${{ secrets.SEED_DATABASE_URL || secrets.DATABASE_URL }}
+          ALLOW: ${{ inputs.allow_unmatched }}
+          DIR: ${{ steps.layout.outputs.dir }}
+        run: |
+          set -euo pipefail
+          args=("$GITHUB_WORKSPACE/$DIR")
+          if [ "$ALLOW" = "true" ]; then
+            echo "::warning::Running with --allow-unmatched: unmatched charts will NOT fail this run."
+            args+=(--allow-unmatched)
+          fi
+          set +e
+          cargo run --release --locked --bin seed_songs -- "${args[@]}" 2>&1 | tee seed.log
+          status=${PIPESTATUS[0]}
+          set -e
+          grep -E '^seeded ' seed.log | tail -1 > seed-summary.txt || true
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit "$status"
+
+      - name: Summary
+        if: always()
+        env:
+          FLAT: ${{ steps.layout.outputs.flat }}
+        run: |
+          {
+            echo "### seed-charts ${{ job.status }}"
+            echo ""
+            echo "- server ref: \`${{ inputs.ref }}\`"
+            echo "- data ref: \`${{ inputs.data_ref }}\`"
+            echo "- song directories found: \`${FLAT}\`"
+            echo "- \`--allow-unmatched\`: \`${{ inputs.allow_unmatched }}\`"
+            echo ""
+            if [ -s seed-summary.txt ]; then
+              echo '```'
+              cat seed-summary.txt
+              echo '```'
+              echo ""
+              echo "\`seeded\` counts real writes only. A re-run over unchanged chart"
+              echo "text reports \`seeded 0\` with everything under already-up-to-date,"
+              echo "so a 0 here is normal rather than a failure signal."
+            else
+              echo "_No seed summary produced — the run failed before seeding._"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
