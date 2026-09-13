@@ -56,7 +56,8 @@ Response `200`:
   "types":      [{ "type": "string", "name": "string", "abbr?": "string", "iconUrl?": "string", "iconHeight?": 0 }],
   "difficulties": [{ "difficulty": "string", "name": "string", "color?": "string", "iconUrl?": "string", "iconHeight?": 0 }],
   "regions":    [{ "region": "string", "name": "string" }],
-  "updateTime": "YYYY-MM-DD"   // bumped whenever any canonical row changes
+  "updateTime": "YYYY-MM-DD"   // bumped whenever any canonical row changes;
+                               // "0000-00-00" before the first catalog sync
 }
 ```
 > `sheets` is intentionally absent — `preprocessData` derives it from
@@ -207,8 +208,8 @@ went with Tauri ([ADR-0003](../adr/0003-web-pwa-drop-tauri.md)).
 Cheap freshness probe.
 ```jsonc
 {
-  "updateTime": "YYYY-MM-DD",
-  "revision": 0,            // monotonic; cache stores last seen
+  "updateTime": "YYYY-MM-DD", // "0000-00-00" before the first catalog sync
+  "revision": 0,            // monotonic; cache stores last seen; 0 before the first sync
   "catalogHash": "string", // ETag for GET /catalog
   "counts": { "songs": 0, "sheets": 0, "charts": 0 }
 }

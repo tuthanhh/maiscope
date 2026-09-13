@@ -304,4 +304,31 @@ mod tests {
         assert_ne!(etag_before, etag_after);
         Ok(())
     }
+
+    // No seeding at all: migrations have run, every table is empty. This is
+    // the state every freshly provisioned environment starts in (contract §1,
+    // docs/work/prod-data-and-infra/issues/06-empty-catalog-500.md).
+    #[sqlx::test]
+    async fn catalog_on_an_unseeded_database_is_empty_not_an_error(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let response = catalog(
+            AxumQuery(CatalogQuery { region: None }),
+            axum::http::HeaderMap::new(),
+            AxumState(pool),
+        )
+        .await
+        .expect("an unseeded catalog must not be an error");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(json["updateTime"], "0000-00-00");
+        assert_eq!(json["songs"].as_array().unwrap().len(), 0);
+        assert_eq!(json["categories"].as_array().unwrap().len(), 0);
+        Ok(())
+    }
 }

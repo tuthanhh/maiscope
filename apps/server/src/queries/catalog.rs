@@ -49,12 +49,19 @@ pub async fn fetch_regions(pool: &PgPool) -> Result<Vec<RegionEntry>, sqlx::Erro
     .await
 }
 
+/// `catalog_meta` is a singleton written only by the catalog sync, so it is
+/// empty between `migrate` and the first sync — the state every new environment
+/// starts in. Report the same `0000-00-00` sentinel the frontend already uses for
+/// an empty catalog (`apps/host/src/utils/data.ts:19`) rather than erroring: an
+/// unseeded catalog is empty, not broken.
 pub async fn fetch_update_time(pool: &PgPool) -> Result<String, sqlx::Error> {
-    sqlx::query_scalar!(
+    let update_time = sqlx::query_scalar!(
         r#"SELECT to_char(update_time, 'YYYY-MM-DD') AS "update_time!" FROM catalog_meta LIMIT 1"#
     )
-    .fetch_one(pool)
-    .await
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(update_time.unwrap_or_else(|| "0000-00-00".to_string()))
 }
 
 #[cfg(test)]

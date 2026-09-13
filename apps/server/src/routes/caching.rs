@@ -29,18 +29,29 @@ pub(crate) struct Freshness {
 }
 
 impl Freshness {
+    /// `catalog_meta` is a singleton written only by the catalog sync, so it
+    /// is empty between `migrate` and the first sync — the state every new
+    /// environment starts in. Both callers (`GET /catalog`, `GET
+    /// /sync/manifest`) need a validator even then, so fall back to the same
+    /// `0000-00-00` / revision-0 sentinel `queries::fetch_update_time` uses
+    /// rather than erroring.
     pub(crate) async fn load(pool: &PgPool) -> Result<Self, AppError> {
         let row = sqlx::query!(
             r#"SELECT to_char(update_time, 'YYYY-MM-DD') AS "update_time!", revision AS "revision!"
                FROM catalog_meta LIMIT 1"#
         )
-        .fetch_one(pool)
+        .fetch_optional(pool)
         .await?;
 
+        let (update_time, revision) = match row {
+            Some(row) => (row.update_time, row.revision),
+            None => ("0000-00-00".to_string(), 0),
+        };
+
         Ok(Self {
-            hash: catalog_hash(row.revision, &row.update_time),
-            update_time: row.update_time,
-            revision: row.revision,
+            hash: catalog_hash(revision, &update_time),
+            update_time,
+            revision,
         })
     }
 
