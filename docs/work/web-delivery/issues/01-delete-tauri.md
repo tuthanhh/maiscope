@@ -15,7 +15,7 @@ With the target now web + PWA, the proxy has no reason to exist.
 
 **Blocked by:** None (independent of server work)
 
-**Status:** in-progress
+**Status:** done — sweep completed, c1b6778 (follow-up: a2d582d)
 
 - [x] `apps/host/src-tauri/` deleted, including `data.rs` and `search.rs`
 - [x] `Cargo.toml` workspace members updated — `apps/host/src-tauri` removed

@@ -32,19 +32,38 @@ failed reload turns a degraded catalog into a hard outage.
 
 **Blocked by:** None
 
-**Status:** todo
+**Status:** done — a4fd0b5
 
-- [ ] `fetch_update_time` uses `fetch_optional`, or the query is restructured so an
-      empty `catalog_meta` is representable
-- [ ] **Contract decision**: what does the response carry when no catalog exists?
+- [x] `fetch_update_time` uses `fetch_optional`, or the query is restructured so an
+      empty `catalog_meta` is representable (`apps/server/src/queries/catalog.rs:61`,
+      falls back to the `0000-00-00` sentinel)
+- [x] **Contract decision**: what does the response carry when no catalog exists?
       Options are `updateTime: null`, omitting the field, or 503 "not yet seeded".
       Whichever wins goes in `docs/reference/api-contract.md` in the same change
-- [ ] The frontend tolerates that shape — `utils/data.ts:preprocessData` currently
-      assumes the field is present
-- [ ] Regression test: `#[sqlx::test]` with no seed data asserting the endpoint does
-      not 500
-- [ ] Audit the other read endpoints for the same pattern; `fetch_one` on a table an
-      empty database legitimately has zero rows in is the smell
+      (decided: `"0000-00-00"` before the first catalog sync — documented at
+      `docs/reference/api-contract.md:59-60` and `:212`)
+- [x] The frontend tolerates that shape — `utils/data.ts:preprocessData` currently
+      assumes the field is present (`buildEmptyData()` in `apps/host/src/utils/data.ts:19`
+      already uses the same `'0000-00-00'` sentinel as its own empty-state marker,
+      so the server's value round-trips without special-casing)
+- [x] Regression test: `#[sqlx::test]` with no seed data asserting the endpoint does
+      not 500 (`apps/server/src/routes/catalog.rs:312`,
+      `catalog_on_an_unseeded_database_is_empty_not_an_error`)
+- [x] Audit the other read endpoints for the same pattern; `fetch_one` on a table an
+      empty database legitimately has zero rows in is the smell (`routes/sync.rs`'s
+      `catalog_meta` reads now use `fetch_optional` too, at lines 82 and 128; its
+      other `fetch_one` calls are `COUNT(*)` queries, which always return one row
+      regardless of table emptiness, so they were never the same bug)
+
+**This ticket was already fixed before this plan was written.** Commit `a4fd0b5`
+("fix(server): serve an empty catalog on an unseeded database") landed the
+`fetch_optional` change in `queries::fetch_update_time` and, in the same commit,
+fixed the identical `fetch_one`-on-an-empty-singleton bug in `Freshness::load`
+(`apps/server/src/routes/caching.rs`), which `GET /sync/manifest` hits as well as
+`GET /catalog`. A sibling case survived in `GET /sync/delta` (`routes/sync.rs`,
+which has its own `catalog_meta` reads and was not in that commit's file list) and
+was closed separately by commit `62f27b6` ("fix(server): /sync/delta no longer
+500s on an unseeded database").
 
 ## Comments
 

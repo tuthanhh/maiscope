@@ -20,7 +20,7 @@ domain is in place.**
 
 **Blocked by:** 01
 
-**Status:** in-progress
+**Status:** done
 
 - [x] **Deployed by wrangler from GitHub Actions, not by Pages' git integration** —
       `.github/workflows/deploy-web.yml`. See Comments; the git-connected build was
