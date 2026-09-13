@@ -17,6 +17,12 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     environment: production
+    # `cancel-in-progress: false` above means every later run queues behind this
+    # one, so a stalled job must not be allowed to sit on GitHub's 6-hour
+    # default. Comfortably above bin/sync_catalog's own 900s run budget, which
+    # covers the part that holds database locks; this only catches the rest
+    # (checkout, a cold cargo build).
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
@@ -31,4 +37,6 @@ jobs:
       - name: Run the sync
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: cargo run --release --bin sync_catalog
+        # --locked: this job writes to production, so it must build the
+        # dependency set Cargo.lock pins, same as apps/server/Dockerfile insists.
+        run: cargo run --release --locked --bin sync_catalog
