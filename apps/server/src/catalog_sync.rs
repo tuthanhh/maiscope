@@ -369,6 +369,24 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
     Ok(stats)
 }
 
+/// Refuse implausible payloads before any write. The failure this guards is a
+/// truncated or malformed upstream response landing in production unattended —
+/// see docs/work/catalog-sync/spec.md.
+pub fn sanity_check(incoming: usize, current: i64) -> Result<(), String> {
+    if incoming == 0 {
+        return Err("upstream returned zero songs".to_string());
+    }
+    if current > 0 {
+        let floor = (current as f64 * 0.9).floor() as usize;
+        if incoming <= floor {
+            return Err(format!(
+                "upstream returned {incoming} songs, below the {floor} floor (90% of {current})"
+            ));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -626,5 +644,28 @@ mod tests {
         assert_eq!(stats.songs_vanished, 0);
 
         Ok(())
+    }
+
+    #[test]
+    fn sanity_check_rejects_an_empty_payload() {
+        assert!(sanity_check(0, 1845).is_err());
+        assert!(sanity_check(0, 0).is_err(), "empty is never plausible");
+    }
+
+    #[test]
+    fn sanity_check_allows_a_first_sync_into_an_empty_database() {
+        assert!(sanity_check(1845, 0).is_ok());
+    }
+
+    #[test]
+    fn sanity_check_rejects_a_large_drop() {
+        // 90% of 1845 is 1660.5, so 1660 is below the floor and 1661 is above it.
+        assert!(sanity_check(1660, 1845).is_err());
+        assert!(sanity_check(1661, 1845).is_ok());
+    }
+
+    #[test]
+    fn sanity_check_allows_growth() {
+        assert!(sanity_check(2000, 1845).is_ok());
     }
 }
