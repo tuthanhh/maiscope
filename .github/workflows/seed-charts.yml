@@ -53,6 +53,35 @@ jobs:
     timeout-minutes: 45
 
     steps:
+      # Fail here with a readable message rather than letting the data-repo
+      # checkout fail with "repository not found", which reads like a broken
+      # workflow instead of missing configuration. Dispatch-only, so failing loudly
+      # is right — unlike the scheduled backup job, which skips instead.
+      - name: Check the required configuration exists
+        env:
+          HAVE_TOKEN: ${{ secrets.CHART_DATA_TOKEN != '' }}
+          HAVE_DB: ${{ secrets.SEED_DATABASE_URL != '' || secrets.DATABASE_URL != '' }}
+        run: |
+          set -euo pipefail
+          missing=0
+          if [ -z "${{ vars.CHART_DATA_REPO }}" ]; then
+            echo "::error::Repo variable CHART_DATA_REPO is not set (expected owner/name of the private chart-text repo)."
+            missing=1
+          fi
+          if [ "$HAVE_TOKEN" != "true" ]; then
+            echo "::error::Secret CHART_DATA_TOKEN is not set (needs read access to that repo)."
+            missing=1
+          fi
+          if [ "$HAVE_DB" != "true" ]; then
+            echo "::error::Neither SEED_DATABASE_URL nor DATABASE_URL is set."
+            missing=1
+          fi
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::See docs/work/prod-data-and-infra/runbook.md for the secret inventory."
+            exit 1
+          fi
+          echo "configuration present"
+
       - name: Check out the server code
         uses: actions/checkout@v4
         with:

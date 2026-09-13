@@ -30,6 +30,12 @@ concurrency:
 jobs:
   backup:
     runs-on: ubuntu-latest
+    # Skip cleanly until the destination is configured. This job is on a daily
+    # schedule, so without the guard it would fail every night from the moment it
+    # lands on master until CHART_DATA_REPO is set — and a workflow that always
+    # fails is one nobody reads. `vars` is available in a job-level `if`;
+    # `secrets` is not, which is why only the repo variable is checked here.
+    if: vars.CHART_DATA_REPO != ''
     environment: production
     permissions:
       contents: read

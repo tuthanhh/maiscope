@@ -46,6 +46,29 @@ Note this overlaps the matcher work that `seed-charts.yml` needs in order to pas
 without `--allow-unmatched`: both are about title matching being too strict for
 the data. Worth doing as one piece.
 
+### Also found: seeding is nondeterministic for duplicate titles
+
+`bin/seed_songs.rs:116` builds its title → song-id map from
+`SELECT id, title FROM songs WHERE title IS NOT NULL` with **no `ORDER BY`**, then
+`HashMap::insert`s each row so the last write wins. **78 catalog titles are held by
+more than one song** (1845 songs, 1767 distinct titles) — `Garakuta Doll Play` ×6,
+`Wonderland Wars オープニング` ×6, `Reach For The Stars` ×3.
+
+Postgres does not guarantee row order without `ORDER BY`, so which song a
+duplicated title resolves to varies between runs. Observed directly on 2026-09-13:
+two seeds of identical input into identically-bootstrapped databases produced 6571
+and 6568 charts.
+
+Consequence in production: a re-seed can silently reattach chart text to a
+different song than the previous run picked. Chart text does not go missing, but it
+moves, and nothing reports it.
+
+- [ ] Make the mapping deterministic (`ORDER BY id`) so repeat runs agree
+- [ ] Better: treat an ambiguous title as unmatched rather than guessing — a
+      duplicated title cannot be resolved from `&title=` alone, and silently
+      picking one is the failure this ticket is about. The song directory name or
+      the version manifest (`.songs-layout.tsv`) can disambiguate.
+
 - [ ] Scheduled workflow in the data repo (weekly is plenty)
 - [ ] Fetches upstream, compares against the vendored snapshot
 - [ ] No change → exits quietly, no PR, no noise
