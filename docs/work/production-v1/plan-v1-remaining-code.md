@@ -250,7 +250,9 @@ The workflows for `prod-data-and-infra` 04 and 05 are committed and already sati
 - Modify: `docs/work/repo-hygiene/spec.md`
 - Modify: `docs/ROADMAP.md` (only the rows these tickets belong to)
 
-**Interfaces:** consumes the commits from Tasks 1 and 2 — cite their short SHAs where a box is being ticked because of them.
+**Interfaces:** consumes Task 2's commit — cite its short SHA where a box is ticked because of it. Task 1 produced no commit: its work was already on `master` as `a4fd0b5` (see Step 5).
+
+**Verify before you tick.** Every box in this task is a claim about code that already exists. Read the file the claim is about and confirm it, then tick. Do not tick a box on the strength of this plan's say-so — this plan was itself written partly from stale ticket text, which is the exact failure being repaired here.
 
 **Scope limit, deliberate:** only the five tickets and two parents above. Do **not** rewrite the whole `ROADMAP.md` table, do not touch `catalog-sync`, and do not write an ADR. Those are real and tracked separately; they are not this task.
 
@@ -289,7 +291,15 @@ Do not touch issues 02 (`obsolete`) and 03 (`descoped`) in that directory — th
 
 - [ ] **Step 5: Close the finished tickets**
 
-- `prod-data-and-infra/issues/06-empty-catalog-500.md` → `**Status:** done — <Task 1 short SHA>`
+- `prod-data-and-infra/issues/06-empty-catalog-500.md` → `**Status:** done — a4fd0b5`.
+
+  **This ticket was already fixed before this plan was written**, which Task 1 discovered and verified: `apps/server/src/queries/catalog.rs:fetch_update_time` already uses `fetch_optional` with the `0000-00-00` sentinel, and the test already exists at `apps/server/src/routes/catalog.rs:312`. Commit `a4fd0b5` ("fix(server): serve an empty catalog on an unseeded database") is on `master`. There is no Task 1 SHA to cite — cite `a4fd0b5`.
+
+  While updating the ticket, also record two facts its text does not have:
+  - The same commit fixed the identical `fetch_one`-on-an-empty-singleton bug in `Freshness::load` (`apps/server/src/routes/caching.rs`), which `GET /sync/manifest` hits as well as `GET /catalog`.
+  - Commit `62f27b6` ("fix(server): /sync/delta no longer 500s on an unseeded database") closed the sibling case on `/sync/delta`.
+
+  Do not re-verify by running the server or the test suite; read the two source files.
 - `web-delivery/issues/01-delete-tauri.md` → `**Status:** done — sweep completed, <Task 2 short SHA>`
 - `web-delivery/issues/03-cloudflare-pages.md` → `**Status:** done`. Its three boxes are already ticked and `.github/workflows/deploy-web.yml` is committed. **Preserve the "do not promote installs until the custom domain is in place" warning** — it is the live constraint on `web-delivery` 04 and must survive the ticket closing.
 - `web-delivery/spec.md` → `**Status:** active` (not `shipped`: issues 04 and 05 remain open and deferred).
