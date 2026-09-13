@@ -30,13 +30,22 @@ Singleton (one row, pinned by a `CHECK (id)` on a boolean PK). Holds
 `Data.updateTime` — the catalog freshness stamp and ETag source (contract §1).
 The only top-level scalar in `Data`.
 - `revision` — monotonic counter shared by every table that participates in
-  sync. `bin/ingest` draws `previous + 1` per full reload and stamps it onto
-  every changed row; `apply_chart_revision` bumps it the same way for a single
-  chart. `GET /sync/delta?since=N` compares row revisions against this one
-  sequence, so a writer that invents its own counter breaks delta polling.
-- `last_full_reload_revision` — the revision of the most recent `bin/ingest`
-  run. A `since` older than this cannot be diffed, so `/sync/delta` answers
-  `409 snapshot_required` (contract §3).
+  sync. `bin/sync_catalog` draws `previous + 1` per run and stamps it onto the
+  rows it actually changed; `apply_chart_revision` bumps it the same way for a
+  single chart. `GET /sync/delta?since=N` compares row revisions against this
+  one sequence, so a writer that invents its own counter breaks delta polling.
+  **A run that changed nothing does not advance it** — this value feeds the
+  `/catalog` ETag, so advancing it daily on a no-op would make every client
+  refetch the whole payload. Writers must read it under the singleton's row
+  lock (`bin/sync_catalog` takes it with its opening upsert) rather than with a
+  bare `SELECT`, or a read-then-write can regress a concurrent bump.
+- `last_full_reload_revision` — the revision of the last reload that broke row
+  identity. A `since` older than this cannot be diffed, so `/sync/delta`
+  answers `409 snapshot_required` (contract §3). **Nothing writes it any more.**
+  `bin/sync_catalog` upserts by natural key and never deletes, so row identity
+  survives every refresh; the column is frozen at whatever the retired
+  `bin/ingest` left. That is exactly what makes delta sync work across daily
+  refreshes.
 
 Both feed the `ETag` on `GET /catalog` and `GET /sync/manifest`, which is
 `sha256("{revision}:{updateTime}")`.
@@ -61,7 +70,7 @@ One row per song. Mirrors `Song.ts` raw fields (`song_id`, `category`, `title`,
 `artist`, `bpm`, `image_name`, `version`, `release_date`, `is_new`, `is_locked`,
 `comment`). Extras:
 - `song_no` — derived display order (client also recomputes in `preprocessData`).
-- `source_index` — position in the upstream `data.json`, so ingest is
+- `source_index` — position in the upstream `data.json`, so a sync is
   reproducible and stable ordering survives re-imports.
 - `song_id UNIQUE` — natural identity (nullable per `Song.songId: string | null`).
 
@@ -91,6 +100,30 @@ Normalized out of the `Sheet` object's `Record<...>` maps:
   map. **Row existence = an override applies** in that region; non-null columns
   override the canonical sheet values (`level`, `level_value`, `internal_level`,
   `internal_level_value`, `note_designer`), null columns inherit.
+
+> `bin/sync_catalog` reconciles all three of these for **every** sheet in the
+> payload, not only sheets whose scalar columns changed — they move upstream
+> independently (note counts backfilled after release, a region flipping to
+> available). A sheet whose sub-tables alone changed still gets a fresh
+> `revision`, so `/sync/delta` reports it. The per-sheet `DELETE`s that do the
+> replacing are scoped to a single `sheet_id` and must stay that way.
+
+### `deleted_songs` / `deleted_sheets`
+Tombstones — `(song_id, revision)` and `(sheet_expr, revision)`. **Populated**,
+as of `bin/sync_catalog`; they were empty placeholders under `bin/ingest`.
+
+A row that disappears from the upstream payload is **not** deleted. Deleting a
+song cascades through `sheets` into `charts` and destroys chart text, which
+Postgres is the only copy of ([ADR-0001](../adr/0001-postgres-source-of-truth-for-charts.md)).
+The row stays in `songs`/`sheets`, stays visible in `/catalog`, and gets one
+tombstone row recording the revision it went missing at. `/sync/delta` serves
+those under `tombstones` (contract §3). A row is logged **once**, not on every
+subsequent sync — the PK is `(key, revision)`, so `ON CONFLICT DO NOTHING`
+would still write a fresh entry under each new revision.
+
+Accepted cost: the catalog drifts from upstream over time, with no way to tell
+a current song from one dropped years ago. See `docs/work/catalog-sync/spec.md`
+for the rejected alternatives.
 
 ---
 
@@ -126,7 +159,10 @@ songs ─< sheets ─┬─< sheet_note_counts
 Lookups are standalone (no FK from songs/sheets — `Song.category` etc. are plain
 strings the client cross-references, matching the frontend's loose coupling). FKs
 on the song→sheet→sub-table chain are `ON DELETE CASCADE`: drop a song → its
-sheets + sub-rows vanish.
+sheets + sub-rows vanish — **and so does the chart text hanging off those
+sheets**, since `charts.sheet_id` cascades too. No code path deletes from
+`songs`, `sheets` or `charts`; that is a structural guarantee, not a
+convention. See `deleted_songs`/`deleted_sheets` above.
 
 ## Planned tables (not yet migrated)
 

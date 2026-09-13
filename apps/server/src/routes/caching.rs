@@ -10,8 +10,11 @@ use sqlx::PgPool;
 
 use crate::error::AppError;
 
-/// `GET /catalog`: the catalog only changes on a `bin/ingest` run, so an
-/// hour of unconditional client-side caching is safe (contract §1).
+/// `GET /catalog`: the catalog changes at most once a day, on the scheduled
+/// `bin/sync_catalog` run, and only when that run found a real difference —
+/// a no-op sync deliberately leaves `catalog_meta.revision` alone, so this
+/// ETag holds still. An hour of unconditional client-side caching is safe
+/// (contract §1).
 pub(crate) const CATALOG_CACHE_CONTROL: &str = "public, max-age=3600";
 
 /// `GET /sync/manifest`: this endpoint's whole job is telling the client

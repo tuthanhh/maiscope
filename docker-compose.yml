@@ -1,4 +1,4 @@
-# Local Postgres, shared by the whole repo — the server, `bin/ingest` and the
+# Local Postgres, shared by the whole repo — the server, `bin/sync_catalog` and the
 # `#[sqlx::test]` suite all connect to it. It lives at the root rather than under
 # apps/server for that reason: root describes the system, apps/<x>/ describes how
 # one app is built.

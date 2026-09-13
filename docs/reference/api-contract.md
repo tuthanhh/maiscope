@@ -68,9 +68,10 @@ Headers: `ETag: "<sha256(revision:updateTime)>"` — the same value
 returns `304 Not Modified` with an empty body, repeating the `ETag` and
 `Cache-Control` (RFC 7232 §4.1 — the client needs them to refresh the
 freshness of the copy it already holds). `Cache-Control: public,
-max-age=3600` — the catalog only changes on a `bin/ingest` run, so an hour
-of unconditional client-side caching trades a small staleness window for
-skipping the network round-trip entirely within it (`server-restructure`
+max-age=3600` — the catalog changes at most once a day, on the scheduled
+`bin/sync_catalog` run, and only when that run found a real difference, so
+an hour of unconditional client-side caching trades a small staleness window
+for skipping the network round-trip entirely within it (`server-restructure`
 issue 07).
 
 ### 1.1 `Song` / `Sheet` payload shape
@@ -222,7 +223,8 @@ against the server rather than trusting a local cache blindly. The `304`
 still saves the round-trip cost of a full body.
 
 ### `GET /sync/delta?since={revision}`
-Rows changed since `revision`. `tombstones` carry deletions.
+Rows changed since `revision`. `tombstones` carry rows that vanished upstream
+— populated by `bin/sync_catalog`, not empty placeholders.
 ```jsonc
 {
   "revision": 0,
@@ -234,9 +236,22 @@ Rows changed since `revision`. `tombstones` carry deletions.
 If `since` is too old to diff, respond `409` with
 `{ "error": "snapshot_required" }` → client refetches `GET /catalog`.
 
-> Precisely: `since` is "too old" when it predates the revision of the last
-> full `bin/ingest` reload (`ingest` fully truncates and reloads canonical
-> tables, so there is no stable row identity to diff across that boundary).
+> Precisely: `since` is "too old" when it predates
+> `catalog_meta.last_full_reload_revision` — the revision of the last reload
+> that broke row identity, leaving nothing stable to diff across.
+>
+> **In practice that boundary no longer moves.** `bin/sync_catalog` upserts by
+> natural key (`songs.song_id`, `sheets.sheet_expr`) and never deletes, so row
+> identity survives every refresh, and it deliberately never writes
+> `last_full_reload_revision`. The column is frozen at whatever the retired
+> `bin/ingest` left, and `409 snapshot_required` is effectively unreachable.
+> The check stays because it is what a future identity-breaking reload would
+> use to tell clients to resnapshot.
+>
+> A row that vanishes upstream is **not** deleted — deleting a sheet would
+> cascade to its chart text. It is left in place, still served by `/catalog`,
+> and recorded in `tombstones` (see `docs/work/catalog-sync/spec.md`).
+>
 > A `song` is included whenever it or any of its sheets changed since
 > `since`, so a sheet-only edit still surfaces its parent song (the response
 > nests sheets under `songs`, so there's no other way to represent it).

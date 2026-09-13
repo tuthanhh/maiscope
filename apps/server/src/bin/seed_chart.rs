@@ -42,8 +42,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .bind(&sheet_expr)
         .fetch_optional(&pool)
         .await?;
-    let sheet_id = sheet_id
-        .ok_or_else(|| format!("no sheet matches sheet_expr '{sheet_expr}' (run ingest first?)"))?;
+    let sheet_id = sheet_id.ok_or_else(|| {
+        format!("no sheet matches sheet_expr '{sheet_expr}' (run `sync_catalog` first?)")
+    })?;
 
     // Upsert canonical chart; bump version on replace.
     sqlx::query(

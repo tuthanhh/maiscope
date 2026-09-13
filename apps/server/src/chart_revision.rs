@@ -3,6 +3,14 @@
 //! `bin/seed_songs.rs` and phase 2's `POST /contributions/{id}/approve` (the
 //! part of the write path that actually carries forward — see the ticket)
 //! share it instead of each hand-rolling their own SQL.
+//!
+//! Note the asymmetry with `catalog_sync`, the other writer on
+//! `catalog_meta.revision`: this module bumps it with `UPDATE ... RETURNING`,
+//! taking the singleton's row lock at the moment it writes. `catalog_sync`
+//! takes the same lock at the *start* of its transaction, because it has to
+//! stamp rows with the next value long before it knows whether the run
+//! changed anything. Either way the lock is what keeps the two from
+//! overwriting each other.
 
 use sha2::{Digest, Sha256};
 use sqlx::{Postgres, Transaction};
@@ -23,10 +31,10 @@ pub enum ChartRevisionOutcome {
 /// with it.
 ///
 /// Revision numbers are a shared sequence, not an independent per-row
-/// counter: `bin/ingest.rs` draws a fresh `catalog_meta.revision` on every
-/// full reload and stamps every changed row with that same number. A client
-/// doing `GET /sync/delta?since=N` compares against that shared sequence
-/// (`sheets.revision > $1`), so `sheets.revision` has to advance *within*
+/// counter: `bin/sync_catalog` draws a fresh `catalog_meta.revision` on every
+/// run that changed something and stamps every changed row with that same
+/// number. A client doing `GET /sync/delta?since=N` compares against that
+/// shared sequence (`sheets.revision > $1`), so `sheets.revision` has to advance *within*
 /// the same numbering space `catalog_meta.revision` uses — an independent
 /// `sheets.revision = sheets.revision + 1` would put it in a different
 /// space and could stay silently below whatever `since` a client already
