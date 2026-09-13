@@ -27,7 +27,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::path::{Path, PathBuf};
 
-use server::chart_revision::{ChartRevisionOutcome, apply_chart_revision};
+use server::chart_revision::{ChartToApply, apply_chart_revisions};
 use sqlx::postgres::PgPoolOptions;
 use unicode_normalization::UnicodeNormalization;
 
@@ -85,11 +85,6 @@ fn parse_maidata(text: &str) -> HashMap<String, String> {
     out
 }
 
-struct SheetRef {
-    id: i64,
-    sheet_expr: String,
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     dotenvy::dotenv().ok();
@@ -112,8 +107,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .await?;
 
     // song title (as stored) -> song id, loaded once and matched by NFC form.
+    //
+    // ORDER BY id because 78 catalog titles are held by more than one song
+    // (1845 songs, 1767 distinct titles) and the last insert wins. Without it,
+    // Postgres is free to return rows in any order, so which song a duplicated
+    // title resolves to varied between runs — two seeds of identical input into
+    // identically-bootstrapped databases produced 6571 and 6568 charts. This makes
+    // the choice reproducible; it does not make it *right*. Resolving a duplicated
+    // title from `&title=` alone is not possible, and treating it as unmatched
+    // rather than guessing is tracked in prod-data-and-infra issue 03.
     let songs: Vec<(i64, String)> =
-        sqlx::query_as("SELECT id, title FROM songs WHERE title IS NOT NULL")
+        sqlx::query_as("SELECT id, title FROM songs WHERE title IS NOT NULL ORDER BY id")
             .fetch_all(&pool)
             .await?;
     let mut song_by_title: HashMap<String, i64> = HashMap::new();
@@ -121,12 +125,26 @@ async fn main() -> Result<(), Box<dyn Error>> {
         song_by_title.insert(nfc(&title), id);
     }
 
+    // Every sheet in the catalog, keyed the way the loop below looks them up.
+    // This replaces one `SELECT ... WHERE song_id_fk = $1 AND difficulty = $2` per
+    // song-difficulty pair — ~9.6k round trips for the full collection — with one.
+    let sheet_rows: Vec<(i64, String, i64, String)> =
+        sqlx::query_as("SELECT song_id_fk, difficulty, id, sheet_expr FROM sheets")
+            .fetch_all(&pool)
+            .await?;
+    let sheet_by_song_difficulty: HashMap<(i64, String), (i64, String)> = sheet_rows
+        .into_iter()
+        .map(|(song_id, difficulty, id, expr)| ((song_id, difficulty), (id, expr)))
+        .collect();
+
     // `applied` counts real writes only. Counting attempts instead makes a
     // re-seed of unchanged data report the same number as the first run,
     // which is precisely the log line CI reads to tell whether anything
     // happened.
     let mut applied = 0usize;
     let mut unchanged = 0usize;
+    // Every chart to write, collected across all songs and applied in one batch.
+    let mut pending: Vec<ChartToApply> = Vec::new();
     let mut skipped_songs = 0usize;
     let mut unmatched_titles: Vec<String> = Vec::new();
     let mut unmatched_difficulties: Vec<String> = Vec::new();
@@ -170,16 +188,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 continue;
             }
 
-            let sheet: Option<SheetRef> = sqlx::query_as!(
-                SheetRef,
-                "SELECT id, sheet_expr FROM sheets WHERE song_id_fk = $1 AND difficulty = $2",
-                song_id,
-                difficulty
-            )
-            .fetch_optional(&pool)
-            .await?;
-
-            let Some(sheet) = sheet else {
+            let Some((sheet_id, sheet_expr)) =
+                sheet_by_song_difficulty.get(&(song_id, (*difficulty).to_string()))
+            else {
                 if *difficulty != "master" && *difficulty != "remaster" {
                     eprintln!(
                         "warning: {dir_name}: maidata has '{difficulty}' but no matching sheet in the catalog"
@@ -189,16 +200,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 continue;
             };
 
-            let mut tx = pool.begin().await?;
-            let outcome =
-                apply_chart_revision(&mut tx, sheet.id, &sheet.sheet_expr, "maimai-simai", inote)
-                    .await?;
-            tx.commit().await?;
-            match outcome {
-                ChartRevisionOutcome::Applied => applied += 1,
-                ChartRevisionOutcome::Unchanged => unchanged += 1,
-            }
+            pending.push(ChartToApply {
+                sheet_id: *sheet_id,
+                sheet_expr: sheet_expr.clone(),
+                content: inote.clone(),
+            });
         }
+    }
+
+    // One transaction for every chart, rather than one per chart. The whole batch
+    // is built first so nothing is held open while walking 1927 directories off
+    // disk, and so `catalog_meta.revision` advances once for the run instead of
+    // once per chart — see `apply_chart_revisions`.
+    if !pending.is_empty() {
+        let mut tx = pool.begin().await?;
+        let outcome = apply_chart_revisions(&mut tx, "maimai-simai", &pending).await?;
+        tx.commit().await?;
+        applied = outcome.applied;
+        unchanged = outcome.unchanged;
     }
 
     println!(

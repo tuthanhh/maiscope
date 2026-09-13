@@ -116,6 +116,20 @@ layer. `engine/` and `apps/host/` have no tests
 yet — growing that is tracked in
 [`docs/work/test-foundation/`](docs/work/test-foundation/).
 
+**Do not let `DATABASE_URL` point at a data-laden database when running tests.**
+`#[sqlx::test]` derives each test's ephemeral database from the one `DATABASE_URL`
+names, so its size is paid 45+ times over in parallel. Against a freshly migrated
+database the suite is ~2.5s and green; against the dev database after a full
+`seed_songs` (38MB, 6.5k charts) tests start failing with
+`database "_sqlx_test_…" is being accessed by other users` as the teardown drops
+race each other — a confusing failure that looks like broken code, not a bloated
+template. Keep a lean database for tests:
+
+```sh
+docker exec maiscope-db psql -U postgres -c 'CREATE DATABASE maiscope_test'
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/maiscope_test cargo test --workspace
+```
+
 ## Conventions
 
 **Cross-tier key.** `sheetExpr = ${songId}|${type}|${difficulty}`. Frontend:
