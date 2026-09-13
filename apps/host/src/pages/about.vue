@@ -33,7 +33,7 @@ usePageTitle(() => ({ title: t("page-title.about") as string }));
 
         <h3 class="mv-about-h3">About The Project</h3>
         <p class="mv-about-p">
-            <strong>maiscope</strong> is a desktop song &amp; chart browser for
+            <strong>maiscope</strong> is a song &amp; chart browser for
             arcade rhythm games such as
             <a href="https://maimai.sega.jp/" target="_blank" rel="noopener"
                 >maimai</a
