@@ -5,12 +5,24 @@
 //! `sheets.song_id_fk` and `charts.sheet_id` are both ON DELETE CASCADE, so
 //! deleting a song destroys the chart text hanging off it —
 //! see docs/work/catalog-sync/spec.md.
+//!
+//! **Every statement is set-based: no loop in this module may await inside
+//! itself.** The payload is 1.8k songs and 7.3k sheets carrying ~81k sub-table
+//! entries, and one round trip per row put a first sync at ~119k sequential
+//! round trips — 15 minutes from a GitHub runner to Neon, past
+//! `bin/sync_catalog`'s whole-run budget, with the `catalog_meta` row lock held
+//! the entire time. Column vectors bound as arrays and zipped back by `unnest`
+//! bring the same work to ~15 round trips. A per-row `.execute()` added back
+//! into a loop here silently restores the 15 minutes.
 
-use crate::upstream::{RawData, RawOverride, RawSheet, parse_date, parse_update_time, sheet_expr};
+use crate::upstream::{
+    RawData, RawOverride, RawSheet, RawSong, parse_date, parse_update_time, sheet_expr,
+};
+use sqlx::Row as _;
 use sqlx::types::Json;
-use sqlx::types::chrono::{DateTime, Utc};
+use sqlx::types::chrono::{DateTime, NaiveDate, Utc};
 use sqlx::{PgConnection, PgPool};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct SyncStats {
@@ -83,247 +95,92 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
     // have no per-row `IS DISTINCT FROM` guard to report a change. Digest them
     // before and after: without this, a renamed category would be applied but
     // never advance `catalog_meta.revision`, so no client would refetch it.
-    let mut lookup_digests_before = Vec::with_capacity(LOOKUP_TABLES.len());
-    for table in LOOKUP_TABLES {
-        lookup_digests_before.push(lookup_digest(&mut tx, table).await?);
-    }
+    let digests_before = lookup_digests(&mut tx).await?;
 
-    // Ordered lookup tables carry no rows anything else references, and their
-    // `ordinal` is positional, so replacing them wholesale is both safe and
-    // simpler than diffing. This is the one place a DELETE is allowed.
-    sqlx::query("DELETE FROM categories")
-        .execute(&mut *tx)
-        .await?;
-    for (i, c) in data.categories.iter().enumerate() {
-        sqlx::query("INSERT INTO categories (category, ordinal) VALUES ($1, $2)")
-            .bind(&c.category)
-            .bind(i as i32)
-            .execute(&mut *tx)
-            .await?;
-    }
+    replace_lookups(&mut tx, data).await?;
 
-    sqlx::query("DELETE FROM versions")
-        .execute(&mut *tx)
-        .await?;
-    for (i, v) in data.versions.iter().enumerate() {
-        sqlx::query(
-            "INSERT INTO versions (version, abbr, release_date, ordinal) VALUES ($1, $2, $3, $4)",
-        )
-        .bind(&v.version)
-        .bind(&v.abbr)
-        .bind(parse_date(&v.release_date))
-        .bind(i as i32)
-        .execute(&mut *tx)
-        .await?;
-    }
-
-    sqlx::query("DELETE FROM types").execute(&mut *tx).await?;
-    for (i, t) in data.types.iter().enumerate() {
-        sqlx::query(
-            "INSERT INTO types (type, name, abbr, icon_url, icon_height, ordinal) \
-             VALUES ($1, $2, $3, $4, $5, $6)",
-        )
-        .bind(&t.r#type)
-        .bind(&t.name)
-        .bind(&t.abbr)
-        .bind(&t.icon_url)
-        .bind(t.icon_height)
-        .bind(i as i32)
-        .execute(&mut *tx)
-        .await?;
-    }
-
-    sqlx::query("DELETE FROM difficulties")
-        .execute(&mut *tx)
-        .await?;
-    for (i, d) in data.difficulties.iter().enumerate() {
-        sqlx::query(
-            "INSERT INTO difficulties (difficulty, name, color, icon_url, icon_height, ordinal) \
-             VALUES ($1, $2, $3, $4, $5, $6)",
-        )
-        .bind(&d.difficulty)
-        .bind(&d.name)
-        .bind(&d.color)
-        .bind(&d.icon_url)
-        .bind(d.icon_height)
-        .bind(i as i32)
-        .execute(&mut *tx)
-        .await?;
-    }
-
-    sqlx::query("DELETE FROM regions").execute(&mut *tx).await?;
-    for (i, r) in data.regions.iter().enumerate() {
-        sqlx::query("INSERT INTO regions (region, name, ordinal) VALUES ($1, $2, $3)")
-            .bind(&r.region)
-            .bind(&r.name)
-            .bind(i as i32)
-            .execute(&mut *tx)
-            .await?;
-    }
-
-    let mut lookups_changed = false;
-    for (table, before) in LOOKUP_TABLES.iter().zip(&lookup_digests_before) {
-        if &lookup_digest(&mut tx, table).await? != before {
-            lookups_changed = true;
-        }
-    }
+    let lookups_changed = lookup_digests(&mut tx).await? != digests_before;
 
     // Songs and sheets are matched on their natural keys — songs.song_id and
     // sheets.sheet_expr, both UNIQUE. The `WHERE ... IS DISTINCT FROM` guard on
     // DO UPDATE is what keeps `revision` still for untouched rows: without it
     // every sync would mark every row changed and /sync/delta would return the
     // entire catalog every time.
-    for (si, song) in data.songs.iter().enumerate() {
-        // A NULL song_id cannot be matched on a later run (UNIQUE permits many
-        // NULLs), so such a row would be re-inserted forever. None exist upstream
-        // today; skip and count so it shows up in the log if that changes.
-        let Some(song_id) = song.song_id.as_deref() else {
-            stats.songs_skipped_no_id += 1;
-            continue;
-        };
-
-        let song_pk: Option<i64> = sqlx::query_as::<_, (i64, bool)>(
-            "INSERT INTO songs \
-             (song_id, song_no, category, title, artist, bpm, image_name, version, \
-              release_date, is_new, is_locked, comment, source_index, revision) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) \
-             ON CONFLICT (song_id) DO UPDATE SET \
-               song_no = EXCLUDED.song_no, category = EXCLUDED.category, \
-               title = EXCLUDED.title, artist = EXCLUDED.artist, bpm = EXCLUDED.bpm, \
-               image_name = EXCLUDED.image_name, version = EXCLUDED.version, \
-               release_date = EXCLUDED.release_date, is_new = EXCLUDED.is_new, \
-               is_locked = EXCLUDED.is_locked, comment = EXCLUDED.comment, \
-               source_index = EXCLUDED.source_index, revision = EXCLUDED.revision, \
-               updated_at = now() \
-             WHERE ROW(songs.song_no, songs.category, songs.title, songs.artist, songs.bpm, \
-                       songs.image_name, songs.version, songs.release_date, songs.is_new, \
-                       songs.is_locked, songs.comment, songs.source_index) \
-                   IS DISTINCT FROM \
-                   ROW(EXCLUDED.song_no, EXCLUDED.category, EXCLUDED.title, EXCLUDED.artist, \
-                       EXCLUDED.bpm, EXCLUDED.image_name, EXCLUDED.version, \
-                       EXCLUDED.release_date, EXCLUDED.is_new, EXCLUDED.is_locked, \
-                       EXCLUDED.comment, EXCLUDED.source_index) \
-             RETURNING id, (xmax = 0) AS inserted",
-        )
-        .bind(song_id)
-        .bind(si as i32 + 1)
-        .bind(&song.category)
-        .bind(&song.title)
-        .bind(&song.artist)
-        .bind(song.bpm)
-        .bind(&song.image_name)
-        .bind(&song.version)
-        .bind(parse_date(&song.release_date))
-        .bind(song.is_new)
-        .bind(song.is_locked)
-        .bind(&song.comment)
-        .bind(si as i32)
-        .bind(revision)
-        .fetch_optional(&mut *tx)
-        .await?
-        .map(|(id, inserted)| {
-            if inserted {
-                stats.songs_inserted += 1;
-            } else {
-                stats.songs_updated += 1;
-            }
-            id
-        });
-
-        // A suppressed DO UPDATE returns no row, so re-read the id to reach the
-        // sheets. This is the unchanged-song path and stays a single indexed
-        // lookup on a UNIQUE column.
-        let song_pk: i64 = match song_pk {
-            Some(id) => id,
-            None => {
-                sqlx::query_scalar("SELECT id FROM songs WHERE song_id = $1")
-                    .bind(song_id)
-                    .fetch_one(&mut *tx)
-                    .await?
-            }
-        };
-
-        for (shi, sheet) in song.sheets.iter().enumerate() {
-            let expr = sheet_expr(&song.song_id, &sheet.r#type, &sheet.difficulty);
-
-            let sheet_pk: Option<i64> = sqlx::query_as::<_, (i64, bool)>(
-                "INSERT INTO sheets \
-                 (song_id_fk, sheet_expr, type, difficulty, level, level_value, \
-                  internal_level, internal_level_value, note_designer, is_special, \
-                  source_index, revision) \
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) \
-                 ON CONFLICT (sheet_expr) DO UPDATE SET \
-                   song_id_fk = EXCLUDED.song_id_fk, type = EXCLUDED.type, \
-                   difficulty = EXCLUDED.difficulty, level = EXCLUDED.level, \
-                   level_value = EXCLUDED.level_value, \
-                   internal_level = EXCLUDED.internal_level, \
-                   internal_level_value = EXCLUDED.internal_level_value, \
-                   note_designer = EXCLUDED.note_designer, \
-                   is_special = EXCLUDED.is_special, source_index = EXCLUDED.source_index, \
-                   revision = EXCLUDED.revision, updated_at = now() \
-                 WHERE ROW(sheets.song_id_fk, sheets.type, sheets.difficulty, sheets.level, \
-                           sheets.level_value, sheets.internal_level, \
-                           sheets.internal_level_value, sheets.note_designer, \
-                           sheets.is_special, sheets.source_index) \
-                       IS DISTINCT FROM \
-                       ROW(EXCLUDED.song_id_fk, EXCLUDED.type, EXCLUDED.difficulty, \
-                           EXCLUDED.level, EXCLUDED.level_value, EXCLUDED.internal_level, \
-                           EXCLUDED.internal_level_value, EXCLUDED.note_designer, \
-                           EXCLUDED.is_special, EXCLUDED.source_index) \
-                 RETURNING id, (xmax = 0) AS inserted",
-            )
-            .bind(song_pk)
-            .bind(&expr)
-            .bind(&sheet.r#type)
-            .bind(&sheet.difficulty)
-            .bind(&sheet.level)
-            .bind(sheet.level_value)
-            .bind(&sheet.internal_level)
-            .bind(sheet.internal_level_value)
-            .bind(&sheet.note_designer)
-            .bind(sheet.is_special)
-            .bind(shi as i32)
-            .bind(revision)
-            .fetch_optional(&mut *tx)
-            .await?
-            .map(|(id, inserted)| {
-                if inserted {
-                    stats.sheets_inserted += 1;
-                } else {
-                    stats.sheets_updated += 1;
-                }
-                id
-            });
-
-            // A suppressed DO UPDATE returns no row. The sub-tables still have
-            // to be reconciled — `noteCounts`, `regions` and `regionOverrides`
-            // change upstream *independently* of the scalar columns in the
-            // guard above (note counts get backfilled days after a song ships;
-            // a region flips to available), and all three are served by
-            // /catalog. Skipping them here froze them at first insert until
-            // some unrelated scalar happened to change.
-            let scalar_changed = sheet_pk.is_some();
-            let stored = read_sub_tables(&mut tx, &expr).await?;
-
-            if sub_tables_differ(&stored, sheet) {
-                replace_sub_tables(&mut tx, stored.sheet_id, sheet).await?;
-
-                // A change the client cannot see is only half applied: without
-                // this bump /sync/delta would never report the sheet. Only
-                // reached on a real difference, so re-writing identical
-                // content still bumps nothing.
-                if !scalar_changed {
-                    sqlx::query(
-                        "UPDATE sheets SET revision = $1, updated_at = now() WHERE id = $2",
-                    )
-                    .bind(revision)
-                    .bind(stored.sheet_id)
-                    .execute(&mut *tx)
-                    .await?;
-                    stats.sheets_updated += 1;
-                }
-            }
+    let songs = dedupe_songs(data, &mut stats);
+    let changed_songs = upsert_songs(&mut tx, &songs, revision).await?;
+    for inserted in changed_songs.values() {
+        if *inserted {
+            stats.songs_inserted += 1;
+        } else {
+            stats.songs_updated += 1;
         }
+    }
+
+    // The upsert's suppressed DO UPDATE returns no row, so the ids of unchanged
+    // songs are not in `changed_songs`. Reading the whole map back costs one
+    // round trip and covers changed and unchanged rows alike — the per-row
+    // fallback lookup it replaces was 1.8k of them.
+    let song_ids: Vec<String> = songs
+        .iter()
+        .map(|(_, s)| s.song_id.clone().unwrap())
+        .collect();
+    let song_pks: HashMap<String, i64> =
+        sqlx::query_as("SELECT song_id, id FROM songs WHERE song_id = ANY($1)")
+            .bind(&song_ids)
+            .fetch_all(&mut *tx)
+            .await?
+            .into_iter()
+            .collect();
+
+    let sheets = dedupe_sheets(&songs, &song_pks);
+    let changed_sheets = upsert_sheets(&mut tx, &sheets, revision).await?;
+    for inserted in changed_sheets.values() {
+        if *inserted {
+            stats.sheets_inserted += 1;
+        } else {
+            stats.sheets_updated += 1;
+        }
+    }
+
+    // The sub-tables still have to be reconciled for every sheet in the
+    // payload, including ones the scalar guard above left alone: `noteCounts`,
+    // `regions` and `regionOverrides` change upstream *independently* of the
+    // scalar columns (note counts get backfilled days after a song ships; a
+    // region flips to available), and all three are served by /catalog.
+    // Skipping them when the guard suppressed the update froze them at first
+    // insert until some unrelated scalar happened to change.
+    let sheet_exprs: Vec<String> = sheets.iter().map(|s| s.expr.clone()).collect();
+    let stored = read_sub_tables(&mut tx, &sheet_exprs).await?;
+
+    let mut dirty: Vec<i64> = Vec::new();
+    // Sheets whose sub-tables changed but whose scalar columns did not. A change
+    // the client cannot see is only half applied: without a revision bump
+    // /sync/delta would never report the sheet.
+    let mut needs_revision_bump: Vec<i64> = Vec::new();
+    let mut sub = SubTableColumns::default();
+
+    for sheet in &sheets {
+        // Every expr was just upserted, so it is present.
+        let stored = &stored[&sheet.expr];
+        if !sub_tables_differ(stored, sheet.raw) {
+            continue;
+        }
+        dirty.push(stored.sheet_id);
+        if !changed_sheets.contains_key(&sheet.expr) {
+            needs_revision_bump.push(stored.sheet_id);
+        }
+        sub.push(stored.sheet_id, sheet.raw);
+    }
+
+    replace_sub_tables(&mut tx, &dirty, &sub).await?;
+
+    if !needs_revision_bump.is_empty() {
+        sqlx::query("UPDATE sheets SET revision = $1, updated_at = now() WHERE id = ANY($2)")
+            .bind(revision)
+            .bind(&needs_revision_bump)
+            .execute(&mut *tx)
+            .await?;
+        stats.sheets_updated += needs_revision_bump.len() as i64;
     }
 
     // Rows the database holds that upstream no longer lists. They are logged for
@@ -331,21 +188,6 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
     // chart text. Rows already logged are not logged again: the deletion tables
     // are keyed (song_id, revision), so ON CONFLICT DO NOTHING would still write
     // a second entry under a new revision.
-    let present_song_ids: Vec<String> = data
-        .songs
-        .iter()
-        .filter_map(|s| s.song_id.clone())
-        .collect();
-    let present_sheet_exprs: Vec<String> = data
-        .songs
-        .iter()
-        .flat_map(|s| {
-            s.sheets
-                .iter()
-                .map(move |sh| sheet_expr(&s.song_id, &sh.r#type, &sh.difficulty))
-        })
-        .collect();
-
     stats.songs_vanished = sqlx::query_scalar::<_, i32>(
         "INSERT INTO deleted_songs (song_id, revision) \
          SELECT s.song_id, $2 FROM songs s \
@@ -354,7 +196,7 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
            AND NOT EXISTS (SELECT 1 FROM deleted_songs d WHERE d.song_id = s.song_id) \
          RETURNING 1",
     )
-    .bind(&present_song_ids)
+    .bind(&song_ids)
     .bind(revision)
     .fetch_all(&mut *tx)
     .await?
@@ -367,18 +209,19 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
            AND NOT EXISTS (SELECT 1 FROM deleted_sheets d WHERE d.sheet_expr = s.sheet_expr) \
          RETURNING 1",
     )
-    .bind(&present_sheet_exprs)
+    .bind(&sheet_exprs)
     .bind(revision)
     .fetch_all(&mut *tx)
     .await?
     .len() as i64;
 
-    stats.songs_vanished_total = sqlx::query_scalar("SELECT COUNT(*) FROM deleted_songs")
-        .fetch_one(&mut *tx)
-        .await?;
-    stats.sheets_vanished_total = sqlx::query_scalar("SELECT COUNT(*) FROM deleted_sheets")
-        .fetch_one(&mut *tx)
-        .await?;
+    let (songs_vanished_total, sheets_vanished_total): (i64, i64) = sqlx::query_as(
+        "SELECT (SELECT COUNT(*) FROM deleted_songs), (SELECT COUNT(*) FROM deleted_sheets)",
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+    stats.songs_vanished_total = songs_vanished_total;
+    stats.sheets_vanished_total = sheets_vanished_total;
 
     // The whole point of this feature is that a run which changed nothing costs
     // clients nothing. `catalog_meta.revision` feeds the /catalog ETag
@@ -403,22 +246,460 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
     Ok(stats)
 }
 
-/// md5 over a lookup table's whole contents, in `ordinal` order. Used only to
-/// compare the table against itself before and after a wholesale replace, so
-/// the exact row-text format does not matter — only that it is stable within
-/// one transaction.
-async fn lookup_digest(conn: &mut PgConnection, table: &str) -> Result<String, sqlx::Error> {
-    // A table name cannot be a bind parameter. `table` is one of the five
+// ── lookup tables ────────────────────────────────────────────────────────────
+
+/// md5 over each lookup table's whole contents, in `ordinal` order, in one round
+/// trip. Used only to compare the tables against themselves before and after a
+/// wholesale replace, so the exact row-text format does not matter — only that
+/// it is stable within one transaction.
+async fn lookup_digests(conn: &mut PgConnection) -> Result<Vec<String>, sqlx::Error> {
+    // A table name cannot be a bind parameter. Each name is one of the five
     // literals in LOOKUP_TABLES and never reaches this function from a request
     // or from the payload, so the interpolation is audited-safe — which is
     // exactly what AssertSqlSafe asserts.
-    let sql = format!(
-        "SELECT COALESCE(md5(string_agg(t::text, '|' ORDER BY t.ordinal)), '') FROM {table} t"
-    );
-    sqlx::query_scalar(sqlx::AssertSqlSafe(sql))
+    let columns = LOOKUP_TABLES
+        .iter()
+        .map(|table| {
+            format!(
+                "(SELECT COALESCE(md5(string_agg(t::text, '|' ORDER BY t.ordinal)), '') \
+                 FROM {table} t)"
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    let row = sqlx::query(sqlx::AssertSqlSafe(format!("SELECT {columns}")))
         .fetch_one(conn)
-        .await
+        .await?;
+    (0..LOOKUP_TABLES.len()).map(|i| row.try_get(i)).collect()
 }
+
+/// Ordered lookup tables carry no rows anything else references, and their
+/// `ordinal` is positional, so replacing them wholesale is both safe and simpler
+/// than diffing. This is the one place a DELETE is allowed.
+async fn replace_lookups(conn: &mut PgConnection, data: &RawData) -> Result<(), sqlx::Error> {
+    let ordinals = |n: usize| (0..n as i32).collect::<Vec<i32>>();
+
+    sqlx::query("DELETE FROM categories")
+        .execute(&mut *conn)
+        .await?;
+    sqlx::query(
+        "INSERT INTO categories (category, ordinal) \
+         SELECT * FROM unnest($1::text[], $2::int[])",
+    )
+    .bind(
+        data.categories
+            .iter()
+            .map(|c| c.category.clone())
+            .collect::<Vec<_>>(),
+    )
+    .bind(ordinals(data.categories.len()))
+    .execute(&mut *conn)
+    .await?;
+
+    sqlx::query("DELETE FROM versions")
+        .execute(&mut *conn)
+        .await?;
+    sqlx::query(
+        "INSERT INTO versions (version, abbr, release_date, ordinal) \
+         SELECT * FROM unnest($1::text[], $2::text[], $3::date[], $4::int[])",
+    )
+    .bind(
+        data.versions
+            .iter()
+            .map(|v| v.version.clone())
+            .collect::<Vec<_>>(),
+    )
+    .bind(
+        data.versions
+            .iter()
+            .map(|v| v.abbr.clone())
+            .collect::<Vec<_>>(),
+    )
+    .bind(
+        data.versions
+            .iter()
+            .map(|v| parse_date(&v.release_date))
+            .collect::<Vec<_>>(),
+    )
+    .bind(ordinals(data.versions.len()))
+    .execute(&mut *conn)
+    .await?;
+
+    sqlx::query("DELETE FROM types").execute(&mut *conn).await?;
+    sqlx::query(
+        "INSERT INTO types (type, name, abbr, icon_url, icon_height, ordinal) \
+         SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], \
+                              $5::int[], $6::int[])",
+    )
+    .bind(
+        data.types
+            .iter()
+            .map(|t| t.r#type.clone())
+            .collect::<Vec<_>>(),
+    )
+    .bind(
+        data.types
+            .iter()
+            .map(|t| t.name.clone())
+            .collect::<Vec<_>>(),
+    )
+    .bind(
+        data.types
+            .iter()
+            .map(|t| t.abbr.clone())
+            .collect::<Vec<_>>(),
+    )
+    .bind(
+        data.types
+            .iter()
+            .map(|t| t.icon_url.clone())
+            .collect::<Vec<_>>(),
+    )
+    .bind(data.types.iter().map(|t| t.icon_height).collect::<Vec<_>>())
+    .bind(ordinals(data.types.len()))
+    .execute(&mut *conn)
+    .await?;
+
+    sqlx::query("DELETE FROM difficulties")
+        .execute(&mut *conn)
+        .await?;
+    sqlx::query(
+        "INSERT INTO difficulties (difficulty, name, color, icon_url, icon_height, ordinal) \
+         SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], \
+                              $5::int[], $6::int[])",
+    )
+    .bind(
+        data.difficulties
+            .iter()
+            .map(|d| d.difficulty.clone())
+            .collect::<Vec<_>>(),
+    )
+    .bind(
+        data.difficulties
+            .iter()
+            .map(|d| d.name.clone())
+            .collect::<Vec<_>>(),
+    )
+    .bind(
+        data.difficulties
+            .iter()
+            .map(|d| d.color.clone())
+            .collect::<Vec<_>>(),
+    )
+    .bind(
+        data.difficulties
+            .iter()
+            .map(|d| d.icon_url.clone())
+            .collect::<Vec<_>>(),
+    )
+    .bind(
+        data.difficulties
+            .iter()
+            .map(|d| d.icon_height)
+            .collect::<Vec<_>>(),
+    )
+    .bind(ordinals(data.difficulties.len()))
+    .execute(&mut *conn)
+    .await?;
+
+    sqlx::query("DELETE FROM regions")
+        .execute(&mut *conn)
+        .await?;
+    sqlx::query(
+        "INSERT INTO regions (region, name, ordinal) \
+         SELECT * FROM unnest($1::text[], $2::text[], $3::int[])",
+    )
+    .bind(
+        data.regions
+            .iter()
+            .map(|r| r.region.clone())
+            .collect::<Vec<_>>(),
+    )
+    .bind(
+        data.regions
+            .iter()
+            .map(|r| r.name.clone())
+            .collect::<Vec<_>>(),
+    )
+    .bind(ordinals(data.regions.len()))
+    .execute(&mut *conn)
+    .await?;
+
+    Ok(())
+}
+
+// ── songs ────────────────────────────────────────────────────────────────────
+
+/// Payload songs that can be synced, in payload order, at most one per `songId`.
+///
+/// The `usize` is the song's index in `data.songs` — the source of both
+/// `song_no` and `source_index`, so it must stay the *payload* position and not
+/// the position in this deduplicated list.
+///
+/// A NULL `songId` cannot be matched on a later run (UNIQUE permits many NULLs),
+/// so such a row would be re-inserted forever. None exist upstream today; they
+/// are skipped and counted so it shows up in the log if that changes.
+///
+/// Duplicate `songId`s likewise do not exist upstream today, but they must be
+/// collapsed rather than passed through: a batched `ON CONFLICT DO UPDATE`
+/// fails outright with "cannot affect row a second time" on a repeated conflict
+/// key, where the per-row loop this replaces absorbed it silently by letting the
+/// later row update the earlier one. Keeping the last occurrence preserves that.
+fn dedupe_songs<'a>(data: &'a RawData, stats: &mut SyncStats) -> Vec<(usize, &'a RawSong)> {
+    let mut deduped: Vec<(usize, &RawSong)> = Vec::with_capacity(data.songs.len());
+    let mut at: HashMap<&str, usize> = HashMap::with_capacity(data.songs.len());
+
+    for (si, song) in data.songs.iter().enumerate() {
+        let Some(song_id) = song.song_id.as_deref() else {
+            stats.songs_skipped_no_id += 1;
+            continue;
+        };
+        match at.get(song_id) {
+            Some(&i) => deduped[i] = (si, song),
+            None => {
+                at.insert(song_id, deduped.len());
+                deduped.push((si, song));
+            }
+        }
+    }
+
+    deduped
+}
+
+/// One batched upsert for every song in the payload.
+///
+/// Returns only the rows the statement actually wrote, keyed by `song_id`, with
+/// `true` for an insert — a suppressed DO UPDATE returns nothing, which is
+/// exactly what keeps `revision` still for untouched rows.
+async fn upsert_songs(
+    conn: &mut PgConnection,
+    songs: &[(usize, &RawSong)],
+    revision: i64,
+) -> Result<HashMap<String, bool>, sqlx::Error> {
+    // One Vec per column, all the same length: `unnest` zips them back into rows
+    // server-side. Lengths must match or Postgres pads the short ones with NULL
+    // instead of complaining.
+    let mut song_id: Vec<String> = Vec::with_capacity(songs.len());
+    let mut song_no: Vec<i32> = Vec::with_capacity(songs.len());
+    let mut category: Vec<Option<String>> = Vec::with_capacity(songs.len());
+    let mut title: Vec<Option<String>> = Vec::with_capacity(songs.len());
+    let mut artist: Vec<Option<String>> = Vec::with_capacity(songs.len());
+    let mut bpm: Vec<Option<f64>> = Vec::with_capacity(songs.len());
+    let mut image_name: Vec<Option<String>> = Vec::with_capacity(songs.len());
+    let mut version: Vec<Option<String>> = Vec::with_capacity(songs.len());
+    let mut release_date: Vec<Option<NaiveDate>> = Vec::with_capacity(songs.len());
+    let mut is_new: Vec<Option<bool>> = Vec::with_capacity(songs.len());
+    let mut is_locked: Vec<Option<bool>> = Vec::with_capacity(songs.len());
+    let mut comment: Vec<Option<String>> = Vec::with_capacity(songs.len());
+    let mut source_index: Vec<i32> = Vec::with_capacity(songs.len());
+
+    for (si, song) in songs {
+        song_id.push(
+            song.song_id
+                .clone()
+                .expect("dedupe_songs drops NULL songIds"),
+        );
+        song_no.push(*si as i32 + 1);
+        category.push(song.category.clone());
+        title.push(song.title.clone());
+        artist.push(song.artist.clone());
+        bpm.push(song.bpm);
+        image_name.push(song.image_name.clone());
+        version.push(song.version.clone());
+        release_date.push(parse_date(&song.release_date));
+        is_new.push(song.is_new);
+        is_locked.push(song.is_locked);
+        comment.push(song.comment.clone());
+        source_index.push(*si as i32);
+    }
+
+    let changed: Vec<(String, bool)> = sqlx::query_as(
+        "INSERT INTO songs \
+         (song_id, song_no, category, title, artist, bpm, image_name, version, \
+          release_date, is_new, is_locked, comment, source_index, revision) \
+         SELECT t.song_id, t.song_no, t.category, t.title, t.artist, t.bpm, t.image_name, \
+                t.version, t.release_date, t.is_new, t.is_locked, t.comment, \
+                t.source_index, $14::bigint \
+         FROM unnest($1::text[], $2::int[], $3::text[], $4::text[], $5::text[], \
+                     $6::double precision[], $7::text[], $8::text[], $9::date[], \
+                     $10::bool[], $11::bool[], $12::text[], $13::int[]) \
+              AS t(song_id, song_no, category, title, artist, bpm, image_name, version, \
+                   release_date, is_new, is_locked, comment, source_index) \
+         ON CONFLICT (song_id) DO UPDATE SET \
+           song_no = EXCLUDED.song_no, category = EXCLUDED.category, \
+           title = EXCLUDED.title, artist = EXCLUDED.artist, bpm = EXCLUDED.bpm, \
+           image_name = EXCLUDED.image_name, version = EXCLUDED.version, \
+           release_date = EXCLUDED.release_date, is_new = EXCLUDED.is_new, \
+           is_locked = EXCLUDED.is_locked, comment = EXCLUDED.comment, \
+           source_index = EXCLUDED.source_index, revision = EXCLUDED.revision, \
+           updated_at = now() \
+         WHERE ROW(songs.song_no, songs.category, songs.title, songs.artist, songs.bpm, \
+                   songs.image_name, songs.version, songs.release_date, songs.is_new, \
+                   songs.is_locked, songs.comment, songs.source_index) \
+               IS DISTINCT FROM \
+               ROW(EXCLUDED.song_no, EXCLUDED.category, EXCLUDED.title, EXCLUDED.artist, \
+                   EXCLUDED.bpm, EXCLUDED.image_name, EXCLUDED.version, \
+                   EXCLUDED.release_date, EXCLUDED.is_new, EXCLUDED.is_locked, \
+                   EXCLUDED.comment, EXCLUDED.source_index) \
+         RETURNING song_id, (xmax = 0) AS inserted",
+    )
+    .bind(&song_id)
+    .bind(&song_no)
+    .bind(&category)
+    .bind(&title)
+    .bind(&artist)
+    .bind(&bpm)
+    .bind(&image_name)
+    .bind(&version)
+    .bind(&release_date)
+    .bind(&is_new)
+    .bind(&is_locked)
+    .bind(&comment)
+    .bind(&source_index)
+    .bind(revision)
+    .fetch_all(conn)
+    .await?;
+
+    Ok(changed.into_iter().collect())
+}
+
+// ── sheets ───────────────────────────────────────────────────────────────────
+
+/// One payload sheet resolved against its parent song's primary key.
+struct SheetRow<'a> {
+    expr: String,
+    song_pk: i64,
+    /// The sheet's index within its own song — `sheets.source_index`.
+    source_index: i32,
+    raw: &'a RawSheet,
+}
+
+/// Every sheet of every synced song, at most one per `sheet_expr`.
+///
+/// Deduplicated for the same reason as [`dedupe_songs`], and on the same rule:
+/// two sheets of one song sharing a `type`/`difficulty` pair collapse to the
+/// later one.
+fn dedupe_sheets<'a>(
+    songs: &[(usize, &'a RawSong)],
+    song_pks: &HashMap<String, i64>,
+) -> Vec<SheetRow<'a>> {
+    let mut deduped: Vec<SheetRow<'a>> = Vec::new();
+    let mut at: HashMap<String, usize> = HashMap::new();
+
+    for (_, song) in songs {
+        let song_pk = song_pks[song
+            .song_id
+            .as_deref()
+            .expect("dedupe_songs drops NULL songIds")];
+        for (shi, sheet) in song.sheets.iter().enumerate() {
+            let expr = sheet_expr(&song.song_id, &sheet.r#type, &sheet.difficulty);
+            let row = SheetRow {
+                expr: expr.clone(),
+                song_pk,
+                source_index: shi as i32,
+                raw: sheet,
+            };
+            match at.get(&expr) {
+                Some(&i) => deduped[i] = row,
+                None => {
+                    at.insert(expr, deduped.len());
+                    deduped.push(row);
+                }
+            }
+        }
+    }
+
+    deduped
+}
+
+/// One batched upsert for every sheet in the payload. Same contract as
+/// [`upsert_songs`]: the returned map holds only rows the statement wrote.
+async fn upsert_sheets(
+    conn: &mut PgConnection,
+    sheets: &[SheetRow<'_>],
+    revision: i64,
+) -> Result<HashMap<String, bool>, sqlx::Error> {
+    let n = sheets.len();
+    let mut song_id_fk: Vec<i64> = Vec::with_capacity(n);
+    let mut expr: Vec<String> = Vec::with_capacity(n);
+    let mut ty: Vec<Option<String>> = Vec::with_capacity(n);
+    let mut difficulty: Vec<Option<String>> = Vec::with_capacity(n);
+    let mut level: Vec<Option<String>> = Vec::with_capacity(n);
+    let mut level_value: Vec<Option<f64>> = Vec::with_capacity(n);
+    let mut internal_level: Vec<Option<String>> = Vec::with_capacity(n);
+    let mut internal_level_value: Vec<Option<f64>> = Vec::with_capacity(n);
+    let mut note_designer: Vec<Option<String>> = Vec::with_capacity(n);
+    let mut is_special: Vec<Option<bool>> = Vec::with_capacity(n);
+    let mut source_index: Vec<i32> = Vec::with_capacity(n);
+
+    for sheet in sheets {
+        song_id_fk.push(sheet.song_pk);
+        expr.push(sheet.expr.clone());
+        ty.push(sheet.raw.r#type.clone());
+        difficulty.push(sheet.raw.difficulty.clone());
+        level.push(sheet.raw.level.clone());
+        level_value.push(sheet.raw.level_value);
+        internal_level.push(sheet.raw.internal_level.clone());
+        internal_level_value.push(sheet.raw.internal_level_value);
+        note_designer.push(sheet.raw.note_designer.clone());
+        is_special.push(sheet.raw.is_special);
+        source_index.push(sheet.source_index);
+    }
+
+    let changed: Vec<(String, bool)> = sqlx::query_as(
+        "INSERT INTO sheets \
+         (song_id_fk, sheet_expr, type, difficulty, level, level_value, \
+          internal_level, internal_level_value, note_designer, is_special, \
+          source_index, revision) \
+         SELECT t.song_id_fk, t.sheet_expr, t.type, t.difficulty, t.level, t.level_value, \
+                t.internal_level, t.internal_level_value, t.note_designer, t.is_special, \
+                t.source_index, $12::bigint \
+         FROM unnest($1::bigint[], $2::text[], $3::text[], $4::text[], $5::text[], \
+                     $6::double precision[], $7::text[], $8::double precision[], \
+                     $9::text[], $10::bool[], $11::int[]) \
+              AS t(song_id_fk, sheet_expr, type, difficulty, level, level_value, \
+                   internal_level, internal_level_value, note_designer, is_special, \
+                   source_index) \
+         ON CONFLICT (sheet_expr) DO UPDATE SET \
+           song_id_fk = EXCLUDED.song_id_fk, type = EXCLUDED.type, \
+           difficulty = EXCLUDED.difficulty, level = EXCLUDED.level, \
+           level_value = EXCLUDED.level_value, \
+           internal_level = EXCLUDED.internal_level, \
+           internal_level_value = EXCLUDED.internal_level_value, \
+           note_designer = EXCLUDED.note_designer, \
+           is_special = EXCLUDED.is_special, source_index = EXCLUDED.source_index, \
+           revision = EXCLUDED.revision, updated_at = now() \
+         WHERE ROW(sheets.song_id_fk, sheets.type, sheets.difficulty, sheets.level, \
+                   sheets.level_value, sheets.internal_level, \
+                   sheets.internal_level_value, sheets.note_designer, \
+                   sheets.is_special, sheets.source_index) \
+               IS DISTINCT FROM \
+               ROW(EXCLUDED.song_id_fk, EXCLUDED.type, EXCLUDED.difficulty, \
+                   EXCLUDED.level, EXCLUDED.level_value, EXCLUDED.internal_level, \
+                   EXCLUDED.internal_level_value, EXCLUDED.note_designer, \
+                   EXCLUDED.is_special, EXCLUDED.source_index) \
+         RETURNING sheet_expr, (xmax = 0) AS inserted",
+    )
+    .bind(&song_id_fk)
+    .bind(&expr)
+    .bind(&ty)
+    .bind(&difficulty)
+    .bind(&level)
+    .bind(&level_value)
+    .bind(&internal_level)
+    .bind(&internal_level_value)
+    .bind(&note_designer)
+    .bind(&is_special)
+    .bind(&source_index)
+    .bind(revision)
+    .fetch_all(conn)
+    .await?;
+
+    Ok(changed.into_iter().collect())
+}
+
+// ── sheet sub-tables ─────────────────────────────────────────────────────────
 
 /// A sheet's three sub-tables as stored, shaped to compare directly against the
 /// upstream payload.
@@ -429,27 +710,33 @@ struct StoredSubTables {
     region_overrides: BTreeMap<String, RawOverride>,
 }
 
-/// Reads the sheet's id and all three sub-tables in **one** round trip, as
-/// jsonb aggregates decoded into the same types the payload parses into.
+/// Reads every listed sheet's id and all three of its sub-tables in **one**
+/// round trip, as jsonb aggregates decoded into the same types the payload
+/// parses into.
 ///
 /// Comparing typed maps in Rust rather than digesting both sides in SQL is
 /// deliberate: a digest would have to reproduce Postgres's float and NULL text
 /// formatting byte-for-byte to agree, and any drift there reads as "changed"
 /// forever. jsonb round-trips `double precision` through its shortest
 /// round-trip representation, so `==` on the decoded `f64` is exact.
+///
+/// The whole payload is fetched in one statement rather than in pages: the three
+/// aggregates for 7.3k sheets decode to a few MB, well within a runner, and
+/// chunking would only trade that for more round trips.
 async fn read_sub_tables(
     conn: &mut PgConnection,
-    sheet_expr: &str,
-) -> Result<StoredSubTables, sqlx::Error> {
+    sheet_exprs: &[String],
+) -> Result<HashMap<String, StoredSubTables>, sqlx::Error> {
     type Row = (
+        String,
         i64,
         Json<BTreeMap<String, Option<i64>>>,
         Json<BTreeMap<String, bool>>,
         Json<BTreeMap<String, RawOverride>>,
     );
 
-    let (sheet_id, note_counts, regions, region_overrides): Row = sqlx::query_as(
-        "SELECT s.id, \
+    let rows: Vec<Row> = sqlx::query_as(
+        "SELECT s.sheet_expr, s.id, \
            (SELECT COALESCE(jsonb_object_agg(n.key, n.value), '{}'::jsonb) \
               FROM sheet_note_counts n WHERE n.sheet_id = s.id), \
            (SELECT COALESCE(jsonb_object_agg(r.region, r.available), '{}'::jsonb) \
@@ -460,18 +747,26 @@ async fn read_sub_tables(
                      'internalLevelValue', o.internal_level_value, \
                      'noteDesigner', o.note_designer)), '{}'::jsonb) \
               FROM sheet_region_overrides o WHERE o.sheet_id = s.id) \
-         FROM sheets s WHERE s.sheet_expr = $1",
+         FROM sheets s WHERE s.sheet_expr = ANY($1)",
     )
-    .bind(sheet_expr)
-    .fetch_one(conn)
+    .bind(sheet_exprs)
+    .fetch_all(conn)
     .await?;
 
-    Ok(StoredSubTables {
-        sheet_id,
-        note_counts: note_counts.0,
-        regions: regions.0,
-        region_overrides: region_overrides.0,
-    })
+    Ok(rows
+        .into_iter()
+        .map(|(expr, sheet_id, note_counts, regions, region_overrides)| {
+            (
+                expr,
+                StoredSubTables {
+                    sheet_id,
+                    note_counts: note_counts.0,
+                    regions: regions.0,
+                    region_overrides: region_overrides.0,
+                },
+            )
+        })
+        .collect())
 }
 
 /// An absent map upstream and an empty one are indistinguishable once stored —
@@ -493,73 +788,126 @@ fn sub_tables_differ(stored: &StoredSubTables, sheet: &RawSheet) -> bool {
         || maps_differ(&stored.region_overrides, &sheet.region_overrides)
 }
 
+/// The rows to write back for every sheet whose sub-tables differ, as column
+/// vectors for three batched inserts.
+#[derive(Default)]
+struct SubTableColumns {
+    note_sheet_id: Vec<i64>,
+    note_key: Vec<String>,
+    note_value: Vec<Option<i64>>,
+
+    region_sheet_id: Vec<i64>,
+    region_region: Vec<String>,
+    region_available: Vec<bool>,
+
+    override_sheet_id: Vec<i64>,
+    override_region: Vec<String>,
+    override_level: Vec<Option<String>>,
+    override_level_value: Vec<Option<f64>>,
+    override_internal_level: Vec<Option<String>>,
+    override_internal_level_value: Vec<Option<f64>>,
+    override_note_designer: Vec<Option<String>>,
+}
+
+impl SubTableColumns {
+    fn push(&mut self, sheet_id: i64, sheet: &RawSheet) {
+        if let Some(counts) = &sheet.note_counts {
+            for (key, value) in counts {
+                self.note_sheet_id.push(sheet_id);
+                self.note_key.push(key.clone());
+                self.note_value.push(*value);
+            }
+        }
+        if let Some(regions) = &sheet.regions {
+            for (region, available) in regions {
+                self.region_sheet_id.push(sheet_id);
+                self.region_region.push(region.clone());
+                self.region_available.push(*available);
+            }
+        }
+        if let Some(overrides) = &sheet.region_overrides {
+            for (region, ov) in overrides {
+                self.override_sheet_id.push(sheet_id);
+                self.override_region.push(region.clone());
+                self.override_level.push(ov.level.clone());
+                self.override_level_value.push(ov.level_value);
+                self.override_internal_level.push(ov.internal_level.clone());
+                self.override_internal_level_value
+                    .push(ov.internal_level_value);
+                self.override_note_designer.push(ov.note_designer.clone());
+            }
+        }
+    }
+}
+
 /// Sub-tables key off `sheet_id` with no natural key of their own, so they are
-/// replaced per sheet.
+/// replaced for every sheet whose content differs — cleared, then rewritten from
+/// `columns`.
 ///
-/// **Every DELETE here is scoped to one `sheet_id` and must stay that way.** A
-/// bare `DELETE FROM` on any of these three would be a different statement with
-/// a very different blast radius. Scoped like this the deletes cascade to
-/// nothing: `charts` hangs off `sheets`, which this module never deletes.
+/// **Every DELETE here is scoped to the explicit `dirty` list of `sheet_id`s and
+/// must stay that way.** A bare `DELETE FROM` on any of these three would be a
+/// different statement with a very different blast radius. Scoped like this the
+/// deletes cascade to nothing: `charts` hangs off `sheets`, which this module
+/// never deletes.
 async fn replace_sub_tables(
     conn: &mut PgConnection,
-    sheet_id: i64,
-    sheet: &RawSheet,
+    dirty: &[i64],
+    columns: &SubTableColumns,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query("DELETE FROM sheet_note_counts WHERE sheet_id = $1")
-        .bind(sheet_id)
-        .execute(&mut *conn)
-        .await?;
-    if let Some(counts) = &sheet.note_counts {
-        for (key, value) in counts {
-            sqlx::query("INSERT INTO sheet_note_counts (sheet_id, key, value) VALUES ($1, $2, $3)")
-                .bind(sheet_id)
-                .bind(key)
-                .bind(value)
-                .execute(&mut *conn)
-                .await?;
-        }
+    if dirty.is_empty() {
+        return Ok(());
     }
 
-    sqlx::query("DELETE FROM sheet_regions WHERE sheet_id = $1")
-        .bind(sheet_id)
+    sqlx::query("DELETE FROM sheet_note_counts WHERE sheet_id = ANY($1)")
+        .bind(dirty)
         .execute(&mut *conn)
         .await?;
-    if let Some(regions) = &sheet.regions {
-        for (region, available) in regions {
-            sqlx::query(
-                "INSERT INTO sheet_regions (sheet_id, region, available) VALUES ($1, $2, $3)",
-            )
-            .bind(sheet_id)
-            .bind(region)
-            .bind(available)
-            .execute(&mut *conn)
-            .await?;
-        }
-    }
+    sqlx::query("DELETE FROM sheet_regions WHERE sheet_id = ANY($1)")
+        .bind(dirty)
+        .execute(&mut *conn)
+        .await?;
+    sqlx::query("DELETE FROM sheet_region_overrides WHERE sheet_id = ANY($1)")
+        .bind(dirty)
+        .execute(&mut *conn)
+        .await?;
 
-    sqlx::query("DELETE FROM sheet_region_overrides WHERE sheet_id = $1")
-        .bind(sheet_id)
-        .execute(&mut *conn)
-        .await?;
-    if let Some(overrides) = &sheet.region_overrides {
-        for (region, ov) in overrides {
-            sqlx::query(
-                "INSERT INTO sheet_region_overrides \
-                 (sheet_id, region, level, level_value, internal_level, \
-                  internal_level_value, note_designer) \
-                 VALUES ($1, $2, $3, $4, $5, $6, $7)",
-            )
-            .bind(sheet_id)
-            .bind(region)
-            .bind(&ov.level)
-            .bind(ov.level_value)
-            .bind(&ov.internal_level)
-            .bind(ov.internal_level_value)
-            .bind(&ov.note_designer)
-            .execute(&mut *conn)
-            .await?;
-        }
-    }
+    sqlx::query(
+        "INSERT INTO sheet_note_counts (sheet_id, key, value) \
+         SELECT * FROM unnest($1::bigint[], $2::text[], $3::bigint[])",
+    )
+    .bind(&columns.note_sheet_id)
+    .bind(&columns.note_key)
+    .bind(&columns.note_value)
+    .execute(&mut *conn)
+    .await?;
+
+    sqlx::query(
+        "INSERT INTO sheet_regions (sheet_id, region, available) \
+         SELECT * FROM unnest($1::bigint[], $2::text[], $3::bool[])",
+    )
+    .bind(&columns.region_sheet_id)
+    .bind(&columns.region_region)
+    .bind(&columns.region_available)
+    .execute(&mut *conn)
+    .await?;
+
+    sqlx::query(
+        "INSERT INTO sheet_region_overrides \
+         (sheet_id, region, level, level_value, internal_level, \
+          internal_level_value, note_designer) \
+         SELECT * FROM unnest($1::bigint[], $2::text[], $3::text[], \
+                              $4::double precision[], $5::text[], \
+                              $6::double precision[], $7::text[])",
+    )
+    .bind(&columns.override_sheet_id)
+    .bind(&columns.override_region)
+    .bind(&columns.override_level)
+    .bind(&columns.override_level_value)
+    .bind(&columns.override_internal_level)
+    .bind(&columns.override_internal_level_value)
+    .bind(&columns.override_note_designer)
+    .execute(&mut *conn)
+    .await?;
 
     Ok(())
 }
@@ -1168,6 +1516,359 @@ mod tests {
         assert_eq!(stats.songs_inserted, 0);
         assert_eq!(stats.songs_vanished, 0);
 
+        Ok(())
+    }
+
+    // ── batching ─────────────────────────────────────────────────────────────
+    //
+    // Every test above syncs exactly one song carrying one sheet, so a batched
+    // statement is only ever exercised with a single row. `unnest` zips column
+    // vectors back into rows positionally: a column listed out of order, or a
+    // vector one element short, scrambles or NULLs fields *across* rows and a
+    // one-row fixture cannot see it. These fixtures are deliberately wide.
+
+    const TWO_SONGS: &str = r#"{
+        "songs": [
+            {
+                "songId": "Alpha", "title": "Alpha Song", "artist": "A Artist",
+                "bpm": 120.5, "category": "pops", "version": "maimai",
+                "releaseDate": "2020-01-02", "isNew": true, "isLocked": false,
+                "comment": "first",
+                "sheets": [
+                    { "type": "std", "difficulty": "expert", "level": "12",
+                      "levelValue": 12.0, "internalLevel": "12.3",
+                      "internalLevelValue": 12.3, "noteDesigner": "Designer One",
+                      "isSpecial": false,
+                      "noteCounts": { "tap": 1 }, "regions": { "jp": true } },
+                    { "type": "dx", "difficulty": "master", "level": "13",
+                      "levelValue": 13.0, "noteDesigner": "Designer Two",
+                      "noteCounts": { "tap": 2 }, "regions": { "jp": true } }
+                ]
+            },
+            {
+                "songId": "Beta", "title": "Beta Song", "artist": "B Artist",
+                "bpm": 200.0, "category": "niconico", "isNew": false,
+                "sheets": [
+                    { "type": "dx", "difficulty": "master", "level": "14+",
+                      "levelValue": 14.7, "noteDesigner": "Designer Three",
+                      "noteCounts": { "tap": 3 }, "regions": { "intl": false } }
+                ]
+            }
+        ]
+    }"#;
+
+    // A scrambled column vector still inserts the right *number* of rows, so the
+    // assertion that matters is that every field landed on its own row.
+    #[sqlx::test]
+    async fn a_multi_row_batch_keeps_each_field_on_its_own_row(pool: PgPool) -> sqlx::Result<()> {
+        let stats = apply(&pool, &payload(TWO_SONGS)).await?;
+        assert_eq!(stats.songs_inserted, 2);
+        assert_eq!(stats.sheets_inserted, 3);
+
+        type SongRow = (
+            String,
+            Option<String>,
+            Option<String>,
+            Option<f64>,
+            Option<String>,
+            Option<bool>,
+            Option<String>,
+            Option<i32>,
+            i32,
+        );
+        let songs: Vec<SongRow> = sqlx::query_as(
+            "SELECT song_id, title, artist, bpm, category, is_new, \
+                    to_char(release_date, 'YYYY-MM-DD'), song_no, source_index \
+             FROM songs ORDER BY source_index",
+        )
+        .fetch_all(&pool)
+        .await?;
+        assert_eq!(
+            songs,
+            vec![
+                (
+                    "Alpha".into(),
+                    Some("Alpha Song".into()),
+                    Some("A Artist".into()),
+                    Some(120.5),
+                    Some("pops".into()),
+                    Some(true),
+                    Some("2020-01-02".into()),
+                    Some(1),
+                    0
+                ),
+                (
+                    "Beta".into(),
+                    Some("Beta Song".into()),
+                    Some("B Artist".into()),
+                    Some(200.0),
+                    Some("niconico".into()),
+                    Some(false),
+                    None,
+                    Some(2),
+                    1
+                ),
+            ]
+        );
+
+        // song_id_fk is resolved in Rust from a map, so a sheet attached to the
+        // wrong parent is the other way a batch can go quietly wrong.
+        type SheetRow = (
+            String,
+            String,
+            Option<String>,
+            Option<f64>,
+            Option<String>,
+            i32,
+        );
+        let sheets: Vec<SheetRow> = sqlx::query_as(
+            "SELECT sh.sheet_expr, s.song_id, sh.level, sh.level_value, \
+                    sh.note_designer, sh.source_index \
+             FROM sheets sh JOIN songs s ON s.id = sh.song_id_fk \
+             ORDER BY s.source_index, sh.source_index",
+        )
+        .fetch_all(&pool)
+        .await?;
+        assert_eq!(
+            sheets,
+            vec![
+                (
+                    "Alpha|std|expert".into(),
+                    "Alpha".into(),
+                    Some("12".into()),
+                    Some(12.0),
+                    Some("Designer One".into()),
+                    0
+                ),
+                (
+                    "Alpha|dx|master".into(),
+                    "Alpha".into(),
+                    Some("13".into()),
+                    Some(13.0),
+                    Some("Designer Two".into()),
+                    1
+                ),
+                (
+                    "Beta|dx|master".into(),
+                    "Beta".into(),
+                    Some("14+".into()),
+                    Some(14.7),
+                    Some("Designer Three".into()),
+                    0
+                ),
+            ]
+        );
+
+        // Sub-tables are batched across every dirty sheet at once, so they carry
+        // the same misalignment risk.
+        let counts: Vec<(String, String, Option<i32>)> = sqlx::query_as(
+            "SELECT sh.sheet_expr, n.key, n.value \
+             FROM sheet_note_counts n JOIN sheets sh ON sh.id = n.sheet_id \
+             ORDER BY sh.sheet_expr, n.key",
+        )
+        .fetch_all(&pool)
+        .await?;
+        assert_eq!(
+            counts,
+            vec![
+                ("Alpha|dx|master".into(), "tap".into(), Some(2)),
+                ("Alpha|std|expert".into(), "tap".into(), Some(1)),
+                ("Beta|dx|master".into(), "tap".into(), Some(3)),
+            ]
+        );
+
+        let regions: Vec<(String, String, bool)> = sqlx::query_as(
+            "SELECT sh.sheet_expr, r.region, r.available \
+             FROM sheet_regions r JOIN sheets sh ON sh.id = r.sheet_id \
+             ORDER BY sh.sheet_expr",
+        )
+        .fetch_all(&pool)
+        .await?;
+        assert_eq!(
+            regions,
+            vec![
+                ("Alpha|dx|master".into(), "jp".into(), true),
+                ("Alpha|std|expert".into(), "jp".into(), true),
+                ("Beta|dx|master".into(), "intl".into(), false),
+            ]
+        );
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn a_multi_row_batch_rerun_bumps_nothing(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(TWO_SONGS)).await?;
+        let stats = apply(&pool, &payload(TWO_SONGS)).await?;
+
+        assert_eq!(stats.songs_updated, 0);
+        assert_eq!(stats.sheets_updated, 0);
+        assert!(!stats.revision_advanced);
+        assert_eq!(catalog_meta_revision(&pool).await, 1);
+        Ok(())
+    }
+
+    // `song_no` and `source_index` come from the song's position in the *payload*,
+    // not its position in the deduplicated list the batch is built from. A skipped
+    // song in the middle is what separates the two.
+    #[sqlx::test]
+    async fn a_skipped_song_does_not_shift_later_source_indexes(pool: PgPool) -> sqlx::Result<()> {
+        let data = payload(
+            r#"{
+                "songs": [
+                    { "title": "No Id", "sheets": [] },
+                    { "songId": "Alpha", "title": "Alpha", "sheets": [] },
+                    { "songId": "Beta", "title": "Beta", "sheets": [] }
+                ]
+            }"#,
+        );
+        let stats = apply(&pool, &data).await?;
+        assert_eq!(stats.songs_skipped_no_id, 1);
+        assert_eq!(stats.songs_inserted, 2);
+
+        let rows: Vec<(String, Option<i32>, i32)> = sqlx::query_as(
+            "SELECT song_id, song_no, source_index FROM songs ORDER BY source_index",
+        )
+        .fetch_all(&pool)
+        .await?;
+        assert_eq!(
+            rows,
+            vec![
+                ("Alpha".to_string(), Some(2), 1),
+                ("Beta".to_string(), Some(3), 2),
+            ]
+        );
+        Ok(())
+    }
+
+    // A batched `ON CONFLICT DO UPDATE` aborts the whole statement with "cannot
+    // affect row a second time" if one conflict key appears twice, where the
+    // per-row loop this replaced absorbed a duplicate by letting the later row
+    // update the earlier one. Upstream carries no duplicates today, so without
+    // the dedupe the first one to appear would fail the nightly sync outright.
+    #[sqlx::test]
+    async fn duplicate_song_ids_collapse_to_the_last_rather_than_failing(
+        pool: PgPool,
+    ) -> sqlx::Result<()> {
+        let data = payload(
+            r#"{
+                "songs": [
+                    { "songId": "Alpha", "title": "First", "sheets": [] },
+                    { "songId": "Alpha", "title": "Second", "sheets": [] }
+                ]
+            }"#,
+        );
+        let stats = apply(&pool, &data).await?;
+
+        assert_eq!(stats.songs_inserted, 1);
+        assert_eq!(stats.songs_updated, 0);
+
+        let rows: Vec<(String, Option<String>, i32)> =
+            sqlx::query_as("SELECT song_id, title, source_index FROM songs")
+                .fetch_all(&pool)
+                .await?;
+        assert_eq!(
+            rows,
+            vec![("Alpha".to_string(), Some("Second".to_string()), 1)]
+        );
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn duplicate_sheet_exprs_collapse_to_the_last_rather_than_failing(
+        pool: PgPool,
+    ) -> sqlx::Result<()> {
+        let data = payload(
+            r#"{
+                "songs": [{
+                    "songId": "Alpha", "title": "Alpha",
+                    "sheets": [
+                        { "type": "dx", "difficulty": "master", "level": "13" },
+                        { "type": "dx", "difficulty": "master", "level": "14" }
+                    ]
+                }]
+            }"#,
+        );
+        let stats = apply(&pool, &data).await?;
+
+        assert_eq!(stats.sheets_inserted, 1);
+        assert_eq!(stats.sheets_updated, 0);
+
+        let rows: Vec<(String, Option<String>, i32)> =
+            sqlx::query_as("SELECT sheet_expr, level, source_index FROM sheets")
+                .fetch_all(&pool)
+                .await?;
+        assert_eq!(
+            rows,
+            vec![("Alpha|dx|master".to_string(), Some("14".to_string()), 1)]
+        );
+        Ok(())
+    }
+
+    // The sub-table DELETEs are now one statement scoped to a list of sheet_ids
+    // rather than one statement per sheet. Widening that list to every sheet in
+    // the payload would still leave correct *content* behind — it is rewritten
+    // immediately — so the observable damage would be revision churn on sheets
+    // that never changed, which is exactly what /sync/delta keys off.
+    #[sqlx::test]
+    async fn a_sub_table_change_bumps_only_its_own_sheet(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(TWO_SONGS)).await?;
+
+        // Only Alpha|std|expert's noteCounts differ; every other sheet, and every
+        // scalar column everywhere, is byte-identical.
+        let backfilled = TWO_SONGS.replace(
+            r#""noteCounts": { "tap": 1 }"#,
+            r#""noteCounts": { "tap": 9 }"#,
+        );
+        let stats = apply(&pool, &payload(&backfilled)).await?;
+
+        assert_eq!(stats.sheets_updated, 1);
+        assert_eq!(stats.songs_updated, 0);
+
+        let revisions: Vec<(String, i64)> =
+            sqlx::query_as("SELECT sheet_expr, revision FROM sheets ORDER BY sheet_expr")
+                .fetch_all(&pool)
+                .await?;
+        assert_eq!(
+            revisions,
+            vec![
+                ("Alpha|dx|master".to_string(), 1),
+                ("Alpha|std|expert".to_string(), 2),
+                ("Beta|dx|master".to_string(), 1),
+            ],
+            "an untouched sheet must not be swept up by the batched delete"
+        );
+
+        // And the untouched sheets' sub-table rows must still be there.
+        let counts: Vec<(String, Option<i32>)> = sqlx::query_as(
+            "SELECT sh.sheet_expr, n.value \
+             FROM sheet_note_counts n JOIN sheets sh ON sh.id = n.sheet_id \
+             ORDER BY sh.sheet_expr",
+        )
+        .fetch_all(&pool)
+        .await?;
+        assert_eq!(
+            counts,
+            vec![
+                ("Alpha|dx|master".to_string(), Some(2)),
+                ("Alpha|std|expert".to_string(), Some(9)),
+                ("Beta|dx|master".to_string(), Some(3)),
+            ]
+        );
+        Ok(())
+    }
+
+    // An empty payload binds empty arrays to every parameter. Postgres needs the
+    // explicit `::type[]` casts on `unnest` to infer anything at all from those,
+    // so this is the test that fails if one is dropped.
+    #[sqlx::test]
+    async fn an_empty_payload_binds_empty_arrays_without_erroring(
+        pool: PgPool,
+    ) -> sqlx::Result<()> {
+        let stats = apply(&pool, &payload(r#"{ "songs": [] }"#)).await?;
+        assert_eq!(stats.songs_inserted, 0);
+        assert_eq!(stats.sheets_inserted, 0);
+        assert!(!stats.revision_advanced);
         Ok(())
     }
 

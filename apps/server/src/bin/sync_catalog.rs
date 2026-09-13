@@ -15,14 +15,18 @@ use sqlx::postgres::PgPoolOptions;
 
 const DATA_URL: &str = "https://dp4p6x0xfi5o9.cloudfront.net/maimai/data.json";
 
-/// Whole-run budget, mirroring `bin/migrate.rs`. This job is unattended: a
-/// no-op run is ~15k sequential round trips inside one open transaction from a
-/// GitHub runner to Neon, and a first sync ~31k. A socket that stalls mid-
-/// transaction holds row locks — including the `catalog_meta` singleton every
-/// writer takes — until GitHub's 6-hour job ceiling, and the workflow's
-/// `cancel-in-progress: false` means every later run queues behind it. The
-/// per-request HTTP timeout and the pool's acquire timeout each bound one step;
-/// neither bounds the run. Override with `SYNC_CATALOG_TIMEOUT_SECS`.
+/// Whole-run budget, mirroring `bin/migrate.rs`. This job is unattended, and a
+/// socket that stalls mid-transaction holds row locks — including the
+/// `catalog_meta` singleton every writer takes — until GitHub's 6-hour job
+/// ceiling, while the workflow's `cancel-in-progress: false` queues every later
+/// run behind it. The per-request HTTP timeout and the pool's acquire timeout
+/// each bound one step; neither bounds the run.
+///
+/// 900s is now pure headroom rather than a working limit. `catalog_sync::apply`
+/// is set-based, so a first sync is ~30 statements and a no-op ~23, and the run
+/// is dominated by fetching 4.5MB over HTTP. Before that it was ~119k sequential
+/// round trips, which at runner-to-Neon latency overran this exact budget.
+/// Override with `SYNC_CATALOG_TIMEOUT_SECS`.
 const DEFAULT_TIMEOUT_SECS: u64 = 900;
 
 #[tokio::main]

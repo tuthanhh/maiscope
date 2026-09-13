@@ -118,6 +118,22 @@ Natural keys are therefore usable directly: `songs.song_id UNIQUE`,
   revision + 1 RETURNING revision` at the top, which is `chart_revision.rs`'s
   pattern but advances the counter before knowing whether the run changed
   anything.
+- **Every statement in `catalog_sync` is set-based — no loop may `await` inside
+  itself.** The payload is 1.8k songs and 7.3k sheets carrying ~81k sub-table
+  entries, and applying it a row at a time measured 119,483 statements for a
+  first sync: 28s against localhost, and ~15 minutes from a GitHub runner to
+  Neon, which overran `bin/sync_catalog`'s 900s budget with the `catalog_meta`
+  row lock held the whole time. Column vectors bound as arrays and zipped back
+  by `unnest` bring the same first sync to ~30 statements and a no-op to ~23,
+  verified byte-identical against the per-row implementation across all 90,068
+  rows. *Consequence:* the upserts must deduplicate on `song_id` and
+  `sheet_expr` in Rust first, because a batched `ON CONFLICT DO UPDATE` aborts
+  with "cannot affect row a second time" where the per-row loop absorbed a
+  duplicate silently. *Rejected:* sending the payload as one `jsonb` parameter
+  and diffing entirely in SQL, which reaches ~10 statements but gives up the
+  typed-map comparison the constraint above depends on; and chunking the
+  sub-table read back, which trades the one-shot decode for more round trips to
+  bound a few MB that a runner has to spare.
 - **`last_full_reload_revision` is never written.** That is what makes delta sync
   work across refreshes, and it is the single line most likely to be reintroduced
   by accident.
