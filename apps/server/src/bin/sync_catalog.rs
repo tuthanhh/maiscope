@@ -52,7 +52,14 @@ async fn main() {
 
 async fn run() -> Result<(), Box<dyn Error>> {
     dotenvy::dotenv().ok();
-    let database_url = std::env::var("DATABASE_URL").map_err(|_| "DATABASE_URL is not set")?;
+    // Empty counts as missing. GitHub Actions substitutes an absent secret with an
+    // empty string, so `env::var` succeeds and the failure surfaces 30 lines later
+    // as sqlx's "error with configuration: relative URL without a base" — which
+    // points at URL parsing rather than at the unset secret that actually caused it.
+    let database_url = match std::env::var("DATABASE_URL") {
+        Ok(url) if !url.trim().is_empty() => url,
+        _ => return Err("DATABASE_URL is not set (or is empty)".into()),
+    };
 
     // Progress lines exist so a timed-out run shows *where* it stalled —
     // without them a hang is indistinguishable from a runner that never started.

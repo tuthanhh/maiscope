@@ -67,7 +67,13 @@ fn redact(url: &str) -> String {
 
 async fn run() -> Result<(), Box<dyn Error>> {
     dotenvy::dotenv().ok();
-    let database_url = std::env::var("DATABASE_URL").map_err(|_| "DATABASE_URL is not set")?;
+    // Empty counts as missing — GitHub Actions substitutes an absent secret with an
+    // empty string, and Fly does the same for an unset one, so `env::var` succeeds
+    // and sqlx fails later with a URL-parsing message instead of naming the secret.
+    let database_url = match std::env::var("DATABASE_URL") {
+        Ok(url) if !url.trim().is_empty() => url,
+        _ => return Err("DATABASE_URL is not set (or is empty)".into()),
+    };
 
     // Progress lines exist so a stalled release command shows *where* it stalled.
     // Without them a hang is indistinguishable from a machine that never started.
