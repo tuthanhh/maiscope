@@ -318,6 +318,53 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
         }
     }
 
+    // Rows the database holds that upstream no longer lists. They are logged for
+    // /sync/delta and left in place — deleting a sheet would cascade to its
+    // chart text. Rows already logged are not logged again: the deletion tables
+    // are keyed (song_id, revision), so ON CONFLICT DO NOTHING would still write
+    // a second entry under a new revision.
+    let present_song_ids: Vec<String> = data
+        .songs
+        .iter()
+        .filter_map(|s| s.song_id.clone())
+        .collect();
+    let present_sheet_exprs: Vec<String> = data
+        .songs
+        .iter()
+        .flat_map(|s| {
+            s.sheets
+                .iter()
+                .map(move |sh| sheet_expr(&s.song_id, &sh.r#type, &sh.difficulty))
+        })
+        .collect();
+
+    stats.songs_vanished = sqlx::query_scalar::<_, i32>(
+        "INSERT INTO deleted_songs (song_id, revision) \
+         SELECT s.song_id, $2 FROM songs s \
+         WHERE s.song_id IS NOT NULL \
+           AND s.song_id <> ALL($1) \
+           AND NOT EXISTS (SELECT 1 FROM deleted_songs d WHERE d.song_id = s.song_id) \
+         RETURNING 1",
+    )
+    .bind(&present_song_ids)
+    .bind(revision)
+    .fetch_all(&mut *tx)
+    .await?
+    .len() as i64;
+
+    stats.sheets_vanished = sqlx::query_scalar::<_, i32>(
+        "INSERT INTO deleted_sheets (sheet_expr, revision) \
+         SELECT s.sheet_expr, $2 FROM sheets s \
+         WHERE s.sheet_expr <> ALL($1) \
+           AND NOT EXISTS (SELECT 1 FROM deleted_sheets d WHERE d.sheet_expr = s.sheet_expr) \
+         RETURNING 1",
+    )
+    .bind(&present_sheet_exprs)
+    .bind(revision)
+    .fetch_all(&mut *tx)
+    .await?
+    .len() as i64;
+
     tx.commit().await?;
     Ok(stats)
 }
@@ -516,6 +563,67 @@ mod tests {
             charts, 1,
             "chart text must survive a song vanishing upstream"
         );
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn a_vanished_song_is_logged_but_not_deleted(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(ONE_SONG)).await?;
+        let stats = apply(&pool, &payload(r#"{ "songs": [] }"#)).await?;
+
+        assert_eq!(stats.songs_vanished, 1);
+        assert_eq!(stats.sheets_vanished, 1);
+
+        // The rows are still there — never deleted.
+        let songs: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM songs")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(songs, 1);
+
+        let logged: Vec<(String, i64)> =
+            sqlx::query_as("SELECT song_id, revision FROM deleted_songs")
+                .fetch_all(&pool)
+                .await?;
+        assert_eq!(logged, vec![("Example".to_string(), 2)]);
+
+        let logged_sheets: Vec<(String, i64)> =
+            sqlx::query_as("SELECT sheet_expr, revision FROM deleted_sheets")
+                .fetch_all(&pool)
+                .await?;
+        assert_eq!(logged_sheets, vec![("Example|dx|master".to_string(), 2)]);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn a_vanished_row_is_logged_once_not_every_sync(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(ONE_SONG)).await?;
+        apply(&pool, &payload(r#"{ "songs": [] }"#)).await?;
+        let stats = apply(&pool, &payload(r#"{ "songs": [] }"#)).await?;
+
+        assert_eq!(
+            stats.songs_vanished, 0,
+            "already logged on the previous sync"
+        );
+
+        let entries: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM deleted_songs")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(entries, 1);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn a_returning_song_is_updated_normally(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(ONE_SONG)).await?;
+        apply(&pool, &payload(r#"{ "songs": [] }"#)).await?;
+        let stats = apply(&pool, &payload(ONE_SONG)).await?;
+
+        // The row never left, so this is neither an insert nor a vanish.
+        assert_eq!(stats.songs_inserted, 0);
+        assert_eq!(stats.songs_vanished, 0);
 
         Ok(())
     }
