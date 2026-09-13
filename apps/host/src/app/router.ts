@@ -34,7 +34,8 @@ const routes: RouteRecordRaw[] = [
   },
 ];
 
-// Hash history: robust for a packaged Tauri app served from file://-like origins.
+// Hash history: the route lives in the URL fragment, which the server never sees,
+// so deep links resolve on Cloudflare Pages without needing an SPA fallback/rewrite rule.
 const router = createRouter({
   history: createWebHashHistory(),
   routes,
