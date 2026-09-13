@@ -9,14 +9,14 @@
 <!-- PROJECT LOGO -->
 <br />
 <div align="center">
-<h3 align="center">maiscope-frontend</h3>
+<h3 align="center">maiscope</h3>
 
   <p align="center">
-    A desktop song &amp; chart browser for arcade rhythm games, built with Vue 3 and Tauri.
+    A web song &amp; chart browser for maimai, built with Vue 3.
     <br />
-    <a href="https://github.com/tuthanhh/maiscope-frontend/issues/new?labels=bug">Report Bug</a>
+    <a href="https://github.com/tuthanhh/maiscope/issues/new?labels=bug">Report Bug</a>
     &middot;
-    <a href="https://github.com/tuthanhh/maiscope-frontend/issues/new?labels=enhancement">Request Feature</a>
+    <a href="https://github.com/tuthanhh/maiscope/issues/new?labels=enhancement">Request Feature</a>
   </p>
 </div>
 
@@ -47,17 +47,16 @@
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-**maiscope-frontend** is a desktop song and chart browser for arcade rhythm games such as [maimai](https://maimai.sega.jp/). It loads community-maintained song data and lets you browse, filter, and inspect charts across difficulties.
+This is the frontend of **maiscope**, a song and chart browser for [maimai](https://maimai.sega.jp/) (SEGA's arcade rhythm game). It loads community-maintained song data from the maiscope backend and lets you browse, filter, and inspect charts across difficulties.
 
-It is a desktop port of [zetaraku/arcade-songs](https://github.com/zetaraku/arcade-songs) — the original web app — wrapped in [Tauri](https://tauri.app/) for a native window and bundled distribution.
+It is a port of [zetaraku/arcade-songs](https://github.com/zetaraku/arcade-songs) — the original web app, originally Nuxt 2 + Vuetify 2 — rebuilt on native Vue 3 for maimai only. See the repo root [README](../../README.md) for how this app fits into the rest of the monorepo (the Rust backend and the wasm chart visualizer).
 
 **Features:**
-- Song gallery with cover art, search, and rich filtering (level, genre, version, BPM, …)
-- Per-sheet chart details (difficulty, internal level, designer, note counts)
-- Data table, grid, and chart (echarts) views
-- Timeline view of song / version history
-- Light / dark mode, multi-language UI (EN, JA, KO, ZH, VI, ES, ID, RU)
-- My List export and shareable filter state via URL query
+- Song gallery with search and rich filtering (level, category, version, BPM, region, note designer)
+- Table and grid views of the filtered results
+- Per-sheet chart details (difficulty, internal level, note designer)
+- Build a working set of sheets ("My List") and filter down to just those
+- Light / dark mode, multi-language UI (EN, JA, KO, ZH-Hans, ZH-Hant, VI, ES, ID, RU)
 
 
 
@@ -65,19 +64,16 @@ It is a desktop port of [zetaraku/arcade-songs](https://github.com/zetaraku/arca
 ## Built With
 
 [![Vue][Vue-badge]][Vue-url]
-[![Vuetify][Vuetify-badge]][Vuetify-url]
-[![Tauri][Tauri-badge]][Tauri-url]
 [![Vite][Vite-badge]][Vite-url]
 
 | Package | Role |
 |---|---|
 | [`vue`](https://vuejs.org) 3 | UI framework |
-| [`vuetify`](https://vuetifyjs.com) 3 | Material component library |
 | [`pinia`](https://pinia.vuejs.org) | State management |
 | [`vue-router`](https://router.vuejs.org) | Routing |
 | [`vue-i18n`](https://vue-i18n.intlify.dev) | Internationalization |
-| [`echarts`](https://echarts.apache.org) + [`vue-echarts`](https://github.com/ecomfe/vue-echarts) | Data visualization |
-| [`@tauri-apps/api`](https://tauri.app) 2 | Native desktop shell |
+| [`@vueuse/core`](https://vueuse.org) | Composition utilities |
+| [`yaml`](https://eemeli.org/yaml/) | Locale file parsing |
 | [`vite`](https://vitejs.dev) 6 | Build tooling |
 
 
@@ -88,15 +84,15 @@ It is a desktop port of [zetaraku/arcade-songs](https://github.com/zetaraku/arca
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) 18+ and [pnpm](https://pnpm.io/)
-- [Rust toolchain](https://rustup.rs/) (stable) and the [Tauri system prerequisites](https://tauri.app/start/prerequisites/) for your OS
+- [Node.js](https://nodejs.org/) 18+ and [pnpm](https://pnpm.io/) (pinned to `pnpm@10.33.0` via `packageManager`)
+- [Rust toolchain](https://rustup.rs/) (stable) — needed to build the chart visualizer's wasm module via `../../scripts/build-wasm.sh`, not for this package's own build
 
 ### Installation
 
-1. Clone the repo
+1. Clone the monorepo
    ```sh
-   git clone https://github.com/tuthanhh/maiscope-frontend.git
-   cd maiscope-frontend
+   git clone https://github.com/tuthanhh/maiscope.git
+   cd maiscope/apps/host
    ```
 
 2. Install dependencies
@@ -104,14 +100,9 @@ It is a desktop port of [zetaraku/arcade-songs](https://github.com/zetaraku/arca
    pnpm install
    ```
 
-3. Run in the browser (Vite dev server)
+3. Run the dev server
    ```sh
    pnpm dev
-   ```
-
-4. Run as a desktop app (Tauri)
-   ```sh
-   pnpm tauri dev
    ```
 
 
@@ -120,13 +111,13 @@ It is a desktop port of [zetaraku/arcade-songs](https://github.com/zetaraku/arca
 <!-- USAGE -->
 ## Usage
 
-Launch the app, pick a game, and browse the song gallery. Use the filter panel to narrow by level, genre, version, BPM, and more; open any song to inspect its charts, switch between table / grid / chart views, or build and export a My List.
+Launch the app and browse the song gallery. Use the filter panel to narrow by level, category, version, BPM, region, and note designer; open any song to inspect its charts, switch between table and grid views, or build a "My List" selection.
 
-Song data is fetched from the community data source configured in `src/data/sites.json`.
+Song data is fetched from the maiscope backend API. The base URL is read from `VITE_API_BASE_URL` at build time (see `src/app/game.ts` and `.github/workflows/deploy-web.yml`); it defaults to `http://localhost:3000/api/v1` for local development against `apps/server`.
 
-To build a distributable desktop binary:
+To produce a production build:
 ```sh
-pnpm tauri build
+pnpm build
 ```
 
 This is a personal project and is not open for contributions at this time.
@@ -137,14 +128,7 @@ This is a personal project and is not open for contributions at this time.
 <!-- ROADMAP -->
 ## Roadmap
 
-Moving off the CloudFront `data.json` feed onto a backend API, with an offline-first local cache, desktop contribution flow, and chart visualization.
-
-- [ ] **C1** — Point client at backend read API (`GET /api/v1/games/{code}/data`), replacing CloudFront; keep current behavior
-- [ ] **C2** — Local SQLite cache (`tauri-plugin-sql`) + offline-first + delta sync via manifest
-- [ ] **C3** — GitHub login + contribution UI (submit chart, my contributions)
-- [ ] **C4** — Chart / audio download + maimai visualization engine
-
-See [open issues](https://github.com/tuthanhh/maiscope-frontend/issues) for tracked items.
+See [docs/ROADMAP.md](../../docs/ROADMAP.md) for the current milestones and what is deferred.
 
 
 
@@ -168,21 +152,17 @@ Distributed under the MIT License.
 
 
 <!-- MARKDOWN LINKS & IMAGES -->
-[contributors-shield]: https://img.shields.io/github/contributors/tuthanhh/maiscope-frontend.svg?style=for-the-badge
-[contributors-url]: https://github.com/tuthanhh/maiscope-frontend/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/tuthanhh/maiscope-frontend.svg?style=for-the-badge
-[forks-url]: https://github.com/tuthanhh/maiscope-frontend/network/members
-[stars-shield]: https://img.shields.io/github/stars/tuthanhh/maiscope-frontend.svg?style=for-the-badge
-[stars-url]: https://github.com/tuthanhh/maiscope-frontend/stargazers
-[issues-shield]: https://img.shields.io/github/issues/tuthanhh/maiscope-frontend.svg?style=for-the-badge
-[issues-url]: https://github.com/tuthanhh/maiscope-frontend/issues
-[license-shield]: https://img.shields.io/github/license/tuthanhh/maiscope-frontend.svg?style=for-the-badge
-[license-url]: https://github.com/tuthanhh/maiscope-frontend/blob/master/LICENSE
+[contributors-shield]: https://img.shields.io/github/contributors/tuthanhh/maiscope.svg?style=for-the-badge
+[contributors-url]: https://github.com/tuthanhh/maiscope/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/tuthanhh/maiscope.svg?style=for-the-badge
+[forks-url]: https://github.com/tuthanhh/maiscope/network/members
+[stars-shield]: https://img.shields.io/github/stars/tuthanhh/maiscope.svg?style=for-the-badge
+[stars-url]: https://github.com/tuthanhh/maiscope/stargazers
+[issues-shield]: https://img.shields.io/github/issues/tuthanhh/maiscope.svg?style=for-the-badge
+[issues-url]: https://github.com/tuthanhh/maiscope/issues
+[license-shield]: https://img.shields.io/github/license/tuthanhh/maiscope.svg?style=for-the-badge
+[license-url]: https://github.com/tuthanhh/maiscope/blob/master/LICENSE
 [Vue-badge]: https://img.shields.io/badge/Vue.js-35495E?style=for-the-badge&logo=vuedotjs&logoColor=4FC08D
 [Vue-url]: https://vuejs.org/
-[Vuetify-badge]: https://img.shields.io/badge/Vuetify-1867C0?style=for-the-badge&logo=vuetify&logoColor=white
-[Vuetify-url]: https://vuetifyjs.com/
-[Tauri-badge]: https://img.shields.io/badge/Tauri-24C8DB?style=for-the-badge&logo=tauri&logoColor=white
-[Tauri-url]: https://tauri.app/
 [Vite-badge]: https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white
 [Vite-url]: https://vitejs.dev/
