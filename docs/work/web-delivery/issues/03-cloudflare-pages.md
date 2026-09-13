@@ -20,7 +20,10 @@ domain is in place.**
 
 **Blocked by:** 01
 
-**Status:** done
+**Status:** in-progress — the Pages deploy itself ships (`.github/workflows/deploy-web.yml`
+is committed and green), but three boxes are still open: preview deployments on
+PRs, Brotli confirmed on `.js`/`.wasm`, and a ticket opened for the custom-domain
+migration
 
 - [x] **Deployed by wrangler from GitHub Actions, not by Pages' git integration** —
       `.github/workflows/deploy-web.yml`. See Comments; the git-connected build was
