@@ -93,6 +93,31 @@ Natural keys are therefore usable directly: `songs.song_id UNIQUE`,
 - **A row's `revision` advances only when a field actually changed**
   (`ON CONFLICT ... DO UPDATE ... WHERE existing IS DISTINCT FROM excluded`), so
   `/sync/delta` returns the rows that changed rather than everything touched.
+- **The sheet sub-tables are reconciled for every sheet in the payload**, not
+  only for sheets the scalar guard above reported as changed. `noteCounts`,
+  `regions` and `regionOverrides` move upstream independently of the scalar
+  columns, and all three are served by `/catalog`; gating them on the scalar
+  guard froze them at first insert. A sub-table-only difference stamps the
+  sheet's `revision` too, or the change is applied but invisible to
+  `/sync/delta`. Stored content is read back and compared as typed maps in
+  Rust. *Rejected:* digesting both sides in SQL, which would have to reproduce
+  Postgres's float and NULL text formatting byte-for-byte to agree, and reads
+  as "changed forever" the moment it does not.
+- **`catalog_meta.revision` does not advance on a run that changed nothing.**
+  It feeds the `/catalog` ETag (`sha256(revision:updateTime)`), so a daily bump
+  on a no-op run makes every client refetch 4.7MB — the cost this feature
+  exists to remove. Rows are still stamped with the precomputed next value;
+  only the write-back is conditional. The five lookup tables are replaced
+  wholesale and so have no per-row guard to report a change, so they are
+  digested before and after and count toward the condition.
+- **The singleton row is locked for the whole transaction**, taken by the
+  opening `catalog_meta` upsert's `ON CONFLICT ... RETURNING revision`. The
+  sync must read the counter long before it knows whether to advance it, and a
+  bare `SELECT` there lets the write-back regress a bump `apply_chart_revision`
+  or a second sync landed in between. *Rejected:* `UPDATE ... SET revision =
+  revision + 1 RETURNING revision` at the top, which is `chart_revision.rs`'s
+  pattern but advances the counter before knowing whether the run changed
+  anything.
 - **`last_full_reload_revision` is never written.** That is what makes delta sync
   work across refreshes, and it is the single line most likely to be reintroduced
   by accident.
