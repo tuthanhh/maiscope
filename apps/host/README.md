@@ -86,7 +86,8 @@ It is a port of [zetaraku/arcade-songs](https://github.com/zetaraku/arcade-songs
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) 18+ and [pnpm](https://pnpm.io/) (pinned to `pnpm@10.33.0` via `packageManager`)
-- [Rust toolchain](https://rustup.rs/) (stable) — this package's own code is plain TypeScript/Vue, but `pnpm build` and the visualizer route both need the chart engine's wasm bindings as a build input; see Usage
+- [Rust toolchain](https://rustup.rs/), pinned by `../../rust-toolchain.toml` — this package's own code is plain TypeScript/Vue, but `pnpm build` and the visualizer route both need the chart engine's wasm bindings; see Usage
+- [`wasm-bindgen-cli`](https://github.com/rustwasm/wasm-bindgen), pinned to the exact version in `../../engine/Cargo.toml`: `cargo install wasm-bindgen-cli --version 0.2.122` — the CLI and crate versions must match exactly, or bindgen fails on a schema mismatch
 
 ### Installation
 
