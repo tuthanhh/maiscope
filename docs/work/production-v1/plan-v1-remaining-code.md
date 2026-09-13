@@ -337,3 +337,77 @@ The seed and backup workflows already satisfy every code box in
 prod-data-and-infra 04/05; reload-catalog.yml is dropped with bin/ingest.
 web-delivery 01 and 03 are complete. Status tokens back inside the enum."
 ```
+
+---
+
+### Task 4: Rewrite `apps/host/README.md` — it still documents a Tauri desktop app
+
+Added after Tasks 1-3 were scoped. This is the largest remaining `web-delivery` [issue 01](../web-delivery/issues/01-delete-tauri.md) straggler. Task 2's sweep missed it because that task's verification grep was scoped to `*.ts`, `*.vue`, `*.json` and `*.html` — markdown was never searched. That was a defect in this plan, not in Task 2's execution.
+
+**Why it matters:** this is the frontend's public README. It instructs a contributor to install the Tauri system prerequisites and run `pnpm tauri dev`, then `pnpm tauri build` to produce a desktop binary. None of those commands exist — `apps/host/package.json` defines exactly three scripts: `dev`, `build`, `preview`. Anyone following this file fails at step 4 of Installation. Closing issue 01 while it stands would make that closure false.
+
+**Files:**
+- Modify: `apps/host/README.md` (188 lines)
+
+**Interfaces:** none. Documentation only; no code, no config, no build behaviour.
+
+**Ground truth, verified against the working tree — trust this over anything the README currently says:**
+
+`apps/host/package.json` declares the package name `maiscope` (not `maiscope-frontend`), `packageManager: pnpm@10.33.0`, and only these scripts:
+
+```json
+"dev": "vite", "build": "vue-tsc --noEmit && vite build", "preview": "vite preview"
+```
+
+Actual dependencies: `@vueuse/core`, `pinia`, `sleep-promise`, `vue`, `vue-i18n`, `vue-router`, `yaml`.
+Actual devDependencies: `@modyfi/vite-plugin-yaml`, `@vitejs/plugin-vue`, `sass`, `typescript`, `vite`, `vue-tsc`.
+
+Therefore the current "Built With" table is wrong in four of its eight rows: **`vuetify`, `echarts`, `vue-echarts` and `@tauri-apps/api` are no longer dependencies at all.** The repo was rebuilt on native Vue 3 with the Vuetify shim removed (CLAUDE.md, "What this is"). `src/data/sites.json`, cited in Usage, does not exist.
+
+- [ ] **Step 1: Re-verify the ground truth yourself**
+
+Read `apps/host/package.json` and confirm the lists above before writing anything. If they disagree with this plan, the file wins — say so in your report. Also run:
+
+```sh
+ls apps/host/src/data/sites.json 2>&1 || echo "absent, as expected"
+```
+
+- [ ] **Step 2: Rewrite the stale sections**
+
+Rewrite `apps/host/README.md` so every factual claim matches the working tree. The sections that are wrong:
+
+- **Header tagline** (line ~15) and **About The Project** (~50-52) — describe a desktop app built with Tauri. maiscope v1 is a browse-only **web app** deployed to Cloudflare Pages ([ADR-0003](../../adr/0003-web-pwa-drop-tauri.md)). Keep the `zetaraku/arcade-songs` credit and link — it is a **license obligation** (`LICENSE-THIRD-PARTY`), not a courtesy — but it is no longer a "desktop port"; it is a port.
+- **Built With** (~65-81) — drop the Vuetify and Tauri badges and the four dead table rows; add the real dependencies. Keep the table's existing two-column `| Package | Role |` shape.
+- **Prerequisites** (~89-92) — the Rust toolchain requirement stays, but it is **not** for Tauri: it is for `scripts/build-wasm.sh`, which builds the Bevy visualizer to wasm with `wasm-bindgen-cli` pinned to `=0.2.122`. Drop the Tauri prerequisites link.
+- **Installation** (~96-115) — the clone URL points at a standalone `maiscope-frontend` repo that no longer exists; this is `apps/host/` inside the monorepo. Remove the `pnpm tauri dev` step.
+- **Usage** (~123-132) — `src/data/sites.json` does not exist; data comes from the server API (`VITE_API_BASE_URL`, set at build time — see `.github/workflows/deploy-web.yml`). Remove the `pnpm tauri build` desktop-binary instructions.
+- **Roadmap** (~140-147) — every item is stale. C1 (backend read API) shipped. C2's `tauri-plugin-sql` SQLite cache was replaced by ETag caching now, IndexedDB later (`web-delivery` [issue 02](../web-delivery/issues/02-client-catalog-freshness.md)). C3 (GitHub login + contribution UI) was **cut** by [ADR-0002](../../adr/0002-chart-data-only-no-audio-hosting.md). C4's visualizer is built and wired. Replace the list with a pointer to [`docs/ROADMAP.md`](../../ROADMAP.md) rather than restating it — the roadmap is the single index and every other document links to it rather than duplicating it (`docs/ROADMAP.md:3-4`).
+- **Any `github.com/tuthanhh/maiscope-frontend` link** — that repo is not this one. Point at the monorepo or remove the link.
+
+**Preserve:** the badge/shield block at the top if the URLs still resolve to this repo, the table of contents structure, the License and Acknowledgments sections, and the "personal project, not open for contributions" note.
+
+**Do not** invent features. The Features list (~55-60) describes the song gallery, filtering, per-sheet details, i18n and My List — verify each against `apps/host/src/` before keeping it, and drop any you cannot confirm. In particular the README claims "Data table, grid, and chart (echarts) views"; `echarts` is not a dependency.
+
+- [ ] **Step 3: Verify no stale references survive**
+
+```sh
+grep -niE 'tauri|vuetify|echarts|desktop|maiscope-frontend|sites\.json' apps/host/README.md
+```
+
+Expected: no output. If a hit is a deliberate, accurate historical reference, keep it and justify it in your report.
+
+- [ ] **Step 4: Confirm the documented commands actually work**
+
+Every command the README tells a reader to run must exist. Check each against `apps/host/package.json`'s `scripts` block. Do not run `pnpm build` — Task 2 already proved it green and nothing here touches source.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/host/README.md
+git commit -m "docs(host): README described a Tauri desktop app that no longer exists
+
+Told readers to install Tauri prerequisites and run \`pnpm tauri dev\`,
+neither of which exists; listed vuetify, echarts and @tauri-apps/api as
+dependencies when none are; and pointed at a standalone frontend repo.
+Roadmap now defers to docs/ROADMAP.md instead of restating it stale."
+```
