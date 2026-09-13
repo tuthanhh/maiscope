@@ -60,19 +60,28 @@ struct DeltaQuery {
 }
 
 // GET /sync/delta?since={revision} — rows changed since `revision`, or `409
-// snapshot_required` if `since` predates the last full ingest reload (contract
-// §3). Only bin/ingest's full reloads and (future) contribution-approve edits
-// bump revision, so `since` "too old to diff" is defined precisely against
-// `last_full_reload_revision`, not a vague staleness heuristic.
+// snapshot_required` if `since` predates a point the catalog cannot be diffed
+// across (contract §3). `bin/sync_catalog` upserts by natural key and never
+// deletes, so row identity is stable across every refresh and it deliberately
+// never writes `last_full_reload_revision` — that column is frozen at whatever
+// the retired `bin/ingest` left, and the 409 is now effectively unreachable.
+// Keeping the check is the point: it is what makes a future reload that *does*
+// break row identity able to tell clients to resnapshot.
 async fn sync_delta(
     Query(q): Query<DeltaQuery>,
     State(pool): State<Pool<Postgres>>,
 ) -> Result<Json<Value>, AppError> {
+    // `catalog_meta` is a singleton written only by the catalog sync, so it is
+    // empty between `migrate` and the first sync — the state every fresh deploy
+    // passes through. Default to 0 rather than 500, matching `Freshness::load`'s
+    // revision-0 sentinel in routes/caching.rs: nothing has been synced, so
+    // there is nothing to diff and no boundary to refuse across.
     let last_full_reload: i64 = sqlx::query_scalar!(
         r#"SELECT last_full_reload_revision AS "v!" FROM catalog_meta LIMIT 1"#
     )
-    .fetch_one(&pool)
-    .await?;
+    .fetch_optional(&pool)
+    .await?
+    .unwrap_or(0);
 
     if q.since < last_full_reload {
         return Err(AppError::SnapshotRequired);
@@ -116,8 +125,9 @@ async fn sync_delta(
 
     let current_revision: i64 =
         sqlx::query_scalar!(r#"SELECT revision AS "v!" FROM catalog_meta LIMIT 1"#)
-            .fetch_one(&pool)
-            .await?;
+            .fetch_optional(&pool)
+            .await?
+            .unwrap_or(0);
 
     let deleted_song_ids: Vec<String> = sqlx::query_scalar!(
         r#"SELECT song_id AS "v!" FROM deleted_songs WHERE revision > $1"#,
@@ -211,6 +221,33 @@ mod tests {
             format!("\"{}\"", json["catalogHash"].as_str().unwrap()),
             etag
         );
+        Ok(())
+    }
+
+    // A fresh deploy runs `migrate` and then serves traffic before the first
+    // sync, so an empty `catalog_meta` is a reachable production state, not a
+    // test-only one. `fetch_one` there is a RowNotFound → 500.
+    #[sqlx::test]
+    async fn delta_on_an_unseeded_database_is_an_empty_answer_not_a_500(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        // Deliberately no seed_catalog_meta.
+        let Json(body) = sync_delta(Query(DeltaQuery { since: 0 }), AxumState(pool))
+            .await
+            .expect("an unseeded catalog_meta must not be an error");
+
+        assert_eq!(body["revision"], 0);
+        assert_eq!(body["songs"].as_array().unwrap().len(), 0);
+        assert_eq!(body["tombstones"]["songIds"].as_array().unwrap().len(), 0);
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn manifest_on_an_unseeded_database_is_not_a_500(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let response = sync_manifest(HeaderMap::new(), AxumState(pool))
+            .await
+            .expect("an unseeded catalog_meta must not be an error");
+        assert_eq!(response.status(), StatusCode::OK);
         Ok(())
     }
 }
