@@ -52,9 +52,24 @@ jobs:
           # Full history so the retention prune below can see prior backups.
           fetch-depth: 0
 
-      # Neon runs Postgres 17; ubuntu-24.04 ships the 16 client, and pg_dump
-      # refuses a newer server than itself ("server version mismatch").
-      - name: Install the Postgres 17 client
+      # Neon serves Postgres 18.x, and pg_dump refuses a server newer than itself:
+      # "aborting because of server version mismatch". The runner ships a
+      # pgdg-packaged client 16.
+      #
+      # The original failure here was simply the wrong major: this installed 17
+      # against an 18.6 server. /usr/bin/pg_dump is Debian's pg_wrapper, which does
+      # normally resolve to the newest installed client — verified in a clean
+      # ubuntu:24.04 — yet the runner still reported 16.15 after a 17 install, so
+      # its /usr/bin/pg_dump evidently resolves differently. Putting the versioned
+      # bin directory on PATH removes the dependence on that behaviour entirely.
+      # $GITHUB_PATH applies to later steps, hence the absolute path just below.
+      # pg_restore in the verify step needs the same treatment, which this covers.
+      #
+      # A client newer than the server is fine, so this only needs bumping if Neon
+      # moves past PG_MAJOR; the dump step checks and says so outright.
+      - name: Install the Postgres client
+        env:
+          PG_MAJOR: "18"
         run: |
           set -euo pipefail
           sudo install -d /usr/share/postgresql-common/pgdg
@@ -64,8 +79,9 @@ jobs:
             https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
             | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
           sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-client-17
-          pg_dump --version
+          sudo apt-get install -y -qq "postgresql-client-${PG_MAJOR}"
+          echo "/usr/lib/postgresql/${PG_MAJOR}/bin" >> "$GITHUB_PATH"
+          "/usr/lib/postgresql/${PG_MAJOR}/bin/pg_dump" --version
 
       - name: Dump the database
         id: dump
@@ -74,6 +90,19 @@ jobs:
         run: |
           set -euo pipefail
           [ -n "$PGURL" ] || { echo "::error::Neither SEED_DATABASE_URL nor DATABASE_URL is set."; exit 1; }
+
+          # pg_dump aborts if the server is newer than the client. Say which major
+          # to bump rather than leaving the raw mismatch to be decoded.
+          client=$(pg_dump --version | grep -oE '[0-9]+' | head -1)
+          server_num=$(psql -tAX -d "$PGURL" -c 'SHOW server_version_num')
+          server=$((server_num / 10000))
+          echo "pg_dump major: $client, server major: $server"
+          if [ "$client" -lt "$server" ]; then
+            echo "::error::pg_dump $client cannot dump a Postgres $server server."
+            echo "::error::Bump PG_MAJOR in the 'Install the Postgres client' step to $server."
+            exit 1
+          fi
+
           stamp=$(date -u +%Y%m%d)
           out="chart-data/backups/maiscope-${stamp}.dump"
           mkdir -p chart-data/backups
