@@ -32,12 +32,13 @@ domain is in place.**
       `/`. Deep links cannot 404. Revisit if the router moves to history mode
 - [ ] Preview deployments on PRs (their origins must not be in the CORS allowlist
       unless deliberately added)
-- [ ] **Production origin added to `CORS_ALLOWED_ORIGINS` in `fly.toml`** and
-      deployed. It currently lists only `http://localhost:1420`; the allowlist
-      matches exactly, with no wildcards, so the API rejects every browser call
-      from Pages until this is done
+- [x] Production origin added to `CORS_ALLOWED_ORIGINS` in `fly.toml`
+      (`https://maiscope.pages.dev`, alongside the dev server) — needs an API
+      deploy to take effect, since `[env]` is baked in at deploy time
 - [ ] Brotli confirmed on `.js`/`.wasm`
-- [ ] Recorded: the exact production origin, since it becomes the PWA identity
+- [x] Recorded: the production origin is **`https://maiscope.pages.dev`**. This
+      becomes the PWA install identity — do not promote installs before the custom
+      domain move (see the trap above)
 - [ ] Ticket opened for the custom-domain migration, with the install-orphaning
       consequence written down
 - [x] **The wasm artifact fits what Pages will accept** — 17MB after the profile

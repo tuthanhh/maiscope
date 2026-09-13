@@ -36,15 +36,14 @@ LOG_JSON = "true"
 # Config, not a credential, so it lives here rather than in `fly secrets`: it
 # should be reviewable in a diff.
 #
-# The Cloudflare Pages origin goes here once `web-delivery` 03 lands. Until then
-# the only entry is the Vite dev server, so the local frontend can be pointed at
-# the deployed API. Low risk: the API is public read-only with no cookies or auth,
-# so an origin entry grants a browser nothing curl could not already do. Remove it
-# once it stops being useful.
+# Production is the Cloudflare Pages origin (`web-delivery` 03). The Vite dev
+# server stays listed so the local frontend can be pointed at the deployed API.
+# Low risk: the API is public read-only with no cookies or auth, so an origin
+# entry grants a browser nothing curl could not already do.
 #
 # Preview deployments get a distinct origin each and must NOT be added casually —
-# matching is exact, with no wildcard support (`web-delivery` 03).
-CORS_ALLOWED_ORIGINS = "http://localhost:1420"
+# matching is exact, with no wildcard support.
+CORS_ALLOWED_ORIGINS = "https://maiscope.pages.dev,http://localhost:1420"
 
 [http_service]
 internal_port = 3000
