@@ -6,9 +6,11 @@
 //! deleting a song destroys the chart text hanging off it —
 //! see docs/work/catalog-sync/spec.md.
 
-use crate::upstream::{RawData, parse_date, sheet_expr};
-use sqlx::PgPool;
+use crate::upstream::{RawData, RawOverride, RawSheet, parse_date, parse_update_time, sheet_expr};
+use sqlx::types::Json;
 use sqlx::types::chrono::{DateTime, Utc};
+use sqlx::{PgConnection, PgPool};
+use std::collections::BTreeMap;
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct SyncStats {
@@ -16,39 +18,75 @@ pub struct SyncStats {
     pub songs_updated: i64,
     pub sheets_inserted: i64,
     pub sheets_updated: i64,
+    /// Rows this run logged as vanished for the first time.
     pub songs_vanished: i64,
     pub sheets_vanished: i64,
+    /// Every row ever logged as vanished. Without this the log reads
+    /// "vanished 0" forever after the first miss, which reads as "nothing is
+    /// missing" when the truth is "nothing newly went missing".
+    pub songs_vanished_total: i64,
+    pub sheets_vanished_total: i64,
     pub songs_skipped_no_id: i64,
+    /// The revision rows changed by this run were stamped with. Equal to
+    /// `catalog_meta.revision` afterwards only when the run changed something —
+    /// a no-op run deliberately leaves the counter where it was.
     pub revision: i64,
+    /// Whether `catalog_meta.revision` was advanced to [`Self::revision`].
+    pub revision_advanced: bool,
 }
+
+impl SyncStats {
+    /// Did this run change anything a client could observe? Drives the
+    /// conditional `catalog_meta.revision` write-back — see [`apply`].
+    fn changed_anything(&self) -> bool {
+        self.songs_inserted > 0
+            || self.songs_updated > 0
+            || self.sheets_inserted > 0
+            || self.sheets_updated > 0
+            || self.songs_vanished > 0
+            || self.sheets_vanished > 0
+    }
+}
+
+/// The five wholesale-replaced lookup tables, all of which carry an `ordinal`.
+const LOOKUP_TABLES: [&str; 5] = ["categories", "versions", "types", "difficulties", "regions"];
 
 pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Error> {
     let mut tx = pool.begin().await?;
     let mut stats = SyncStats::default();
 
+    let update_time: DateTime<Utc> = parse_update_time(&data.update_time).unwrap_or_else(Utc::now);
+
     // catalog_meta is a singleton guarded by a CHECK constraint, so the row is
-    // created on first sync and updated thereafter. revision advances every run;
+    // created on first sync and updated thereafter. `update_time` always
+    // reflects upstream; `revision` is *not* touched here — it is advanced at
+    // the end of this function, and only if the run actually changed something.
     // last_full_reload_revision is deliberately left at whatever it already is.
-    let previous: Option<i64> = sqlx::query_scalar("SELECT revision FROM catalog_meta LIMIT 1")
-        .fetch_optional(&mut *tx)
-        .await?;
-    let revision = previous.unwrap_or(0) + 1;
-    stats.revision = revision;
-
-    let update_time: DateTime<Utc> = parse_date(&data.update_time)
-        .and_then(|d| d.and_hms_opt(0, 0, 0))
-        .map(|ndt| ndt.and_utc())
-        .unwrap_or_else(Utc::now);
-
-    sqlx::query(
-        "INSERT INTO catalog_meta (id, update_time, revision) VALUES (true, $1, $2) \
-         ON CONFLICT (id) DO UPDATE SET update_time = EXCLUDED.update_time, \
-                                        revision = EXCLUDED.revision",
+    //
+    // This upsert doubles as the lock that makes read-now / write-later safe:
+    // it takes a row-level exclusive lock on the singleton held until commit,
+    // so no concurrent writer (`apply_chart_revision`, another sync) can slip a
+    // bump in between the read below and the write-back at the end. Reading
+    // with a bare SELECT instead would let the final write regress their value.
+    let previous: i64 = sqlx::query_scalar(
+        "INSERT INTO catalog_meta (id, update_time, revision) VALUES (true, $1, 0) \
+         ON CONFLICT (id) DO UPDATE SET update_time = EXCLUDED.update_time \
+         RETURNING revision",
     )
     .bind(update_time)
-    .bind(revision)
-    .execute(&mut *tx)
+    .fetch_one(&mut *tx)
     .await?;
+    let revision = previous + 1;
+    stats.revision = revision;
+
+    // The lookup tables are replaced wholesale, so unlike songs and sheets they
+    // have no per-row `IS DISTINCT FROM` guard to report a change. Digest them
+    // before and after: without this, a renamed category would be applied but
+    // never advance `catalog_meta.revision`, so no client would refetch it.
+    let mut lookup_digests_before = Vec::with_capacity(LOOKUP_TABLES.len());
+    for table in LOOKUP_TABLES {
+        lookup_digests_before.push(lookup_digest(&mut tx, table).await?);
+    }
 
     // Ordered lookup tables carry no rows anything else references, and their
     // `ordinal` is positional, so replacing them wholesale is both safe and
@@ -123,6 +161,13 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
             .await?;
     }
 
+    let mut lookups_changed = false;
+    for (table, before) in LOOKUP_TABLES.iter().zip(&lookup_digests_before) {
+        if &lookup_digest(&mut tx, table).await? != before {
+            lookups_changed = true;
+        }
+    }
+
     // Songs and sheets are matched on their natural keys — songs.song_id and
     // sheets.sheet_expr, both UNIQUE. The `WHERE ... IS DISTINCT FROM` guard on
     // DO UPDATE is what keeps `revision` still for untouched rows: without it
@@ -148,7 +193,8 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
                image_name = EXCLUDED.image_name, version = EXCLUDED.version, \
                release_date = EXCLUDED.release_date, is_new = EXCLUDED.is_new, \
                is_locked = EXCLUDED.is_locked, comment = EXCLUDED.comment, \
-               source_index = EXCLUDED.source_index, revision = EXCLUDED.revision \
+               source_index = EXCLUDED.source_index, revision = EXCLUDED.revision, \
+               updated_at = now() \
              WHERE ROW(songs.song_no, songs.category, songs.title, songs.artist, songs.bpm, \
                        songs.image_name, songs.version, songs.release_date, songs.is_new, \
                        songs.is_locked, songs.comment, songs.source_index) \
@@ -214,7 +260,7 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
                    internal_level_value = EXCLUDED.internal_level_value, \
                    note_designer = EXCLUDED.note_designer, \
                    is_special = EXCLUDED.is_special, source_index = EXCLUDED.source_index, \
-                   revision = EXCLUDED.revision \
+                   revision = EXCLUDED.revision, updated_at = now() \
                  WHERE ROW(sheets.song_id_fk, sheets.type, sheets.difficulty, sheets.level, \
                            sheets.level_value, sheets.internal_level, \
                            sheets.internal_level_value, sheets.note_designer, \
@@ -249,70 +295,32 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
                 id
             });
 
-            let Some(sheet_pk) = sheet_pk else {
-                // Unchanged sheet: its sub-tables are unchanged too.
-                continue;
-            };
+            // A suppressed DO UPDATE returns no row. The sub-tables still have
+            // to be reconciled — `noteCounts`, `regions` and `regionOverrides`
+            // change upstream *independently* of the scalar columns in the
+            // guard above (note counts get backfilled days after a song ships;
+            // a region flips to available), and all three are served by
+            // /catalog. Skipping them here froze them at first insert until
+            // some unrelated scalar happened to change.
+            let scalar_changed = sheet_pk.is_some();
+            let stored = read_sub_tables(&mut tx, &expr).await?;
 
-            // Sub-tables key off sheet_id with no natural key of their own, so
-            // they are replaced per sheet. Deleting from these cascades to
-            // nothing — `charts` hangs off `sheets`, which is never deleted.
-            sqlx::query("DELETE FROM sheet_note_counts WHERE sheet_id = $1")
-                .bind(sheet_pk)
-                .execute(&mut *tx)
-                .await?;
-            if let Some(counts) = &sheet.note_counts {
-                for (key, value) in counts {
+            if sub_tables_differ(&stored, sheet) {
+                replace_sub_tables(&mut tx, stored.sheet_id, sheet).await?;
+
+                // A change the client cannot see is only half applied: without
+                // this bump /sync/delta would never report the sheet. Only
+                // reached on a real difference, so re-writing identical
+                // content still bumps nothing.
+                if !scalar_changed {
                     sqlx::query(
-                        "INSERT INTO sheet_note_counts (sheet_id, key, value) VALUES ($1, $2, $3)",
+                        "UPDATE sheets SET revision = $1, updated_at = now() WHERE id = $2",
                     )
-                    .bind(sheet_pk)
-                    .bind(key)
-                    .bind(value)
+                    .bind(revision)
+                    .bind(stored.sheet_id)
                     .execute(&mut *tx)
                     .await?;
-                }
-            }
-
-            sqlx::query("DELETE FROM sheet_regions WHERE sheet_id = $1")
-                .bind(sheet_pk)
-                .execute(&mut *tx)
-                .await?;
-            if let Some(regions) = &sheet.regions {
-                for (region, available) in regions {
-                    sqlx::query(
-                        "INSERT INTO sheet_regions (sheet_id, region, available) \
-                         VALUES ($1, $2, $3)",
-                    )
-                    .bind(sheet_pk)
-                    .bind(region)
-                    .bind(available)
-                    .execute(&mut *tx)
-                    .await?;
-                }
-            }
-
-            sqlx::query("DELETE FROM sheet_region_overrides WHERE sheet_id = $1")
-                .bind(sheet_pk)
-                .execute(&mut *tx)
-                .await?;
-            if let Some(overrides) = &sheet.region_overrides {
-                for (region, ov) in overrides {
-                    sqlx::query(
-                        "INSERT INTO sheet_region_overrides \
-                         (sheet_id, region, level, level_value, internal_level, \
-                          internal_level_value, note_designer) \
-                         VALUES ($1, $2, $3, $4, $5, $6, $7)",
-                    )
-                    .bind(sheet_pk)
-                    .bind(region)
-                    .bind(&ov.level)
-                    .bind(ov.level_value)
-                    .bind(&ov.internal_level)
-                    .bind(ov.internal_level_value)
-                    .bind(&ov.note_designer)
-                    .execute(&mut *tx)
-                    .await?;
+                    stats.sheets_updated += 1;
                 }
             }
         }
@@ -365,8 +373,195 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
     .await?
     .len() as i64;
 
+    stats.songs_vanished_total = sqlx::query_scalar("SELECT COUNT(*) FROM deleted_songs")
+        .fetch_one(&mut *tx)
+        .await?;
+    stats.sheets_vanished_total = sqlx::query_scalar("SELECT COUNT(*) FROM deleted_sheets")
+        .fetch_one(&mut *tx)
+        .await?;
+
+    // The whole point of this feature is that a run which changed nothing costs
+    // clients nothing. `catalog_meta.revision` feeds the /catalog ETag
+    // (sha256(revision:updateTime)), so advancing it on a no-op run would make
+    // every client refetch 4.7MB daily — the exact cost being removed here.
+    // Rows were still *stamped* with `revision`; only this write-back is
+    // conditional.
+    //
+    // GREATEST is belt-and-braces: the singleton is locked for this whole
+    // transaction (see the upsert at the top), so `revision` cannot have moved
+    // under us — but a future refactor that drops the lock would otherwise turn
+    // this into a silent regression of another writer's bump.
+    stats.revision_advanced = stats.changed_anything() || lookups_changed;
+    if stats.revision_advanced {
+        sqlx::query("UPDATE catalog_meta SET revision = GREATEST(revision, $1)")
+            .bind(revision)
+            .execute(&mut *tx)
+            .await?;
+    }
+
     tx.commit().await?;
     Ok(stats)
+}
+
+/// md5 over a lookup table's whole contents, in `ordinal` order. Used only to
+/// compare the table against itself before and after a wholesale replace, so
+/// the exact row-text format does not matter — only that it is stable within
+/// one transaction.
+async fn lookup_digest(conn: &mut PgConnection, table: &str) -> Result<String, sqlx::Error> {
+    // A table name cannot be a bind parameter. `table` is one of the five
+    // literals in LOOKUP_TABLES and never reaches this function from a request
+    // or from the payload, so the interpolation is audited-safe — which is
+    // exactly what AssertSqlSafe asserts.
+    let sql = format!(
+        "SELECT COALESCE(md5(string_agg(t::text, '|' ORDER BY t.ordinal)), '') FROM {table} t"
+    );
+    sqlx::query_scalar(sqlx::AssertSqlSafe(sql))
+        .fetch_one(conn)
+        .await
+}
+
+/// A sheet's three sub-tables as stored, shaped to compare directly against the
+/// upstream payload.
+struct StoredSubTables {
+    sheet_id: i64,
+    note_counts: BTreeMap<String, Option<i64>>,
+    regions: BTreeMap<String, bool>,
+    region_overrides: BTreeMap<String, RawOverride>,
+}
+
+/// Reads the sheet's id and all three sub-tables in **one** round trip, as
+/// jsonb aggregates decoded into the same types the payload parses into.
+///
+/// Comparing typed maps in Rust rather than digesting both sides in SQL is
+/// deliberate: a digest would have to reproduce Postgres's float and NULL text
+/// formatting byte-for-byte to agree, and any drift there reads as "changed"
+/// forever. jsonb round-trips `double precision` through its shortest
+/// round-trip representation, so `==` on the decoded `f64` is exact.
+async fn read_sub_tables(
+    conn: &mut PgConnection,
+    sheet_expr: &str,
+) -> Result<StoredSubTables, sqlx::Error> {
+    type Row = (
+        i64,
+        Json<BTreeMap<String, Option<i64>>>,
+        Json<BTreeMap<String, bool>>,
+        Json<BTreeMap<String, RawOverride>>,
+    );
+
+    let (sheet_id, note_counts, regions, region_overrides): Row = sqlx::query_as(
+        "SELECT s.id, \
+           (SELECT COALESCE(jsonb_object_agg(n.key, n.value), '{}'::jsonb) \
+              FROM sheet_note_counts n WHERE n.sheet_id = s.id), \
+           (SELECT COALESCE(jsonb_object_agg(r.region, r.available), '{}'::jsonb) \
+              FROM sheet_regions r WHERE r.sheet_id = s.id), \
+           (SELECT COALESCE(jsonb_object_agg(o.region, jsonb_build_object( \
+                     'level', o.level, 'levelValue', o.level_value, \
+                     'internalLevel', o.internal_level, \
+                     'internalLevelValue', o.internal_level_value, \
+                     'noteDesigner', o.note_designer)), '{}'::jsonb) \
+              FROM sheet_region_overrides o WHERE o.sheet_id = s.id) \
+         FROM sheets s WHERE s.sheet_expr = $1",
+    )
+    .bind(sheet_expr)
+    .fetch_one(conn)
+    .await?;
+
+    Ok(StoredSubTables {
+        sheet_id,
+        note_counts: note_counts.0,
+        regions: regions.0,
+        region_overrides: region_overrides.0,
+    })
+}
+
+/// An absent map upstream and an empty one are indistinguishable once stored —
+/// both are zero rows — so they must compare equal, or every sheet without
+/// `regionOverrides` would look changed on every run.
+fn maps_differ<V: PartialEq>(
+    stored: &BTreeMap<String, V>,
+    incoming: &Option<BTreeMap<String, V>>,
+) -> bool {
+    match incoming {
+        Some(incoming) => stored != incoming,
+        None => !stored.is_empty(),
+    }
+}
+
+fn sub_tables_differ(stored: &StoredSubTables, sheet: &RawSheet) -> bool {
+    maps_differ(&stored.note_counts, &sheet.note_counts)
+        || maps_differ(&stored.regions, &sheet.regions)
+        || maps_differ(&stored.region_overrides, &sheet.region_overrides)
+}
+
+/// Sub-tables key off `sheet_id` with no natural key of their own, so they are
+/// replaced per sheet.
+///
+/// **Every DELETE here is scoped to one `sheet_id` and must stay that way.** A
+/// bare `DELETE FROM` on any of these three would be a different statement with
+/// a very different blast radius. Scoped like this the deletes cascade to
+/// nothing: `charts` hangs off `sheets`, which this module never deletes.
+async fn replace_sub_tables(
+    conn: &mut PgConnection,
+    sheet_id: i64,
+    sheet: &RawSheet,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM sheet_note_counts WHERE sheet_id = $1")
+        .bind(sheet_id)
+        .execute(&mut *conn)
+        .await?;
+    if let Some(counts) = &sheet.note_counts {
+        for (key, value) in counts {
+            sqlx::query("INSERT INTO sheet_note_counts (sheet_id, key, value) VALUES ($1, $2, $3)")
+                .bind(sheet_id)
+                .bind(key)
+                .bind(value)
+                .execute(&mut *conn)
+                .await?;
+        }
+    }
+
+    sqlx::query("DELETE FROM sheet_regions WHERE sheet_id = $1")
+        .bind(sheet_id)
+        .execute(&mut *conn)
+        .await?;
+    if let Some(regions) = &sheet.regions {
+        for (region, available) in regions {
+            sqlx::query(
+                "INSERT INTO sheet_regions (sheet_id, region, available) VALUES ($1, $2, $3)",
+            )
+            .bind(sheet_id)
+            .bind(region)
+            .bind(available)
+            .execute(&mut *conn)
+            .await?;
+        }
+    }
+
+    sqlx::query("DELETE FROM sheet_region_overrides WHERE sheet_id = $1")
+        .bind(sheet_id)
+        .execute(&mut *conn)
+        .await?;
+    if let Some(overrides) = &sheet.region_overrides {
+        for (region, ov) in overrides {
+            sqlx::query(
+                "INSERT INTO sheet_region_overrides \
+                 (sheet_id, region, level, level_value, internal_level, \
+                  internal_level_value, note_designer) \
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)",
+            )
+            .bind(sheet_id)
+            .bind(region)
+            .bind(&ov.level)
+            .bind(ov.level_value)
+            .bind(&ov.internal_level)
+            .bind(ov.internal_level_value)
+            .bind(&ov.note_designer)
+            .execute(&mut *conn)
+            .await?;
+        }
+    }
+
+    Ok(())
 }
 
 /// Refuse implausible payloads before any write. The failure this guards is a
@@ -377,6 +572,12 @@ pub fn sanity_check(incoming: usize, current: i64) -> Result<(), String> {
         return Err("upstream returned zero songs".to_string());
     }
     if current > 0 {
+        // `current` is `COUNT(*) FROM songs`, and this sync never deletes, so
+        // that count only ever grows: the floor ratchets. A single 15% upstream
+        // loss is caught, but a loss spread over enough runs to stay inside 10%
+        // each time is absorbed silently, and the floor then sits permanently
+        // above the true upstream size. Deliberate for now — tightening it needs
+        // a notion of "expected current size" the schema does not carry.
         let floor = (current as f64 * 0.9).floor() as usize;
         if incoming <= floor {
             return Err(format!(
@@ -430,6 +631,33 @@ mod tests {
         Ok(())
     }
 
+    // The live feed's real updateTime shape. Before this, parse_date returned
+    // None for it and the fallback stamped Utc::now() on every single run, so
+    // the ETag changed daily and no test noticed.
+    #[sqlx::test]
+    async fn the_live_update_time_is_stored_not_replaced_with_now(
+        pool: PgPool,
+    ) -> sqlx::Result<()> {
+        let data = payload(r#"{ "updateTime": "2026-09-11T01:24:07.945Z" }"#);
+        apply(&pool, &data).await?;
+
+        let stored: String = sqlx::query_scalar(
+            "SELECT to_char(update_time AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS') \
+             FROM catalog_meta",
+        )
+        .fetch_one(&pool)
+        .await?;
+        assert_eq!(stored, "2026-09-11T01:24:07");
+        Ok(())
+    }
+
+    async fn catalog_meta_revision(pool: &PgPool) -> i64 {
+        sqlx::query_scalar("SELECT revision FROM catalog_meta LIMIT 1")
+            .fetch_one(pool)
+            .await
+            .unwrap()
+    }
+
     #[sqlx::test]
     async fn second_sync_advances_the_revision_and_replaces_lookups(
         pool: PgPool,
@@ -440,6 +668,10 @@ mod tests {
         let second = payload(r#"{ "categories": [{ "category": "gamemusic" }] }"#);
         let stats = apply(&pool, &second).await?;
         assert_eq!(stats.revision, 2);
+        // A lookup table changed, so the counter must move even though no song
+        // or sheet did — the lookups are what /catalog's filter UI is built from.
+        assert!(stats.revision_advanced);
+        assert_eq!(catalog_meta_revision(&pool).await, 2);
 
         let categories: Vec<(String,)> =
             sqlx::query_as("SELECT category FROM categories ORDER BY ordinal")
@@ -506,7 +738,7 @@ mod tests {
             "unchanged sheet must not be updated"
         );
 
-        // Still revision 1 even though catalog_meta is now at 2.
+        // Still revision 1 — and so is catalog_meta, see the test below.
         let song_revision: i64 =
             sqlx::query_scalar("SELECT revision FROM songs WHERE song_id = 'Example'")
                 .fetch_one(&pool)
@@ -538,6 +770,299 @@ mod tests {
         assert_eq!(title, "Renamed Song");
         assert_eq!(revision, 2);
 
+        Ok(())
+    }
+
+    // The /catalog ETag is sha256(revision:updateTime). Advancing `revision` on
+    // a run that changed nothing makes every client refetch 4.7MB a day, which
+    // is the exact cost this feature exists to remove.
+    #[sqlx::test]
+    async fn an_identical_second_sync_leaves_catalog_meta_revision_alone(
+        pool: PgPool,
+    ) -> sqlx::Result<()> {
+        apply(&pool, &payload(ONE_SONG)).await?;
+        let after_first = catalog_meta_revision(&pool).await;
+        assert_eq!(after_first, 1);
+
+        let stats = apply(&pool, &payload(ONE_SONG)).await?;
+        assert!(!stats.revision_advanced);
+        assert_eq!(
+            catalog_meta_revision(&pool).await,
+            after_first,
+            "a no-op run must not churn the ETag"
+        );
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn a_changed_row_does_advance_catalog_meta_revision(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(ONE_SONG)).await?;
+        let retitled = ONE_SONG.replace("Example Song", "Renamed Song");
+        let stats = apply(&pool, &payload(&retitled)).await?;
+
+        assert!(stats.revision_advanced);
+        assert_eq!(catalog_meta_revision(&pool).await, 2);
+        Ok(())
+    }
+
+    // A concurrent writer (apply_chart_revision, or a second sync) must not have
+    // its bump overwritten by this one's read-then-write. The singleton row is
+    // locked for the whole transaction, so the interleaving is serialised rather
+    // than lost: the later run reads the committed value and builds on it.
+    #[sqlx::test]
+    async fn a_concurrent_bump_is_not_regressed(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(ONE_SONG)).await?;
+        assert_eq!(catalog_meta_revision(&pool).await, 1);
+
+        // Stand in for any other writer on the shared counter.
+        sqlx::query("UPDATE catalog_meta SET revision = revision + 1")
+            .execute(&pool)
+            .await?;
+        assert_eq!(catalog_meta_revision(&pool).await, 2);
+
+        let retitled = ONE_SONG.replace("Example Song", "Renamed Song");
+        apply(&pool, &payload(&retitled)).await?;
+
+        assert_eq!(
+            catalog_meta_revision(&pool).await,
+            3,
+            "the sync must build on the other writer's value, not overwrite it"
+        );
+        let song_revision: i64 =
+            sqlx::query_scalar("SELECT revision FROM songs WHERE song_id = 'Example'")
+                .fetch_one(&pool)
+                .await?;
+        assert_eq!(song_revision, 3, "the row must carry a fetchable revision");
+        Ok(())
+    }
+
+    const SONG_WITH_SUB_TABLES: &str = r#"{
+        "songs": [{
+            "songId": "Example",
+            "title": "Example Song",
+            "sheets": [{
+                "type": "dx", "difficulty": "master", "level": "14+",
+                "noteCounts": { "tap": 100, "total": 400, "touch": null },
+                "regions": { "jp": true, "intl": false },
+                "regionOverrides": { "intl": { "level": "14", "levelValue": 14.0 } }
+            }]
+        }]
+    }"#;
+
+    async fn note_counts(pool: &PgPool) -> Vec<(String, Option<i32>)> {
+        sqlx::query_as("SELECT key, value FROM sheet_note_counts ORDER BY key")
+            .fetch_all(pool)
+            .await
+            .unwrap()
+    }
+
+    async fn sheet_revision(pool: &PgPool) -> i64 {
+        sqlx::query_scalar("SELECT revision FROM sheets")
+            .fetch_one(pool)
+            .await
+            .unwrap()
+    }
+
+    // The regression this guards: noteCounts / regions / regionOverrides change
+    // upstream *independently* of the scalar columns in the sheets upsert's
+    // IS DISTINCT FROM guard. Skipping the sub-tables whenever that guard
+    // suppressed the update froze them at first insert — note counts backfilled
+    // days after a song ships would never land, and /catalog serves all three.
+    #[sqlx::test]
+    async fn a_sub_table_only_change_is_applied_and_bumps_the_sheet(
+        pool: PgPool,
+    ) -> sqlx::Result<()> {
+        apply(&pool, &payload(SONG_WITH_SUB_TABLES)).await?;
+        assert_eq!(sheet_revision(&pool).await, 1);
+
+        // Only noteCounts differs; every scalar column is byte-identical.
+        let backfilled = SONG_WITH_SUB_TABLES.replace(r#""tap": 100"#, r#""tap": 123"#);
+        let stats = apply(&pool, &payload(&backfilled)).await?;
+
+        assert_eq!(
+            stats.sheets_updated, 1,
+            "a sub-table-only change is still a change to the sheet"
+        );
+        assert_eq!(
+            note_counts(&pool).await,
+            vec![
+                ("tap".to_string(), Some(123)),
+                ("total".to_string(), Some(400)),
+                ("touch".to_string(), None),
+            ]
+        );
+        // Applied but not visible to /sync/delta would be a half-fix.
+        assert_eq!(sheet_revision(&pool).await, 2);
+        assert_eq!(catalog_meta_revision(&pool).await, 2);
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn a_regions_only_change_is_applied_and_bumps_the_sheet(
+        pool: PgPool,
+    ) -> sqlx::Result<()> {
+        apply(&pool, &payload(SONG_WITH_SUB_TABLES)).await?;
+
+        let released = SONG_WITH_SUB_TABLES.replace(r#""intl": false"#, r#""intl": true"#);
+        let stats = apply(&pool, &payload(&released)).await?;
+
+        assert_eq!(stats.sheets_updated, 1);
+        let available: bool =
+            sqlx::query_scalar("SELECT available FROM sheet_regions WHERE region = 'intl'")
+                .fetch_one(&pool)
+                .await?;
+        assert!(available, "a region flipping to available must land");
+        assert_eq!(sheet_revision(&pool).await, 2);
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn a_region_override_only_change_is_applied_and_bumps_the_sheet(
+        pool: PgPool,
+    ) -> sqlx::Result<()> {
+        apply(&pool, &payload(SONG_WITH_SUB_TABLES)).await?;
+
+        let rerated =
+            SONG_WITH_SUB_TABLES.replace(r#""levelValue": 14.0"#, r#""levelValue": 14.3"#);
+        let stats = apply(&pool, &payload(&rerated)).await?;
+
+        assert_eq!(stats.sheets_updated, 1);
+        let level_value: Option<f64> = sqlx::query_scalar(
+            "SELECT level_value FROM sheet_region_overrides WHERE region = 'intl'",
+        )
+        .fetch_one(&pool)
+        .await?;
+        assert_eq!(level_value, Some(14.3));
+        assert_eq!(sheet_revision(&pool).await, 2);
+        Ok(())
+    }
+
+    // The other half of the requirement: re-writing identical sub-table content
+    // must bump nothing. A float, a NULL note count and an absent-vs-empty map
+    // are the three places a naive comparison reports a spurious difference.
+    #[sqlx::test]
+    async fn an_identical_sub_table_rerun_bumps_nothing(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(SONG_WITH_SUB_TABLES)).await?;
+        let stats = apply(&pool, &payload(SONG_WITH_SUB_TABLES)).await?;
+
+        assert_eq!(stats.sheets_updated, 0);
+        assert_eq!(stats.songs_updated, 0);
+        assert!(!stats.revision_advanced);
+        assert_eq!(sheet_revision(&pool).await, 1);
+        assert_eq!(catalog_meta_revision(&pool).await, 1);
+        Ok(())
+    }
+
+    // ONE_SONG carries no sub-table maps at all. Absent upstream and empty in
+    // the database are indistinguishable once stored, so they must compare equal
+    // — otherwise every sheet without regionOverrides looks changed every run.
+    #[sqlx::test]
+    async fn absent_sub_tables_do_not_look_like_a_change(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(ONE_SONG)).await?;
+        let stats = apply(&pool, &payload(ONE_SONG)).await?;
+
+        assert_eq!(stats.sheets_updated, 0);
+        assert!(!stats.revision_advanced);
+        Ok(())
+    }
+
+    // Removing a note count upstream must remove the row, not leave it behind.
+    #[sqlx::test]
+    async fn a_removed_sub_table_entry_is_dropped(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(SONG_WITH_SUB_TABLES)).await?;
+
+        let trimmed = SONG_WITH_SUB_TABLES.replace(r#", "touch": null"#, "");
+        apply(&pool, &payload(&trimmed)).await?;
+
+        assert_eq!(
+            note_counts(&pool).await,
+            vec![
+                ("tap".to_string(), Some(100)),
+                ("total".to_string(), Some(400)),
+            ]
+        );
+        Ok(())
+    }
+
+    // A genuinely changed row must not keep a stale updated_at.
+    #[sqlx::test]
+    async fn a_changed_row_refreshes_updated_at(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(ONE_SONG)).await?;
+        sqlx::query("UPDATE songs SET updated_at = now() - interval '10 days'")
+            .execute(&pool)
+            .await?;
+        sqlx::query("UPDATE sheets SET updated_at = now() - interval '10 days'")
+            .execute(&pool)
+            .await?;
+
+        let retitled = ONE_SONG
+            .replace("Example Song", "Renamed Song")
+            .replace(r#""level": "14+""#, r#""level": "15""#);
+        apply(&pool, &payload(&retitled)).await?;
+
+        let song_is_fresh: bool =
+            sqlx::query_scalar("SELECT updated_at > now() - interval '1 minute' FROM songs")
+                .fetch_one(&pool)
+                .await?;
+        let sheet_is_fresh: bool =
+            sqlx::query_scalar("SELECT updated_at > now() - interval '1 minute' FROM sheets")
+                .fetch_one(&pool)
+                .await?;
+        assert!(song_is_fresh, "songs.updated_at must be refreshed");
+        assert!(sheet_is_fresh, "sheets.updated_at must be refreshed");
+        Ok(())
+    }
+
+    // "vanished 0" reads as "nothing is missing"; the truth after the first miss
+    // is "nothing newly went missing". Both numbers have to be reportable.
+    #[sqlx::test]
+    async fn vanished_counts_report_new_and_cumulative(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(ONE_SONG)).await?;
+
+        let first_miss = apply(&pool, &payload(r#"{ "songs": [] }"#)).await?;
+        assert_eq!(first_miss.songs_vanished, 1);
+        assert_eq!(first_miss.songs_vanished_total, 1);
+
+        let second_miss = apply(&pool, &payload(r#"{ "songs": [] }"#)).await?;
+        assert_eq!(second_miss.songs_vanished, 0, "nothing newly vanished");
+        assert_eq!(
+            second_miss.songs_vanished_total, 1,
+            "but one row is still missing upstream"
+        );
+        assert_eq!(second_miss.sheets_vanished_total, 1);
+        Ok(())
+    }
+
+    // The inviolable constraint: no code path may DELETE from or cascade to
+    // songs, sheets or charts. Sub-table reconciliation now runs for every sheet
+    // in the payload, including unchanged ones, so this is the path that guards
+    // its deletes staying scoped to a single sheet_id.
+    #[sqlx::test]
+    async fn reconciling_sub_tables_never_touches_chart_text(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(SONG_WITH_SUB_TABLES)).await?;
+
+        let sheet_id: i64 = sqlx::query_scalar("SELECT id FROM sheets")
+            .fetch_one(&pool)
+            .await?;
+        sqlx::query("INSERT INTO charts (sheet_id, sheet_expr, content) VALUES ($1, $2, $3)")
+            .bind(sheet_id)
+            .bind("Example|dx|master")
+            .bind("&title=Example")
+            .execute(&pool)
+            .await?;
+
+        // A sub-table-only change, then an identical re-run.
+        let backfilled = SONG_WITH_SUB_TABLES.replace(r#""tap": 100"#, r#""tap": 123"#);
+        apply(&pool, &payload(&backfilled)).await?;
+        apply(&pool, &payload(&backfilled)).await?;
+
+        let charts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM charts")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(
+            charts, 1,
+            "chart text must survive sub-table reconciliation"
+        );
         Ok(())
     }
 
