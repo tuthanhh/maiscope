@@ -6,7 +6,7 @@
 //! deleting a song destroys the chart text hanging off it —
 //! see docs/work/catalog-sync/spec.md.
 
-use crate::upstream::{RawData, parse_date};
+use crate::upstream::{RawData, parse_date, sheet_expr};
 use sqlx::PgPool;
 use sqlx::types::chrono::{DateTime, Utc};
 
@@ -123,6 +123,201 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
             .await?;
     }
 
+    // Songs and sheets are matched on their natural keys — songs.song_id and
+    // sheets.sheet_expr, both UNIQUE. The `WHERE ... IS DISTINCT FROM` guard on
+    // DO UPDATE is what keeps `revision` still for untouched rows: without it
+    // every sync would mark every row changed and /sync/delta would return the
+    // entire catalog every time.
+    for (si, song) in data.songs.iter().enumerate() {
+        // A NULL song_id cannot be matched on a later run (UNIQUE permits many
+        // NULLs), so such a row would be re-inserted forever. None exist upstream
+        // today; skip and count so it shows up in the log if that changes.
+        let Some(song_id) = song.song_id.as_deref() else {
+            stats.songs_skipped_no_id += 1;
+            continue;
+        };
+
+        let song_pk: Option<i64> = sqlx::query_as::<_, (i64, bool)>(
+            "INSERT INTO songs \
+             (song_id, song_no, category, title, artist, bpm, image_name, version, \
+              release_date, is_new, is_locked, comment, source_index, revision) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) \
+             ON CONFLICT (song_id) DO UPDATE SET \
+               song_no = EXCLUDED.song_no, category = EXCLUDED.category, \
+               title = EXCLUDED.title, artist = EXCLUDED.artist, bpm = EXCLUDED.bpm, \
+               image_name = EXCLUDED.image_name, version = EXCLUDED.version, \
+               release_date = EXCLUDED.release_date, is_new = EXCLUDED.is_new, \
+               is_locked = EXCLUDED.is_locked, comment = EXCLUDED.comment, \
+               source_index = EXCLUDED.source_index, revision = EXCLUDED.revision \
+             WHERE ROW(songs.song_no, songs.category, songs.title, songs.artist, songs.bpm, \
+                       songs.image_name, songs.version, songs.release_date, songs.is_new, \
+                       songs.is_locked, songs.comment, songs.source_index) \
+                   IS DISTINCT FROM \
+                   ROW(EXCLUDED.song_no, EXCLUDED.category, EXCLUDED.title, EXCLUDED.artist, \
+                       EXCLUDED.bpm, EXCLUDED.image_name, EXCLUDED.version, \
+                       EXCLUDED.release_date, EXCLUDED.is_new, EXCLUDED.is_locked, \
+                       EXCLUDED.comment, EXCLUDED.source_index) \
+             RETURNING id, (xmax = 0) AS inserted",
+        )
+        .bind(song_id)
+        .bind(si as i32 + 1)
+        .bind(&song.category)
+        .bind(&song.title)
+        .bind(&song.artist)
+        .bind(song.bpm)
+        .bind(&song.image_name)
+        .bind(&song.version)
+        .bind(parse_date(&song.release_date))
+        .bind(song.is_new)
+        .bind(song.is_locked)
+        .bind(&song.comment)
+        .bind(si as i32)
+        .bind(revision)
+        .fetch_optional(&mut *tx)
+        .await?
+        .map(|(id, inserted)| {
+            if inserted {
+                stats.songs_inserted += 1;
+            } else {
+                stats.songs_updated += 1;
+            }
+            id
+        });
+
+        // A suppressed DO UPDATE returns no row, so re-read the id to reach the
+        // sheets. This is the unchanged-song path and stays a single indexed
+        // lookup on a UNIQUE column.
+        let song_pk: i64 = match song_pk {
+            Some(id) => id,
+            None => {
+                sqlx::query_scalar("SELECT id FROM songs WHERE song_id = $1")
+                    .bind(song_id)
+                    .fetch_one(&mut *tx)
+                    .await?
+            }
+        };
+
+        for (shi, sheet) in song.sheets.iter().enumerate() {
+            let expr = sheet_expr(&song.song_id, &sheet.r#type, &sheet.difficulty);
+
+            let sheet_pk: Option<i64> = sqlx::query_as::<_, (i64, bool)>(
+                "INSERT INTO sheets \
+                 (song_id_fk, sheet_expr, type, difficulty, level, level_value, \
+                  internal_level, internal_level_value, note_designer, is_special, \
+                  source_index, revision) \
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) \
+                 ON CONFLICT (sheet_expr) DO UPDATE SET \
+                   song_id_fk = EXCLUDED.song_id_fk, type = EXCLUDED.type, \
+                   difficulty = EXCLUDED.difficulty, level = EXCLUDED.level, \
+                   level_value = EXCLUDED.level_value, \
+                   internal_level = EXCLUDED.internal_level, \
+                   internal_level_value = EXCLUDED.internal_level_value, \
+                   note_designer = EXCLUDED.note_designer, \
+                   is_special = EXCLUDED.is_special, source_index = EXCLUDED.source_index, \
+                   revision = EXCLUDED.revision \
+                 WHERE ROW(sheets.song_id_fk, sheets.type, sheets.difficulty, sheets.level, \
+                           sheets.level_value, sheets.internal_level, \
+                           sheets.internal_level_value, sheets.note_designer, \
+                           sheets.is_special, sheets.source_index) \
+                       IS DISTINCT FROM \
+                       ROW(EXCLUDED.song_id_fk, EXCLUDED.type, EXCLUDED.difficulty, \
+                           EXCLUDED.level, EXCLUDED.level_value, EXCLUDED.internal_level, \
+                           EXCLUDED.internal_level_value, EXCLUDED.note_designer, \
+                           EXCLUDED.is_special, EXCLUDED.source_index) \
+                 RETURNING id, (xmax = 0) AS inserted",
+            )
+            .bind(song_pk)
+            .bind(&expr)
+            .bind(&sheet.r#type)
+            .bind(&sheet.difficulty)
+            .bind(&sheet.level)
+            .bind(sheet.level_value)
+            .bind(&sheet.internal_level)
+            .bind(sheet.internal_level_value)
+            .bind(&sheet.note_designer)
+            .bind(sheet.is_special)
+            .bind(shi as i32)
+            .bind(revision)
+            .fetch_optional(&mut *tx)
+            .await?
+            .map(|(id, inserted)| {
+                if inserted {
+                    stats.sheets_inserted += 1;
+                } else {
+                    stats.sheets_updated += 1;
+                }
+                id
+            });
+
+            let Some(sheet_pk) = sheet_pk else {
+                // Unchanged sheet: its sub-tables are unchanged too.
+                continue;
+            };
+
+            // Sub-tables key off sheet_id with no natural key of their own, so
+            // they are replaced per sheet. Deleting from these cascades to
+            // nothing — `charts` hangs off `sheets`, which is never deleted.
+            sqlx::query("DELETE FROM sheet_note_counts WHERE sheet_id = $1")
+                .bind(sheet_pk)
+                .execute(&mut *tx)
+                .await?;
+            if let Some(counts) = &sheet.note_counts {
+                for (key, value) in counts {
+                    sqlx::query(
+                        "INSERT INTO sheet_note_counts (sheet_id, key, value) VALUES ($1, $2, $3)",
+                    )
+                    .bind(sheet_pk)
+                    .bind(key)
+                    .bind(value)
+                    .execute(&mut *tx)
+                    .await?;
+                }
+            }
+
+            sqlx::query("DELETE FROM sheet_regions WHERE sheet_id = $1")
+                .bind(sheet_pk)
+                .execute(&mut *tx)
+                .await?;
+            if let Some(regions) = &sheet.regions {
+                for (region, available) in regions {
+                    sqlx::query(
+                        "INSERT INTO sheet_regions (sheet_id, region, available) \
+                         VALUES ($1, $2, $3)",
+                    )
+                    .bind(sheet_pk)
+                    .bind(region)
+                    .bind(available)
+                    .execute(&mut *tx)
+                    .await?;
+                }
+            }
+
+            sqlx::query("DELETE FROM sheet_region_overrides WHERE sheet_id = $1")
+                .bind(sheet_pk)
+                .execute(&mut *tx)
+                .await?;
+            if let Some(overrides) = &sheet.region_overrides {
+                for (region, ov) in overrides {
+                    sqlx::query(
+                        "INSERT INTO sheet_region_overrides \
+                         (sheet_id, region, level, level_value, internal_level, \
+                          internal_level_value, note_designer) \
+                         VALUES ($1, $2, $3, $4, $5, $6, $7)",
+                    )
+                    .bind(sheet_pk)
+                    .bind(region)
+                    .bind(&ov.level)
+                    .bind(ov.level_value)
+                    .bind(&ov.internal_level)
+                    .bind(ov.internal_level_value)
+                    .bind(&ov.note_designer)
+                    .execute(&mut *tx)
+                    .await?;
+                }
+            }
+        }
+    }
+
     tx.commit().await?;
     Ok(stats)
 }
@@ -192,6 +387,135 @@ mod tests {
                 .fetch_one(&pool)
                 .await?;
         assert_eq!(last_full, 0);
+
+        Ok(())
+    }
+
+    const ONE_SONG: &str = r#"{
+        "songs": [{
+            "songId": "Example",
+            "title": "Example Song",
+            "artist": "Someone",
+            "bpm": 180.0,
+            "sheets": [{
+                "type": "dx", "difficulty": "master",
+                "level": "14+", "levelValue": 14.7
+            }]
+        }]
+    }"#;
+
+    #[sqlx::test]
+    async fn inserts_songs_and_sheets_on_first_sync(pool: PgPool) -> sqlx::Result<()> {
+        let stats = apply(&pool, &payload(ONE_SONG)).await?;
+
+        assert_eq!(stats.songs_inserted, 1);
+        assert_eq!(stats.sheets_inserted, 1);
+        assert_eq!(stats.songs_updated, 0);
+
+        let (title, revision): (String, i64) =
+            sqlx::query_as("SELECT title, revision FROM songs WHERE song_id = 'Example'")
+                .fetch_one(&pool)
+                .await?;
+        assert_eq!(title, "Example Song");
+        assert_eq!(revision, 1);
+
+        let (expr, sheet_revision): (String, i64) =
+            sqlx::query_as("SELECT sheet_expr, revision FROM sheets")
+                .fetch_one(&pool)
+                .await?;
+        assert_eq!(expr, "Example|dx|master");
+        assert_eq!(sheet_revision, 1);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn identical_second_sync_bumps_no_row_revisions(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(ONE_SONG)).await?;
+        let stats = apply(&pool, &payload(ONE_SONG)).await?;
+
+        assert_eq!(stats.songs_inserted, 0);
+        assert_eq!(stats.songs_updated, 0, "unchanged song must not be updated");
+        assert_eq!(
+            stats.sheets_updated, 0,
+            "unchanged sheet must not be updated"
+        );
+
+        // Still revision 1 even though catalog_meta is now at 2.
+        let song_revision: i64 =
+            sqlx::query_scalar("SELECT revision FROM songs WHERE song_id = 'Example'")
+                .fetch_one(&pool)
+                .await?;
+        assert_eq!(song_revision, 1);
+
+        let sheet_revision: i64 = sqlx::query_scalar("SELECT revision FROM sheets")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(sheet_revision, 1);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn a_changed_field_bumps_only_that_row(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(ONE_SONG)).await?;
+
+        let retitled = ONE_SONG.replace("Example Song", "Renamed Song");
+        let stats = apply(&pool, &payload(&retitled)).await?;
+
+        assert_eq!(stats.songs_updated, 1);
+        assert_eq!(stats.sheets_updated, 0, "the sheet did not change");
+
+        let (title, revision): (String, i64) =
+            sqlx::query_as("SELECT title, revision FROM songs WHERE song_id = 'Example'")
+                .fetch_one(&pool)
+                .await?;
+        assert_eq!(title, "Renamed Song");
+        assert_eq!(revision, 2);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn songs_without_an_id_are_skipped_and_counted(pool: PgPool) -> sqlx::Result<()> {
+        let data = payload(r#"{ "songs": [{ "title": "No Id", "sheets": [] }] }"#);
+        let stats = apply(&pool, &data).await?;
+
+        assert_eq!(stats.songs_skipped_no_id, 1);
+        assert_eq!(stats.songs_inserted, 0);
+
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM songs")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(count, 0);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn sync_never_touches_chart_text(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(ONE_SONG)).await?;
+
+        let sheet_id: i64 = sqlx::query_scalar("SELECT id FROM sheets")
+            .fetch_one(&pool)
+            .await?;
+        sqlx::query("INSERT INTO charts (sheet_id, sheet_expr, content) VALUES ($1, $2, $3)")
+            .bind(sheet_id)
+            .bind("Example|dx|master")
+            .bind("&title=Example")
+            .execute(&pool)
+            .await?;
+
+        // A sync where the song vanished entirely from upstream.
+        apply(&pool, &payload(r#"{ "songs": [] }"#)).await?;
+
+        let charts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM charts")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(
+            charts, 1,
+            "chart text must survive a song vanishing upstream"
+        );
 
         Ok(())
     }
