@@ -30,12 +30,12 @@ contributor-supplied audio. Unscheduled.
 | Feature | Status | Milestone |
 |---|---|---|
 | [production-v1](work/production-v1/spec.md) — umbrella | active | v1.0 |
-| ├ [repo-hygiene](work/repo-hygiene/spec.md) | planned | v1.0 |
+| ├ [repo-hygiene](work/repo-hygiene/spec.md) | shipped | v1.0 |
 | ├ [server-restructure](work/server-restructure/spec.md) | shipped | v1.0 |
-| ├ [build-and-deploy](work/build-and-deploy/spec.md) | planned | v1.0 |
-| ├ [prod-data-and-infra](work/prod-data-and-infra/spec.md) | planned | v1.0 |
+| ├ [build-and-deploy](work/build-and-deploy/spec.md) | active | v1.0 |
+| ├ [prod-data-and-infra](work/prod-data-and-infra/spec.md) | active | v1.0 |
 | ├ [catalog-sync](work/catalog-sync/spec.md) | planned | v1.0 |
-| ├ [web-delivery](work/web-delivery/spec.md) | planned | v1.0 |
+| ├ [web-delivery](work/web-delivery/spec.md) | active | v1.0 |
 | └ [test-foundation](work/test-foundation/spec.md) | planned | v1.0 |
 | [mobile-webview-spike](work/mobile-webview-spike/) | planned | v1.1 |
 | [docs-restructure](work/docs-restructure/spec.md) | shipped | — |

@@ -40,7 +40,7 @@ wasm-bindgen "$WASM_IN" --out-dir "$OUT_DIR" --target web
 
 # Sprite textures are loaded at runtime by Bevy's AssetServer, which on wasm
 # fetches them from "/assets/..." (see ASSET_ROOT in engine/src/plugins/mod.rs).
-# Vite/Tauri serve apps/host/public/ at the origin root, so mirror the sprites
+# Vite serves apps/host/public/ at the origin root, so mirror the sprites
 # there. (Charts + audio are NOT copied — they're pushed in as bytes via
 # wasm_bridge; only sprites go through the file-fetching AssetServer.)
 ASSETS_OUT="$WORKSPACE_DIR/apps/host/public/assets"

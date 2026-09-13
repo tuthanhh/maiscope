@@ -17,7 +17,7 @@ and bumps `last_full_reload_revision`, which invalidates every client's delta sy
 **Blocked by:** 01 (role split), `server-restructure/issues/09-chart-revision-service-fn.md`.
 No longer blocked by 02, which is obsolete.
 
-**Status:** in progress — `.github/workflows/seed-charts.yml` written 2026-09-13,
+**Status:** in-progress — `.github/workflows/seed-charts.yml` written 2026-09-13,
 cannot run until the setup below exists
 
 ## Assessment (2026-09-13)
@@ -62,23 +62,28 @@ so the failure is a deliberate override rather than a silent default.
   catalog matches nothing and would look like a clean no-op
 - Verifies the data tree is flat before touching the database, since a
   `<version>/<song>/` layout silently matches nothing
-- Installs the Postgres 17 client; the runner's bundled 16 client refuses Neon's
-  17 server
+- Installs the Postgres 18 client; the runner's bundled 16 client refuses Neon's
+  18 server
 
-- [ ] `seed-charts.yml` — `workflow_dispatch`, runs `seed_songs` from the private
+- [x] `seed-charts.yml` — `workflow_dispatch`, runs `seed_songs` from the private
       data repo's `maidata.txt` tree
-- [ ] `reload-catalog.yml` — `workflow_dispatch`, runs `ingest` from the vendored
-      snapshot. Requires a typed confirmation input; states in its description
-      that it truncates and invalidates delta sync.
-- [ ] Both use the lower-privilege Neon role (issue 01), not owner
-- [ ] Both take a `pg_dump` first (issue 05) and upload it as a run artifact
-- [ ] `seed-charts` fails the run on anything unmatched — both titles and
+- **`reload-catalog.yml` is dropped**, not built. `bin/ingest` no longer exists —
+      `apps/server/src/bin/` holds only `migrate`, `seed_chart`, `seed_songs`,
+      `sync_catalog` — replaced by the differential `bin/sync_catalog`, which never
+      truncates. See the header comment in `.github/workflows/seed-charts.yml`:
+      "There is no truncating counterpart to this workflow... Ticket 04's
+      `reload-catalog.yml` is obsolete for that reason."
+- [ ] Both use the lower-privilege Neon role (issue 01), not owner (needs human
+      setup: the private repo, `CHART_DATA_TOKEN`, `SEED_DATABASE_URL`, and issue
+      01 itself — the workflow falls back to `DATABASE_URL` today)
+- [x] Both take a `pg_dump` first (issue 05) and upload it as a run artifact
+- [x] `seed-charts` fails the run on anything unmatched — both titles and
       difficulties (`server-restructure` issue 09). This is the default: just
       don't pass `--allow-unmatched`, which is the only way to get exit `0`
       with unmatched entries.
-- [ ] Run summary posts counts: seeded / already-up-to-date / unmatched
+- [x] Run summary posts counts: seeded / already-up-to-date / unmatched
       difficulties / unmatched titles / skipped. Note `seeded` counts real
       writes only — a re-run over unchanged chart text reports `seeded 0` with
       everything under already-up-to-date, so a `0` here is normal, not a
       failure signal.
-- [ ] Neither workflow can be triggered by a push or a merge
+- [x] Neither workflow can be triggered by a push or a merge

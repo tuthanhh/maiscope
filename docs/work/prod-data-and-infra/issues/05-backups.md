@@ -15,7 +15,7 @@ directly to production — and the loss would be silent during a restore.
 
 **Blocked by:** 01
 
-**Status:** in progress — `.github/workflows/backup-database.yml` written
+**Status:** in-progress — `.github/workflows/backup-database.yml` written
 2026-09-13; restore rehearsed locally, not yet on Neon
 
 ## Assessment (2026-09-13)
@@ -51,12 +51,17 @@ decides whether "we can roll back the data" is a fact. Both need Neon access.
 **Scheduled an hour before `sync-catalog`** (18:00 vs 19:00 UTC), so the dump
 captures the state *before* the nightly sync rather than after it.
 
-- [ ] Scheduled workflow running `pg_dump` (custom format, compressed)
-- [ ] Destination decided and documented: private repo, or object storage with
+- [x] Scheduled workflow running `pg_dump` (custom format, compressed)
+- [x] Destination decided and documented: private repo, or object storage with
       credentials in repo secrets
-- [ ] Retention policy chosen (e.g. daily for 7, weekly for 8) and enforced
-- [ ] Pre-mutation dumps wired into issue 04's workflows
+- [x] Retention policy chosen (e.g. daily for 7, weekly for 8) and enforced
+- [x] Pre-mutation dumps wired into issue 04's workflows
 - [ ] **Restore rehearsed once for real** into a scratch Neon branch, and the
       procedure written into `runbook.md` — an untested backup is not a backup
+      (rehearsed locally 2026-09-13, per the Assessment above; the box says
+      Neon, and that has not happened yet)
 - [ ] Dump size and duration recorded; revisit when charts reach ~1500 songs
+      (size is recorded — 8.13MB against a fully seeded database, see the
+      Assessment above — but no duration is recorded anywhere in this ticket
+      or in `.github/workflows/backup-database.yml`)
 - [ ] Backup contents contain no secrets beyond the data itself

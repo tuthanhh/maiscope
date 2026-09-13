@@ -16,7 +16,7 @@ use bevy::{
 ///   against the page path, e.g. `/visualizer/assets/...`, and 404).
 ///
 /// The host build copies `engine/assets/sprites` into `apps/host/public/assets`
-/// (see `engine/build-wasm.sh`) so Vite/Tauri serve it at that URL.
+/// (see `scripts/build-wasm.sh`) so Vite serves it at that URL.
 #[cfg(target_arch = "wasm32")]
 const ASSET_ROOT: &str = "/assets";
 #[cfg(not(target_arch = "wasm32"))]

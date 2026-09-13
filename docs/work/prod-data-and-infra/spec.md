@@ -1,6 +1,6 @@
 # Spec — Production data and infrastructure
 
-**Status:** planned
+**Status:** active
 **Milestone:** v1.0
 **Parent:** [`production-v1`](../production-v1/spec.md)
 

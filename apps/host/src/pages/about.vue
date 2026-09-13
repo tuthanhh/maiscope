@@ -33,7 +33,7 @@ usePageTitle(() => ({ title: t("page-title.about") as string }));
 
         <h3 class="mv-about-h3">About The Project</h3>
         <p class="mv-about-p">
-            <strong>maiscope</strong> is a desktop song &amp; chart browser for
+            <strong>maiscope</strong> is a song &amp; chart browser for
             arcade rhythm games such as
             <a href="https://maimai.sega.jp/" target="_blank" rel="noopener"
                 >maimai</a
@@ -41,18 +41,14 @@ usePageTitle(() => ({ title: t("page-title.about") as string }));
             filter, and inspect charts across difficulties.
         </p>
         <p class="mv-about-p">
-            It is a desktop port of
+            It is a port of
             <a
                 href="https://github.com/zetaraku/arcade-songs"
                 target="_blank"
                 rel="noopener"
                 >zetaraku/arcade-songs</a
             >
-            — the original web app — wrapped in
-            <a href="https://tauri.app/" target="_blank" rel="noopener"
-                >Tauri</a
-            >
-            for a native window and bundled distribution.
+            — the original web app.
         </p>
 
         <h3 class="mv-about-h3">{{ t("page.about.author") }}</h3>

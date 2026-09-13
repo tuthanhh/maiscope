@@ -1,6 +1,6 @@
 # Spec — Repo hygiene
 
-**Status:** done
+**Status:** shipped
 **Milestone:** v1.0
 **Parent:** [`production-v1`](../production-v1/spec.md)
 

@@ -2,8 +2,9 @@
 
 ## Prerequisites
 
-- [Rust toolchain](https://rustup.rs/) (stable, edition 2024) with the
-  `wasm32-unknown-unknown` target
+- [Rust toolchain](https://rustup.rs/), pinned to `1.97` by `rust-toolchain.toml`
+  at the repo root — which also declares the `wasm32-unknown-unknown` target, so
+  `rustup show` installs everything the engine build needs
 - `wasm-bindgen-cli` **0.2.122 exactly** — it must match the `wasm-bindgen` crate
   version pinned in `engine/Cargo.toml`, or bindgen fails with a schema-version
   mismatch
@@ -34,6 +35,11 @@ which is where `migrations/` and `.env` live.
 Output lands in `apps/host/src/wasm/` (gitignored — rebuild after any change under
 `engine/`). Artifacts build through the root workspace, so they appear in the root
 `target/`, not `engine/target/`.
+
+This step is not optional for the frontend. `apps/host/src/composables/useEngine.ts`
+imports `~/wasm/maiscope_viewer.js` at type level, so `pnpm build` — which runs
+`vue-tsc --noEmit` first — fails without it, and the visualizer route fails at
+runtime. Skipping it leaves the rest of the app working.
 
 ## 3. Frontend
 
