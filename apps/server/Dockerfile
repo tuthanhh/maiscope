@@ -52,8 +52,8 @@ COPY . .
 # `--locked` fails the build rather than silently resolving newer patch versions,
 # so the image stays a function of the commit.
 #
-# Two binaries only. `ingest`, `seed_chart` and `seed_songs` are operator tools
-# and stay out of the serving image.
+# Two binaries only. `sync_catalog`, `seed_chart` and `seed_songs` are operator
+# tools and stay out of the serving image.
 RUN cargo build --release --locked -p server --bin server --bin migrate
 
 # --- Runtime ------------------------------------------------------------------
@@ -61,7 +61,7 @@ FROM debian:${DEBIAN_RELEASE}-slim AS runtime
 
 # sqlx bundles its own roots via `tls-rustls-ring-webpki`, but reqwest resolves
 # `rustls-platform-verifier`, which reads the OS trust store on Linux. Without
-# this, outbound HTTPS from `bin/ingest` and the sync route fails to verify.
+# this, outbound HTTPS from `bin/sync_catalog` and the sync route fails to verify.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*

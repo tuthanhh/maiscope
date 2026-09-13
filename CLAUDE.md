@@ -30,7 +30,7 @@ The frontend is a port of [zetaraku/arcade-songs](https://github.com/zetaraku/ar
 ```sh
 docker compose up -d               # Postgres on :5432 — from the repo root
 sqlx migrate run                   # the rest from apps/server
-cargo run --bin ingest             # load catalog into canonical tables
+cargo run --bin sync_catalog       # fetch upstream and apply the diff
 cargo run                          # API on :3000
 cargo run --bin seed_songs         # load chart text, keyed by sheet_expr
 ```
@@ -38,7 +38,7 @@ cargo run --bin seed_songs         # load chart text, keyed by sheet_expr
 #### Where infrastructure files live
 
 **Root describes the system; `apps/<x>/` describes how one app is built.** The
-dev database is shared by the server, `bin/ingest` and the test suite, so
+dev database is shared by the server, `bin/sync_catalog` and the test suite, so
 `docker-compose.yml` is at the root. The server image is one app's build, so
 `apps/server/Dockerfile` sits with it.
 
