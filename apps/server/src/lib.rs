@@ -3,3 +3,4 @@
 // separate crate root and can't see main.rs's module tree, so anything both
 // need to call has to live here instead.
 pub mod chart_revision;
+pub mod upstream;

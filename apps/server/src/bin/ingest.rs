@@ -6,136 +6,14 @@
 //! refreshes the catalog from scratch. Reads DATABASE_URL from .env.
 //! Runtime queries (not the `query!` macro) so it builds with no DB present.
 
-use std::collections::BTreeMap;
 use std::error::Error;
 
-use serde::Deserialize;
+use server::upstream::{RawData, parse_date, sheet_expr};
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
-use sqlx::types::chrono::{DateTime, NaiveDate, Utc};
+use sqlx::types::chrono::{DateTime, Utc};
 
 const DATA_URL: &str = "https://dp4p6x0xfi5o9.cloudfront.net/maimai/data.json";
-
-// ── upstream data.json shape (raw fields; mirrors types/{Data,Song,Sheet}.ts) ──
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RawData {
-    #[serde(default)]
-    songs: Vec<RawSong>,
-    #[serde(default)]
-    categories: Vec<RawCategory>,
-    #[serde(default)]
-    versions: Vec<RawVersion>,
-    #[serde(default)]
-    types: Vec<RawType>,
-    #[serde(default)]
-    difficulties: Vec<RawDifficulty>,
-    #[serde(default)]
-    regions: Vec<RawRegion>,
-    update_time: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct RawCategory {
-    category: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RawVersion {
-    version: String,
-    abbr: Option<String>,
-    release_date: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RawType {
-    r#type: String,
-    name: String,
-    abbr: Option<String>,
-    icon_url: Option<String>,
-    icon_height: Option<i32>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RawDifficulty {
-    difficulty: String,
-    name: String,
-    color: Option<String>,
-    icon_url: Option<String>,
-    icon_height: Option<i32>,
-}
-
-#[derive(Debug, Deserialize)]
-struct RawRegion {
-    region: String,
-    name: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RawSong {
-    song_id: Option<String>,
-    category: Option<String>,
-    title: Option<String>,
-    artist: Option<String>,
-    bpm: Option<f64>,
-    image_name: Option<String>,
-    version: Option<String>,
-    release_date: Option<String>,
-    is_new: Option<bool>,
-    is_locked: Option<bool>,
-    comment: Option<String>,
-    #[serde(default)]
-    sheets: Vec<RawSheet>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RawSheet {
-    r#type: Option<String>,
-    difficulty: Option<String>,
-    level: Option<String>,
-    level_value: Option<f64>,
-    internal_level: Option<String>,
-    internal_level_value: Option<f64>,
-    note_designer: Option<String>,
-    note_counts: Option<BTreeMap<String, Option<i64>>>,
-    regions: Option<BTreeMap<String, bool>>,
-    region_overrides: Option<BTreeMap<String, RawOverride>>,
-    is_special: Option<bool>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RawOverride {
-    level: Option<String>,
-    level_value: Option<f64>,
-    internal_level: Option<String>,
-    internal_level_value: Option<f64>,
-    note_designer: Option<String>,
-}
-
-// ── helpers ──────────────────────────────────────────────────────────────────
-
-fn parse_date(s: &Option<String>) -> Option<NaiveDate> {
-    s.as_deref()
-        .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
-}
-
-// sheet_expr = songId|type|difficulty (mirrors utils/sheet.ts:computeSheetExpr,
-// where a null/undefined part stringifies to its JS literal).
-fn sheet_expr(song_id: &Option<String>, ty: &Option<String>, diff: &Option<String>) -> String {
-    format!(
-        "{}|{}|{}",
-        song_id.as_deref().unwrap_or("null"),
-        ty.as_deref().unwrap_or("undefined"),
-        diff.as_deref().unwrap_or("undefined"),
-    )
-}
 
 // ── main ─────────────────────────────────────────────────────────────────────
 
