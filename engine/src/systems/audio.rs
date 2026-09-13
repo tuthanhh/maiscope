@@ -12,8 +12,8 @@ pub struct Bgm;
 #[derive(Resource)]
 pub struct Sfx;
 
-// Guide-tap SFX baked into the binary so it works in a browser / Tauri webview
-// without serving an assets dir. It's ALWAYS loaded (independent of the optional
+// Guide-tap SFX baked into the binary so it works in a browser without serving
+// an assets dir. It's ALWAYS loaded (independent of the optional
 // song BGM) so hit sounds play even for a chart loaded without audio.
 const GUIDE_TAP_SFX: &[u8] = include_bytes!("../../assets/system_sounds/answer.wav");
 /// Metronome click, baked in like the guide SFX.

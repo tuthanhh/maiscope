@@ -62,8 +62,8 @@ so the failure is a deliberate override rather than a silent default.
   catalog matches nothing and would look like a clean no-op
 - Verifies the data tree is flat before touching the database, since a
   `<version>/<song>/` layout silently matches nothing
-- Installs the Postgres 17 client; the runner's bundled 16 client refuses Neon's
-  17 server
+- Installs the Postgres 18 client; the runner's bundled 16 client refuses Neon's
+  18 server
 
 - [x] `seed-charts.yml` — `workflow_dispatch`, runs `seed_songs` from the private
       data repo's `maidata.txt` tree

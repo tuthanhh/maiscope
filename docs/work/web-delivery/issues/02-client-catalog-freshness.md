@@ -18,7 +18,7 @@ layer would only be translated back into the same JSON shape.
 
 **Blocked by:** 01, `server-restructure/issues/07-etag-caching.md`
 
-**Status:** stage 1 done (v1.0); stage 2 deferred to v1.1
+**Status:** in-progress — stage 1 done (v1.0); stage 2 deferred to v1.1
 
 *Stage 1 (v1.0)*
 - [x] `loadData` uses plain `fetch`, no `isTauri()` branch (issue 01) — now via

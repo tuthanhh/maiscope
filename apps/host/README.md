@@ -74,7 +74,8 @@ It is a port of [zetaraku/arcade-songs](https://github.com/zetaraku/arcade-songs
 | [`vue-router`](https://router.vuejs.org) | Routing |
 | [`vue-i18n`](https://vue-i18n.intlify.dev) | Internationalization |
 | [`@vueuse/core`](https://vueuse.org) | Composition utilities |
-| [`yaml`](https://eemeli.org/yaml/) | Locale file parsing |
+| [`yaml`](https://eemeli.org/yaml/) | Declared dependency, unused — no direct import under `src/`; locale YAML is handled entirely by the build-time transform below |
+| [`@modyfi/vite-plugin-yaml`](https://github.com/modyfi/vite-plugin-yaml) | Build-time transform of locale `.yaml` files into JS modules (`vite.config.ts`), consumed via `import.meta.glob` in `src/app/i18n.ts` |
 | [`vite`](https://vitejs.dev) 6 | Build tooling |
 
 

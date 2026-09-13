@@ -17,14 +17,18 @@ sqlx::query_scalar!(r#"SELECT to_char(update_time, 'YYYY-MM-DD') AS "update_time
     .fetch_one(pool)
 ```
 
-`catalog_meta` is a singleton written by `bin/ingest`, and no migration seeds it.
-So the window between `migrate` and the first `ingest` — which is exactly the state
+`catalog_meta` is a singleton written by `bin/sync_catalog`, and no migration seeds
+it. So the window between `migrate` and the first sync — which is exactly the state
 every new environment starts in, and the state production is in right now — serves
 500s on the main read endpoint.
 
-`bin/ingest` itself is fine: `ingest.rs:178` reads the previous revision with
-`fetch_optional(...).unwrap_or(0)`, so a first-ever ingest against an empty database
-works. Only the read path is brittle.
+The write path itself is fine: `bin/ingest` no longer exists — it was replaced by
+the differential `bin/sync_catalog`, which never truncates (see
+`04-seed-workflows.md`) — and `catalog_sync.rs:83-89` writes `catalog_meta` via an
+`INSERT ... ON CONFLICT (id) DO UPDATE ... RETURNING revision` upsert, which
+returns exactly one row whether or not the singleton already existed. So a
+first-ever sync against an empty database works fine. Only the read path is
+brittle.
 
 **Not merely cosmetic.** It makes "provision a new environment" a two-step process
 where step one leaves the API returning 500, and it means a truncation bug or a

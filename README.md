@@ -8,7 +8,7 @@ in-app chart playback.
 ## What's here
 
 ```
-apps/host/     Vue 3 + Vite web app (PWA-installable) — song browser, visualizer page
+apps/host/     Vue 3 + Vite web app — song browser, visualizer page
 apps/server/   Rust/Axum + Postgres — chart catalog and per-sheet chart API
 engine/        Bevy ECS chart renderer, compiled to wasm and imported by apps/host
 shared/        Rust crate for cross-workspace types (scaffolded, not yet wired in)

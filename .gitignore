@@ -1,5 +1,5 @@
-# Rust workspace build output (shared by apps/server, apps/host/src-tauri,
-# shared, engine — each also has its own /target ignore for standalone builds)
+# Rust workspace build output (shared by apps/server, shared, engine — each
+# also has its own /target ignore for standalone builds)
 /target
 
 # server local env
