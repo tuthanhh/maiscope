@@ -49,12 +49,13 @@
 
 This is the frontend of **maiscope**, a song and chart browser for [maimai](https://maimai.sega.jp/) (SEGA's arcade rhythm game). It loads community-maintained song data from the maiscope backend and lets you browse, filter, and inspect charts across difficulties.
 
-It is a port of [zetaraku/arcade-songs](https://github.com/zetaraku/arcade-songs) — the original web app, originally Nuxt 2 + Vuetify 2 — rebuilt on native Vue 3 for maimai only. See the repo root [README](../../README.md) for how this app fits into the rest of the monorepo (the Rust backend and the wasm chart visualizer).
+It is a port of [zetaraku/arcade-songs](https://github.com/zetaraku/arcade-songs) — the original web app, originally Nuxt 2 + Vuetify 2 — rebuilt on native Vue 3 for maimai only. This package also hosts the chart visualizer, a Bevy-engine-compiled-to-wasm player; see the repo root [README](../../README.md) for how it and the Rust backend fit into the rest of the monorepo.
 
 **Features:**
 - Song gallery with search and rich filtering (level, category, version, BPM, region, note designer)
 - Table and grid views of the filtered results
-- Per-sheet chart details (difficulty, internal level, note designer)
+- Per-sheet chart details (difficulty, internal level, note designer, note counts)
+- Chart visualizer: plays back a sheet's chart, deep-linked from any sheet's detail view
 - Build a working set of sheets ("My List") and filter down to just those
 - Light / dark mode, multi-language UI (EN, JA, KO, ZH-Hans, ZH-Hant, VI, ES, ID, RU)
 
@@ -85,7 +86,7 @@ It is a port of [zetaraku/arcade-songs](https://github.com/zetaraku/arcade-songs
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) 18+ and [pnpm](https://pnpm.io/) (pinned to `pnpm@10.33.0` via `packageManager`)
-- [Rust toolchain](https://rustup.rs/) (stable) — needed to build the chart visualizer's wasm module via `../../scripts/build-wasm.sh`, not for this package's own build
+- [Rust toolchain](https://rustup.rs/) (stable) — this package's own code is plain TypeScript/Vue, but `pnpm build` and the visualizer route both need the chart engine's wasm bindings as a build input; see Usage
 
 ### Installation
 
@@ -100,7 +101,16 @@ It is a port of [zetaraku/arcade-songs](https://github.com/zetaraku/arcade-songs
    pnpm install
    ```
 
-3. Run the dev server
+3. Build the wasm chart engine (once, and again whenever `engine/` changes)
+   ```sh
+   ../../scripts/build-wasm.sh
+   ```
+   Output goes to `src/wasm/` (gitignored). `useEngine.ts` imports from this
+   path, so both `pnpm dev`'s visualizer route and `pnpm build` need it —
+   skipping this step leaves the rest of the app working but the visualizer
+   and the production build broken.
+
+4. Run the dev server
    ```sh
    pnpm dev
    ```
@@ -115,8 +125,9 @@ Launch the app and browse the song gallery. Use the filter panel to narrow by le
 
 Song data is fetched from the maiscope backend API. The base URL is read from `VITE_API_BASE_URL` at build time (see `src/app/game.ts` and `.github/workflows/deploy-web.yml`); it defaults to `http://localhost:3000/api/v1` for local development against `apps/server`.
 
-To produce a production build:
+To produce a production build, rebuild the wasm bindings first (`release` is the size-optimised variant used for deploys — see `.github/workflows/deploy-web.yml`), then build:
 ```sh
+../../scripts/build-wasm.sh release
 pnpm build
 ```
 
