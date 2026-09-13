@@ -60,13 +60,13 @@ Natural keys are therefore usable directly: `songs.song_id UNIQUE`,
 
 ## Scope
 
-| # | Ticket | Note |
-|---|---|---|
-| 01 | Extract `RawData` types out of `bin/ingest.rs` into a shared module | They are private to that binary today |
-| 02 | `bin/sync_catalog`: fetch, sanity-gate, diff, upsert, log vanished rows | The core of this feature |
-| 03 | Scheduled workflow — daily cron plus `workflow_dispatch` | |
-| 04 | Delete `bin/ingest` | Removes the cascade path entirely |
-| 05 | Tests: first sync, no-op sync, changed field, vanished row, sanity gate | `#[sqlx::test]`, no live network |
+| # | Ticket | Note | Done |
+|---|---|---|---|
+| 01 | Extract `RawData` types out of `bin/ingest.rs` into a shared module | They are private to that binary today | ✅ |
+| 02 | `bin/sync_catalog`: fetch, sanity-gate, diff, upsert, log vanished rows | The core of this feature | ✅ |
+| 03 | Scheduled workflow — daily cron plus `workflow_dispatch` | | ✅ |
+| 04 | Delete `bin/ingest` | Removes the cascade path entirely | ✅ |
+| 05 | Tests: first sync, no-op sync, changed field, vanished row, sanity gate | `#[sqlx::test]`, no live network | ✅ |
 
 ## Decisions that constrain this work
 
