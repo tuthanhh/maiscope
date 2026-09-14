@@ -116,7 +116,7 @@ production action is a workflow dispatch, never a local command.
 |---|---|---|
 | `ci.yml` | push / PR | checks named `rust`, `wasm-web`, `links` |
 | `deploy.yml` | manual | Fly deploy; migrations run as the `release_command` |
-| `deploy-web.yml` | push | Cloudflare Pages build of `apps/host` |
+| `deploy-web.yml` | manual | Cloudflare Pages build of `apps/host` |
 | `sync-catalog.yml` | cron + manual | differential upstream sync; never deletes |
 | `seed-charts.yml` | manual | chart text into production; insert/update only |
 | `backup-database.yml` | cron + manual | `pg_dump` of Neon |
