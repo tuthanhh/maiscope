@@ -34,7 +34,7 @@ contributor-supplied audio. Unscheduled.
 | ├ [server-restructure](work/server-restructure/spec.md) | shipped | v1.0 |
 | ├ [build-and-deploy](work/build-and-deploy/spec.md) | active | v1.0 |
 | ├ [prod-data-and-infra](work/prod-data-and-infra/spec.md) | active | v1.0 |
-| ├ [catalog-sync](work/catalog-sync/spec.md) | planned | v1.0 |
+| ├ [catalog-sync](work/catalog-sync/spec.md) | shipped | v1.0 |
 | ├ [web-delivery](work/web-delivery/spec.md) | active | v1.0 |
 | └ [test-foundation](work/test-foundation/spec.md) | planned | v1.0 |
 | [mobile-webview-spike](work/mobile-webview-spike/) | planned | v1.1 |

@@ -10,7 +10,10 @@ charts: an upstream song rename that breaks `seed_songs`' title matching.
 
 **Blocked by:** 02 (obsolete)
 
-**Status:** descoped — see Assessment
+**Status:** dropped — descoped, see Assessment. Built on issue 02's vendored
+snapshot, which `catalog-sync` removed the need for
+([ADR-0010](../../../adr/0010-differential-catalog-sync.md)); the daily
+`sync-catalog.yml` run replaces the PR-based refresh flow.
 
 ## Assessment (2026-09-13)
 

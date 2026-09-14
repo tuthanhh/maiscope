@@ -31,7 +31,7 @@ migration
 - [x] `VITE_API_BASE_URL` set to the Fly origin — in the workflow, not in Pages env
       vars, since Pages no longer runs the build
 - [x] SPA fallback **not needed**: the router is on `createWebHashHistory`
-      (`router.ts:39`), so every route is a fragment and the server only ever serves
+      (`router.ts:40`), so every route is a fragment and the server only ever serves
       `/`. Deep links cannot 404. Revisit if the router moves to history mode
 - [ ] Preview deployments on PRs (their origins must not be in the CORS allowlist
       unless deliberately added)
