@@ -1,10 +1,10 @@
-// Lazy bridge to the Bevy/wasm chart viewer (built by engine/build-wasm.sh into
+// Lazy bridge to the Bevy/wasm chart viewer (built by scripts/build-wasm.sh into
 // ~/wasm). The wasm module auto-starts its Bevy App on init (#[wasm_bindgen(start)]
 // in engine/src/lib.rs), grabbing the <canvas id="bevy"> that must already be in
 // the DOM. So: mount the canvas first, THEN call ensureEngine().
 //
 // The 74 MB debug wasm is fetched lazily on first visit to the visualizer page,
-// never as part of the main bundle. A release build (engine/build-wasm.sh release)
+// never as part of the main bundle. A release build (scripts/build-wasm.sh release)
 // shrinks it by orders of magnitude.
 
 import { GAME } from "~/app/game";
