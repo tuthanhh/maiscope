@@ -35,6 +35,10 @@ cargo run                          # API on :3000
 cargo run --bin seed_songs         # load chart text, keyed by sheet_expr
 ```
 
+`seed_songs` reads `songs/` at the repo root — a gitignored local sample, one
+flat directory per song holding `maidata.txt`. It is absent on a fresh clone.
+Matching is by the maidata `&title=`, so an unmatched title warns and skips.
+
 #### Where infrastructure files live
 
 **Root describes the system; `apps/<x>/` describes how one app is built.** The
@@ -103,6 +107,25 @@ cargo test --workspace
 There is no lint or format config (no eslint/prettier). Do not assume `pnpm lint`
 exists.
 
+### Production operations (`.github/workflows/`)
+
+Production is live: Fly.io `maiscope-api`, Neon Postgres, Cloudflare Pages. Every
+production action is a workflow dispatch, never a local command.
+
+| Workflow | Trigger | Effect |
+|---|---|---|
+| `ci.yml` | push / PR | checks named `rust`, `wasm-web`, `links` |
+| `deploy.yml` | manual | Fly deploy; migrations run as the `release_command` |
+| `deploy-web.yml` | push | Cloudflare Pages build of `apps/host` |
+| `sync-catalog.yml` | cron + manual | differential upstream sync; never deletes |
+| `seed-charts.yml` | manual | chart text into production; insert/update only |
+| `backup-database.yml` | cron + manual | `pg_dump` of Neon |
+
+`deploy.yml` gates on the CI check-runs of the exact SHA and fails while any is
+`pending`. That is the gate working — wait for CI and re-dispatch, never route
+around it. `flyctl` is not installed locally; Fly-side settings are changed in
+its web UI.
+
 ## Testing
 
 Tests live per-module next to the code they cover, not centralized in
@@ -145,13 +168,32 @@ drained once per frame by `apply_commands`. Never call into Bevy synchronously.
 
 ## Rules
 
-- **Never touch production.** Everything local: dev Postgres via `docker compose`,
-  local wasm builds. If a task implies a production system, stop and ask.
+- **Never reach production from this machine.** Local work runs against dev
+  Postgres via `docker compose` and local wasm builds. Production is reached only
+  by dispatching a workflow (see *Production operations*) — no `flyctl`, no
+  `psql`, no `pg_dump` against a Neon URL, no secrets pasted into a shell. If a
+  task needs a production change, name the workflow and let the user dispatch it.
 - **Doc sync is part of the ticket that changes behaviour**, not a trailing ticket.
   Changing an endpoint means updating `docs/reference/api-contract.md` in the same
   change; changing the schema means `docs/reference/schema.md`.
 - **Record decisions as ADRs.** A choice with a rejected alternative belongs in
   `docs/adr/`, not buried in a spec.
+
+## Working with the maintainer
+
+This is a solo learning project. The code is a vehicle for learning Rust, Axum
+and deployment, so *how* work happens matters as much as the result.
+
+- **"Instruct me to do task N" means do not write the code.** Lay out the steps,
+  the signatures and the reasoning, then stop and let them implement. "Help me
+  with task N" is the opposite — write it. Honour the verb they used.
+- **Explanations worth keeping go to `.claude/study/<topic>.md`** (gitignored),
+  one file per concept, written after the code lands — existing notes cover
+  `tracing-subscriber`, `env-filter`, rate limiting, CORS.
+- **One ticket at a time, committed on its own.** Per-ticket review, then one
+  whole-branch review before merging to master.
+- Decisions are made by picking from options. Offer a small labelled set with
+  trade-offs and a recommendation rather than one pre-chosen path.
 
 ## Agent skills
 
