@@ -1,8 +1,9 @@
 # Spec — Differential catalog sync
 
-**Status:** planned
+**Status:** shipped
 **Milestone:** v1.0
 **Parent:** [`production-v1`](../production-v1/spec.md)
+**Decision record:** [ADR-0010](../../adr/0010-differential-catalog-sync.md)
 
 Replace truncate-and-reload with a scheduled differential sync: fetch upstream
 `data.json`, compare it against the canonical tables, and update only what

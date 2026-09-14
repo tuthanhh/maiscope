@@ -6,7 +6,7 @@ this document describes the result.
 ## Tiers
 
 ```
-apps/host/     Vue 3 + Vite web app, PWA-installable — song browser and visualizer page
+apps/host/     Vue 3 + Vite web app — song browser and visualizer page
 apps/server/   Rust/Axum + Postgres — chart catalog and per-sheet chart API
 engine/        Bevy ECS chart renderer, compiled to wasm32-unknown-unknown
 shared/        Scaffolded Rust crate for cross-workspace types — not yet wired in
@@ -50,7 +50,7 @@ between debugging staleness in one minute and three.
 
 | Layer | Holds | Invalidated by |
 |---|---|---|
-| Service worker | App shell (precached); wasm (runtime, cache-first) | Content-hashed filenames; `index.html` is network-first |
+| Service worker (v1.0, not yet built) | App shell (precached); wasm (runtime, cache-first) | Content-hashed filenames; `index.html` is network-first |
 | IndexedDB | Catalog blob (v1.1) | `GET /sync/manifest` revision change; paint-then-swap |
 | HTTP | Wire responses | `ETag` / `If-None-Match` / `Cache-Control` |
 

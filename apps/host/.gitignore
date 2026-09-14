@@ -12,10 +12,10 @@ dist
 dist-ssr
 *.local
 
-# Generated Bevy engine wasm bindings (built by engine/build-wasm.sh)
+# Generated Bevy engine wasm bindings (built by scripts/build-wasm.sh)
 src/wasm/
 
-# Sprite textures mirrored from engine/assets by engine/build-wasm.sh
+# Sprite textures mirrored from engine/assets by scripts/build-wasm.sh
 public/assets/
 
 # Agent / local tooling

@@ -16,7 +16,9 @@ artifact serves as seed input and as backup.
 
 **Blocked by:** None (independent of the server restructure)
 
-**Status:** obsolete — see Assessment
+**Status:** dropped — obsolete, see Assessment. Superseded by `catalog-sync`
+([ADR-0010](../../../adr/0010-differential-catalog-sync.md)): vendoring existed to
+make `TRUNCATE` survivable, and the differential sync never truncates.
 
 ## Assessment (2026-09-13)
 

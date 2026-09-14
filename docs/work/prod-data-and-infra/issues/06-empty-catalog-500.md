@@ -23,8 +23,8 @@ every new environment starts in, and the state production is in right now — se
 500s on the main read endpoint.
 
 The write path itself is fine: `bin/ingest` no longer exists — it was replaced by
-the differential `bin/sync_catalog`, which never truncates (see
-`04-seed-workflows.md`) — and `catalog_sync.rs:83-89` writes `catalog_meta` via an
+the differential `bin/sync_catalog`, which never deletes a song, sheet or chart
+([ADR-0010](../../../adr/0010-differential-catalog-sync.md)) — and `catalog_sync.rs:83-89` writes `catalog_meta` via an
 `INSERT ... ON CONFLICT (id) DO UPDATE ... RETURNING revision` upsert, which
 returns exactly one row whether or not the singleton already existed. So a
 first-ever sync against an empty database works fine. Only the read path is
