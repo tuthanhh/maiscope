@@ -22,14 +22,14 @@ contradictory input is rejected, not guessed at.
 
 **Blocked by:** None.
 
-**Status:** todo
+**Status:** done
 
-- [ ] `parse_chained_slide_segments` distinguishes "only the last is bracketed"
+- [x] `parse_chained_slide_segments` distinguishes "only the last is bracketed"
       from "some are bracketed" — currently both collapse into
       `segments.iter().any(|s| s.duration.is_none())`
-- [ ] The all-but-last-bare case stays legal and keeps `shared_duration: true`
-- [ ] The every-segment case stays legal with `shared_duration: false`
-- [ ] Anything between is an error naming the segment that lacks a bracket
-- [ ] A single-segment slide is unaffected
-- [ ] `slide::tests::partially_bracketed_chain_silently_inherits` inverts into a
+- [x] The all-but-last-bare case stays legal and keeps `shared_duration: true`
+- [x] The every-segment case stays legal with `shared_duration: false`
+- [x] Anything between is an error naming the segment that lacks a bracket
+- [x] A single-segment slide is unaffected
+- [x] `slide::tests::partially_bracketed_chain_silently_inherits` inverts into a
       rejection test

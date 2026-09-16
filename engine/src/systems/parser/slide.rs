@@ -111,14 +111,36 @@ fn parse_chained_slide_segments(
         ));
     }
 
-    // Last segment must have a duration (simai spec). If only the last has one,
-    // all segments share it (shared_duration = true).
+    // The notation allows exactly two shapes, and nothing between them:
+    //
+    //   1-4q7-2[1:2]              one bracket, on the last segment — the whole
+    //                             path traces at one speed derived from it
+    //   1-4[2:1]q7[2:1]-2[1:1]    a bracket on every segment — per-segment speeds
+    //
+    // "When doing this, every sub-track needs its own length — omitting one
+    // causes an error." A chain that brackets some segments but not all is
+    // neither shape: it used to fill the bare ones from the last segment and
+    // trace at a speed the author never wrote, silently. Rejected instead, on
+    // the same grounds as ADR-0012's duplicate markers.
     let last_duration = segments
         .last()
         .and_then(|s| s.duration)
         .ok_or_else(|| format!("Slide requires duration: '{}'", pattern_str))?;
 
-    let shared_duration = segments.iter().any(|s| s.duration.is_none());
+    let bare = segments.iter().filter(|s| s.duration.is_none()).count();
+    // Every segment but the last is bare → the single-bracket form.
+    let shared_duration = bare == segments.len() - 1 && bare > 0;
+
+    if bare > 0 && !shared_duration {
+        return Err(format!(
+            "Slide '{}' brackets some segments but not all: {} of {} segments \
+             have no duration. Write one duration on the last segment for a \
+             single tracing speed, or one on every segment.",
+            pattern_str,
+            bare,
+            segments.len()
+        ));
+    }
 
     let mut result = Vec::new();
     let mut current_start = start_btn;
@@ -592,35 +614,23 @@ mod tests {
         }
     }
 
-    /// Divergence: a *partially* bracketed chain is accepted.
+    /// A chain that brackets some segments but not all is rejected.
     ///
-    /// The notation doc is explicit — when specifying per-segment lengths,
-    /// "every sub-track needs its own length — omitting one causes an error".
-    /// Here the omitted segment silently inherits the last segment's duration,
-    /// and the whole note is marked `shared_duration: true`.
+    /// The notation allows exactly two shapes — one bracket on the last segment,
+    /// or a bracket on every segment. "When doing this, every sub-track needs
+    /// its own length — omitting one causes an error."
     ///
-    /// The result is a slide that traces at a speed the author never wrote, with
-    /// nothing logged. Left as-is because rejecting it means distinguishing
-    /// "none bracketed but the last" from "some bracketed", which is a real
-    /// change to `parse_chained_slide_segments` rather than a guard — and no
-    /// fixture exercises it yet.
+    /// `1-4[2:1]q7-2[1:1]` is neither. It used to fill the bare middle segment
+    /// from the last one and trace at a speed nobody wrote, with nothing logged.
     #[test]
-    fn partially_bracketed_chain_silently_inherits() {
-        let note = parse_one("1-4[2:1]q7-2[1:1]");
-        match &note.kind {
-            NoteKind::Slide {
-                segments,
-                shared_duration,
-                ..
-            } => {
-                assert!(shared_duration);
-                assert_eq!(segments[0].duration, simple(2, 1));
-                // BUG: written without a bracket, filled in from the last segment.
-                assert_eq!(segments[1].duration, simple(1, 1));
-                assert_eq!(segments[2].duration, simple(1, 1));
-            }
-            other => panic!("expected a Slide, got {other:?}"),
-        }
+    fn partially_bracketed_chain_is_an_error() {
+        let err = parse_err("1-4[2:1]q7-2[1:1]");
+        assert!(err.contains("some segments but not all"), "{err}");
+        assert!(err.contains("1 of 3"), "{err}");
+
+        // First bracketed, rest bare — also neither shape.
+        parse_err("1-4[2:1]q7-2[1:1]");
+        parse_err("1-4[2:1]q7[2:1]-2");
     }
 
     /// A slide needs a tracing length; the last segment must carry one.
