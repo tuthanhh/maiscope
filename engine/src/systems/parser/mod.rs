@@ -13,9 +13,11 @@
 
 mod chart;
 mod duration;
+mod error;
 mod note;
 mod slide;
 #[cfg(test)]
 mod testutil;
 
 pub use chart::parse_chart;
+pub use error::ParseError;

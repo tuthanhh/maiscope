@@ -15,7 +15,7 @@ pub mod chart {
     pub use crate::systems::component::{
         ChartEvent, Duration, Note, NoteKind, SlideSegment, SlideShape,
     };
-    pub use crate::systems::parser::parse_chart;
+    pub use crate::systems::parser::{ParseError, parse_chart};
 }
 
 impl Plugin for AppPlugin {

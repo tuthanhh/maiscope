@@ -1,6 +1,7 @@
 //! Chart-file parsing: read the file, tokenize on commas, strip meta tokens
 //! (BPM / resolution / absolute-length), and dispatch each note group.
 
+use super::error::ParseError;
 use super::note::parse_note;
 use crate::systems::component::{ChartEvent, Note};
 use regex::Regex;
@@ -12,8 +13,18 @@ static RES_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\{(\d+)\}").un
 static ABS_LEN_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\{#(\d+(\.\d+)?)\}").unwrap());
 
-/// Parse a simai chart file and return a sequence of chart events
-pub fn parse_chart(inp: &str) -> Result<Vec<ChartEvent>, std::io::Error> {
+/// Parse a simai chart into a sequence of chart events.
+///
+/// Fails on the first token it cannot read, rather than skipping it. A chart
+/// containing notes we cannot parse is a chart we cannot render correctly, and
+/// saying so beats rendering it subtly wrong: a dropped token used to take a
+/// beat of the grid with it, shifting every later note one comma early with
+/// nothing surfaced to the caller.
+///
+/// Never panics. The engine runs in wasm, where a panic takes the whole canvas
+/// down; the caller (`systems::load_pending_songs`) logs the error and skips
+/// the song, so the worst case is one chart that does not load.
+pub fn parse_chart(inp: &str) -> Result<Vec<ChartEvent>, ParseError> {
     let content = inp.to_string();
     let clean: String = content.chars().filter(|c| !c.is_whitespace()).collect();
 
@@ -21,9 +32,8 @@ pub fn parse_chart(inp: &str) -> Result<Vec<ChartEvent>, std::io::Error> {
     let mut events: Vec<ChartEvent> = Vec::new();
 
     for (idx, token) in tokens.iter().enumerate() {
-        let (current_str, meta) = strip_meta_tokens(token).map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, format!("token {idx}: {e}"))
-        })?;
+        let (current_str, meta) =
+            strip_meta_tokens(token).map_err(|e| ParseError::new(idx, token, e))?;
         events.extend(meta);
 
         if current_str.is_empty() {
@@ -62,16 +72,10 @@ pub fn parse_chart(inp: &str) -> Result<Vec<ChartEvent>, std::io::Error> {
             .collect::<Result<Vec<Vec<Note>>, String>>()
             .map(|v| v.into_iter().flatten().collect());
 
-        match notes_result {
-            Ok(notes) => events.push(ChartEvent::NoteGroup(notes)),
-            Err(e) => eprintln!(
-                "Warning: Error parsing note at token {}: '{}' - {}",
-                idx, token, e
-            ),
-        }
+        let notes = notes_result.map_err(|e| ParseError::new(idx, token, e))?;
+        events.push(ChartEvent::NoteGroup(notes));
     }
 
-    println!("Parsed {} events", events.len());
     Ok(events)
 }
 
@@ -107,7 +111,7 @@ fn strip_meta_tokens(token: &str) -> Result<(String, Vec<ChartEvent>), String> {
         if let Some(caps) = ABS_LEN_REGEX.captures(&rest)
             && let Ok(seconds) = caps[1].parse::<f64>()
         {
-            reject_duplicate(length.is_some(), token, Marker::Length)?;
+            reject_duplicate(length.is_some(), Marker::Length)?;
             length = Some(ChartEvent::AbsoluteLength(seconds));
             let m = caps.get(0).unwrap();
             rest = format!("{}{}", &rest[..m.start()], &rest[m.end()..]);
@@ -117,7 +121,7 @@ fn strip_meta_tokens(token: &str) -> Result<(String, Vec<ChartEvent>), String> {
         if let Some(caps) = BPM_REGEX.captures(&rest)
             && let Ok(value) = caps[1].parse::<f32>()
         {
-            reject_duplicate(bpm.is_some(), token, Marker::Bpm)?;
+            reject_duplicate(bpm.is_some(), Marker::Bpm)?;
             bpm = Some(ChartEvent::BpmChange(value));
             let m = caps.get(0).unwrap();
             rest = format!("{}{}", &rest[..m.start()], &rest[m.end()..]);
@@ -127,7 +131,7 @@ fn strip_meta_tokens(token: &str) -> Result<(String, Vec<ChartEvent>), String> {
         if let Some(caps) = RES_REGEX.captures(&rest)
             && let Ok(resolution) = caps[1].parse::<u32>()
         {
-            reject_duplicate(length.is_some(), token, Marker::Length)?;
+            reject_duplicate(length.is_some(), Marker::Length)?;
             length = Some(ChartEvent::ResolutionChange(resolution));
             let m = caps.get(0).unwrap();
             rest = format!("{}{}", &rest[..m.start()], &rest[m.end()..]);
@@ -152,7 +156,9 @@ enum Marker {
     Length,
 }
 
-fn reject_duplicate(already_set: bool, token: &str, marker: Marker) -> Result<(), String> {
+// The token itself is not quoted here: `ParseError` prefixes every cause with
+// the token index and text, so repeating it would read twice in one line.
+fn reject_duplicate(already_set: bool, marker: Marker) -> Result<(), String> {
     if !already_set {
         return Ok(());
     }
@@ -161,8 +167,8 @@ fn reject_duplicate(already_set: bool, token: &str, marker: Marker) -> Result<()
         Marker::Length => ("length", "{N} or {#S}"),
     };
     Err(format!(
-        "token '{token}' carries more than one {name} marker ({spellings}); \
-         at most one per token, since the second would silently overwrite the first"
+        "carries more than one {name} marker ({spellings}); at most one per \
+         token, since the second would silently overwrite the first"
     ))
 }
 
@@ -177,10 +183,10 @@ mod tests {
         parse_chart(chart).unwrap_or_else(|e| panic!("parse_chart failed: {e}"))
     }
 
-    /// Assert the chart was rejected, and hand back the message to check.
-    fn parse_err(chart: &str) -> String {
+    /// Assert the chart was rejected, and hand back the error to inspect.
+    fn parse_err(chart: &str) -> ParseError {
         match parse_chart(chart) {
-            Err(e) => e.to_string(),
+            Err(e) => e,
             Ok(events) => panic!("expected {chart:?} to be rejected, got {events:#?}"),
         }
     }
@@ -466,7 +472,7 @@ mod tests {
     #[test]
     fn duplicate_bpm_in_one_token_is_an_error() {
         let err = parse_err("(120)(240)1");
-        assert!(err.contains("BPM"), "{err}");
+        assert!(err.cause.contains("BPM"), "{err}");
 
         // Position within the token does not launder it.
         parse_err("(120)1(240)");
@@ -490,7 +496,7 @@ mod tests {
             "{#0.35}{8}1",   // absolute then divider
         ] {
             let err = parse_err(chart);
-            assert!(err.contains("length"), "{chart:?} gave: {err}");
+            assert!(err.cause.contains("length"), "{chart:?} gave: {err}");
         }
     }
 
@@ -534,31 +540,33 @@ mod tests {
 
     // --- The error path -----------------------------------------------------
 
-    /// BUG: a token that fails to parse is logged to stderr and *no event is
-    /// pushed*, so the chart silently loses a beat.
+    /// An unparseable token refuses the whole chart rather than vanishing.
     ///
-    /// `"1,@@@,3,"` yields three events where four are expected, and every note
-    /// after the bad token lands one beat early. `parse_chart` is typed
-    /// `Result<Vec<ChartEvent>, io::Error>` but no path ever returns `Err`, so
-    /// a caller has no way to know this happened.
-    ///
-    /// Not fixed here: the fix is a design choice — skip, emit `Rest` to hold
-    /// the grid, or propagate `Err` and refuse the chart — and it wants its own
-    /// ticket. `BIRTH.txt` hits this for real via the unsupported backtick, see
-    /// `note::tests::pseudo_each_backtick_is_unsupported`.
+    /// It used to be logged to stderr and skipped, which took a beat of the
+    /// grid with it: `"1,@@@,3,"` produced three events where four belong, and
+    /// every note after the bad token landed one comma early. Worse,
+    /// `parse_chart("@@@")` returned `Ok(vec![])` — a chart that parsed to
+    /// nothing was indistinguishable from an empty one.
     #[test]
-    fn unparseable_token_drops_the_event_and_shifts_the_chart() {
-        let evs = events("1,@@@,3,");
-        assert_eq!(evs, vec![tap(1), tap(3), ChartEvent::Rest]);
-        assert_eq!(
-            evs.len(),
-            3,
-            "the bad token vanished; a grid-preserving parser would emit 4 events"
-        );
+    fn unparseable_token_refuses_the_chart() {
+        let err = parse_err("1,@@@,3,");
+        assert_eq!(err.token_index, 1);
+        assert_eq!(err.token, "@@@");
+        assert!(err.cause.contains("Invalid note syntax"), "{err}");
 
-        // The failure is invisible to the caller — still `Ok`.
-        assert!(parse_chart("@@@").is_ok());
-        assert_eq!(events("@@@"), vec![]);
+        // The index counts every comma, rests included, so it lines up with
+        // the chart as written.
+        assert_eq!(parse_err("1,,,@@@").token_index, 3);
+    }
+
+    /// The error names the token, so one log line is enough to find it.
+    #[test]
+    fn error_display_locates_the_token() {
+        let err = parse_err("1,(120)(240)2,");
+        assert!(
+            err.to_string().starts_with("token 1 ('(120)(240)2')"),
+            "{err}"
+        );
     }
 
     /// Never panics, whatever it is fed. A panic in wasm takes the whole canvas

@@ -86,13 +86,14 @@ them — the cost of being strict is currently zero and rises the longer it wait
 `parse_chart` now has a reachable `Err` path for the first time. Its signature
 already promised `Result<_, io::Error>`, so no caller changed.
 
-`io::Error` remains a poor fit — nothing here touches IO — but replacing it with
-a parser-specific error type is a wider change than this ADR covers, and would
-need to account for the *other* error path in `parse_chart`, which is still
-wrong: a token whose note fails to parse is logged to stderr and dropped
-entirely, silently shifting every later note one beat early. That defect is
-recorded in
-[`test-foundation` 01](../work/test-foundation/issues/01-engine-parser-tests.md)
-and pinned by
-`chart::tests::unparseable_token_drops_the_event_and_shifts_the_chart`. The two
-should be fixed together, behind one error type.
+`io::Error` was a poor fit — nothing here touches IO — but replacing it was a
+wider change than this ADR covered, and it needed to account for the *other*
+error path in `parse_chart`: a token whose note failed to parse was logged to
+stderr and dropped entirely, silently shifting every later note one beat early.
+
+> **Resolved** by
+> [`parser-defects` 05](../work/parser-defects/issues/05-parser-error-type.md).
+> `parse_chart` now returns `ParseError`, carrying the token index, the token
+> text and the cause, and an unparseable token refuses the chart rather than
+> vanishing from it. The duplicate-marker failure this ADR introduced travels on
+> the same type.

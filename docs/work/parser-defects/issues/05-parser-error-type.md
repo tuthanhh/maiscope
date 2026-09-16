@@ -31,17 +31,17 @@ wrong render into a loud total failure, for charts whose syntax is perfectly
 valid simai. `BIRTH.txt` is the proof: it would stop loading entirely until
 issue 01 ships.
 
-**Status:** todo
+**Status:** done
 
-- [ ] A `ParseError` type carrying the token index, the token text, and the
+- [x] A `ParseError` type carrying the token index, the token text, and the
       cause — the three things needed to diagnose from one log line
-- [ ] `parse_chart` returns `Result<Vec<ChartEvent>, ParseError>`
-- [ ] A token whose note fails to parse propagates instead of being skipped
-- [ ] The duplicate-marker error from ADR-0012 moves onto the same type
-- [ ] No `eprintln!` or `println!` left in the parser — `parse_chart` currently
+- [x] `parse_chart` returns `Result<Vec<ChartEvent>, ParseError>`
+- [x] A token whose note fails to parse propagates instead of being skipped
+- [x] The duplicate-marker error from ADR-0012 moves onto the same type
+- [x] No `eprintln!` or `println!` left in the parser — `parse_chart` currently
       prints `"Parsed N events"` on every call, which is noise in tests and in
       the browser console
-- [ ] `chart::tests::unparseable_token_drops_the_event_and_shifts_the_chart`
+- [x] `chart::tests::unparseable_token_drops_the_event_and_shifts_the_chart`
       inverts into a rejection test
-- [ ] `parse_chart_never_panics` keeps passing unchanged — `Err` was always an
+- [x] `parse_chart_never_panics` keeps passing unchanged — `Err` was always an
       acceptable outcome there; panicking never was

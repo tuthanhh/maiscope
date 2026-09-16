@@ -87,45 +87,23 @@ While there: the comment claiming the `{#S}`-before-`{N}` check order was
 load-bearing is wrong — `RES_REGEX` needs a digit directly after `{` and cannot
 match `{#0.35}` at all. Comment corrected, disjointness asserted directly.
 
-## Defects found and left unfixed
+## Defects found
 
-Documented by a test rather than fixed — a bug found and fixed in one commit
-leaves no evidence the test would have caught it.
+Five, all documented by a test rather than fixed here — a bug found and fixed in
+one commit leaves no evidence the test would have caught it. They are now
+[`parser-defects`](../../parser-defects/spec.md), where four of the five have
+shipped:
 
-1. **A failed token drops its event and shifts the chart** (`chart.rs:46-52`).
-   An unparseable token is logged to stderr and *no* event is pushed, so every
-   note after it lands one beat early. Worse than first recorded: `parse_chart`
-   returns `Ok` with an empty vec for a chart that parsed to nothing, so a caller
-   cannot distinguish that from an empty chart. Pinned by
-   `unparseable_token_drops_the_event_and_shifts_the_chart`. The fix is a design
-   choice — skip, emit `Rest`, or propagate `Err` — and should land together
-   with a parser-specific error type replacing `io::Error`, per ADR-0012's
-   consequences.
-2. **Backtick pseudo-each is unsupported.** The `BIRTH` fixture fails three
-   tokens: `` Invalid note syntax: 'E6`B5' ``. The `` ` `` separator appears in
-   neither `TAP_TOUCH_RE` nor the slide tokenizer. Because of defect 1 this is
-   silent — three note groups vanish from a real chart. Pinned by
-   `note::tests::pseudo_each_backtick_is_unsupported`.
-3. **HOLD accepts only `[N:M]`.** `TAP_TOUCH_RE` hard-codes
-   `\[(\d+):(\d+)\]`, so the notation doc's `4h[#5.678],` and `4h[150#2:1],`
-   are both rejected. `parse_duration_bracket` already handles the second; the
-   regex never gives it the chance. Pinned by
-   `note::tests::hold_rejects_non_simple_durations`.
-4. **UTAGE `$` / `@` tap modifiers are unsupported.** `1$,` (force star-shaped
-   TAP) and `1@,` fail, while `@`, `?` and `!` *do* parse on a slide and are
-   then ignored — so the gap is inconsistent rather than uniform. Lowest
-   priority: UTAGE is out of scope for v1. Pinned by
-   `note::tests::utage_star_tap_modifiers_are_unsupported`.
+| Defect | Ticket | State |
+|---|---|---|
+| Unparseable token dropped, shifting the chart | [05](../../parser-defects/issues/05-parser-error-type.md) | fixed |
+| Backtick pseudo-EACH unsupported | [01](../../parser-defects/issues/01-backtick-pseudo-each.md) | fixed |
+| HOLD accepted only `[N:M]` | [02](../../parser-defects/issues/02-hold-duration-forms.md) | fixed |
+| Partially bracketed slide chain silently inherited | [04](../../parser-defects/issues/04-partial-slide-brackets.md) | fixed |
+| UTAGE `$` / `@` tap modifiers unsupported | [03](../../parser-defects/issues/03-utage-tap-modifiers.md) | todo |
 
-5. **A partially bracketed slide chain silently inherits.** The doc is explicit
-   that when per-segment lengths are given, "every sub-track needs its own
-   length — omitting one causes an error". `1-4[2:1]q7-2[1:1]` instead fills the
-   bracket-less segment from the last one and marks the note
-   `shared_duration: true`, so it traces at a speed the author never wrote.
-   Pinned by `slide::tests::partially_bracketed_chain_silently_inherits`.
-   Rejecting it means distinguishing "only the last is bracketed" from "some are
-   bracketed" in `parse_chained_slide_segments` — a real change, and no fixture
-   exercises it yet.
+Each fix shows up as the pinning test flipping from recording the bug to
+asserting the notation — which is the whole reason they were written that way.
 
 Smaller divergences pinned without a BUG label, since leniency is defensible:
 
