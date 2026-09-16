@@ -32,13 +32,11 @@ Parser first, ahead of server tests, because:
       `chart::tests::parse_chart_never_panics` over 16 hostile inputs)
 - [x] `cargo test -p engine` wired into CI as its own `engine` job
 
-## Scaffold notes
+## Decisions taken while scaffolding
 
-Tests are scaffolded and the harness verified green; the per-case assertions are
-still to write. 5 exemplar tests pass, 35 stubs are `#[ignore = "TODO"]`, each
-carrying a doc comment naming exactly what to assert.
-
-Decisions taken while scaffolding:
+The suite was built in two passes: a scaffold of 5 worked examples plus 35
+`#[ignore = "TODO"]` stubs, each carrying a doc comment naming what to assert,
+then the assertions themselves. The stubs are all filled — see Result below.
 
 - **Inline `#[cfg(test)]` modules, not `engine/tests/`.** `parse_note`,
   `parse_slide_note` and `parse_duration_bracket` are private to
@@ -64,7 +62,7 @@ Decisions taken while scaffolding:
 --all-targets` is clean.
 
 Assertions are checked against
-[`docs/reference/simai-notation.md`](../../reference/simai-notation.md) rather
+[`docs/reference/simai-notation.md`](../../../reference/simai-notation.md) rather
 than against the implementation, so a test failing means the parser disagrees
 with the spec — not that the test drifted.
 
@@ -78,7 +76,7 @@ whichever order the author wrote them in. Same class of problem for
 
 Now an error, and marker emission order is fixed at BPM → length → note.
 Recorded as
-[ADR-0012](../../adr/0012-one-marker-of-each-kind-per-simai-token.md) with the
+[ADR-0012](../../../adr/0012-one-marker-of-each-kind-per-simai-token.md) with the
 two rejected alternatives. `parse_chart` gained its first reachable `Err` path;
 its only caller (`systems/mod.rs:80`) already logged and skipped on `Err`.
 `BIRTH.txt` has zero violations across 872 tokens, so nothing real regressed.

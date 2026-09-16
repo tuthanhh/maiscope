@@ -32,7 +32,7 @@ client reads, and a snapshot catches exactly that.
 ## Stopped deliberately
 
 Paused partway. The API is being redesigned — see
-[`api-v2`](../api-v2/spec.md) — under transient coexistence: v2 is authored
+[`api-v2`](../../api-v2/spec.md) — under transient coexistence: v2 is authored
 fresh, the frontend migrates endpoint by endpoint, and v1 is deleted once
 nothing calls it.
 
@@ -51,7 +51,7 @@ the eight checkboxes were already satisfied.
 
 `X-Total-Count` contradicted `api-contract.md` §6, which specified a body field
 and gave a reason. Resolved by
-[ADR-0015](../../adr/0015-pagination-total-as-a-response-header.md) — the
+[ADR-0015](../../../adr/0015-pagination-total-as-a-response-header.md) — the
 contract's reason was conditional on being the only paginated endpoint, which
 `community-charts` ends — so the header won, but via its own feature rather than
 by smuggling an API change into a test ticket.
