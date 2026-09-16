@@ -29,7 +29,7 @@ assertions that get rewritten.
 |---|---|---|
 | 01 | [Emit the header, keep the field](issues/01-emit-header.md) | Expand |
 | 02 | [Frontend reads the header](issues/02-frontend-switch.md) | Blocked by 01 **being deployed** |
-| 03 | [Drop the body field](issues/03-drop-body-field.md) | **dropped** — v1 is frozen, see [`api-v2`](../api-v2/spec.md) |
+| 03 | [Drop the body field](issues/03-drop-body-field.md) | **dropped** — v1 is frozen, see [`api-rewrite`](../api-rewrite/spec.md) |
 
 ## Decisions that constrain this work
 

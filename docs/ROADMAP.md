@@ -41,7 +41,9 @@ which supersedes the contribution-queue design. Still no contributor audio
 | ├ [web-delivery](work/web-delivery/spec.md) | active | v1.0 |
 | ├ [test-foundation](work/test-foundation/spec.md) | active | v1.0 |
 | └ [api-pagination-header](work/api-pagination-header/spec.md) | shipped | v1.0 |
-| [api-v2](work/api-v2/spec.md) | planned | phase 2 |
+| [catalog-difficulties](work/catalog-difficulties/spec.md) | planned | phase 2 |
+| [song-public-id](work/song-public-id/spec.md) | planned | phase 2 |
+| [api-rewrite](work/api-rewrite/spec.md) | planned | phase 2 |
 | [parser-defects](work/parser-defects/spec.md) | active | v1.0 |
 | [mobile-webview-spike](work/mobile-webview-spike/) | planned | v1.1 |
 | [docs-restructure](work/docs-restructure/spec.md) | shipped | — |

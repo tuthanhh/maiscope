@@ -21,8 +21,7 @@ field while an older bundle is live breaks its pagination.
 
 ## Dropped
 
-v1 is frozen and scheduled for deletion under [`api-v2`](../../api-v2/spec.md)'s
-transient-coexistence plan. Removing a field from a version that is not being
+v1 is frozen and scheduled for deletion under [`api-rewrite`](../../api-rewrite/spec.md). Removing a field from a version that is not being
 evolved is churn: the body field costs nothing while it sits there, its only
 consumer is a frontend that is migrating away, and the removal would be a
 breaking change to `/api/v1` — which §6's versioning rule forbids and which this

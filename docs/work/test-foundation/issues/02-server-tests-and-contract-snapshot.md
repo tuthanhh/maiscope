@@ -32,9 +32,8 @@ client reads, and a snapshot catches exactly that.
 ## Stopped deliberately
 
 Paused partway. The API is being redesigned — see
-[`api-v2`](../../api-v2/spec.md) — under transient coexistence: v2 is authored
-fresh, the frontend migrates endpoint by endpoint, and v1 is deleted once
-nothing calls it.
+[`api-rewrite`](../../api-rewrite/spec.md) — on a branch, cutting over together with the
+redesigned frontend.
 
 That does **not** make these tests waste. They are the regression net the
 rewrite needs: the `/catalog` snapshot is the before-and-after comparison that

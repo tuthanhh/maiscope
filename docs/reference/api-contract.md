@@ -7,8 +7,10 @@ revision-probe sync tier. Auth (§4) is phase 2; §5 is superseded by
 [ADR-0013](../adr/0013-community-charts-beside-the-catalog.md).
 
 > **This document describes `/api/v1`, which is frozen.** A from-scratch
-> replacement is planned — see [`api-v2`](../work/api-v2/spec.md). No further
-> behaviour lands here.
+> replacement is planned — see [`api-rewrite`](../work/api-rewrite/spec.md).
+> It is developed on a branch and replaces this API at merge; the two never
+> serve simultaneously, and it drops the version segment entirely (`/api/...`).
+> No further behaviour lands here.
 
 Each section carries its implementation status:
 
@@ -380,8 +382,11 @@ Status enum: `pending | approved | rejected | merged`.
   it doesn't gate access to public read-only data — the real cap on abuse is
   `server-restructure` issue 08's rate limiting. There is no native proxy
   tier — the browser talks to this API directly.
-- **Versioning**: breaking changes → `/api/v2`. Additive fields are non-breaking;
-  clients ignore unknowns (frontend already tolerates extra keys).
+- **Versioning**: *retired.* This rule said breaking changes go to `/api/v2`.
+  With one first-party consumer and no second API ever served, the version
+  segment named a distinction that did not exist —
+  [`api-rewrite`](../work/api-rewrite/spec.md) drops it and cuts over on a
+  branch instead. Additive fields remain non-breaking; clients ignore unknowns.
 
 ## 7. Frontend wiring map
 
