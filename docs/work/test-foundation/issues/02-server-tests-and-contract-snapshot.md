@@ -12,16 +12,67 @@ client reads, and a snapshot catches exactly that.
 
 **Blocked by:** `server-restructure/issues/04-split-modules.md`, `server-restructure/issues/07-etag-caching.md`
 
-**Status:** todo
+**Status:** in-progress
 
-- [ ] Coverage for all eight routes, including `/sync/manifest` and `/sync/delta`
+- [x] Coverage for all eight routes — `/sheets/{sheet}/chart` had **zero** tests
+      and now has four; every other route already had some
 - [ ] `/sync/delta` `409 snapshot_required` path tested (`since` predating
-      `last_full_reload_revision`)
-- [ ] `/sheets/search` pagination + `X-Total-Count` tested
-- [ ] Snapshot test asserting `/catalog`'s top-level shape and one full `Song`
+      `last_full_reload_revision`) — **not done, see below**
+- [ ] `/sheets/search` pagination boundary — **not done**. The `X-Total-Count`
+      half is covered by `api-pagination-header` 01
+- [x] Snapshot test asserting `/catalog`'s top-level shape and one full `Song`
       with nested sheets
-- [ ] Snapshot asserts the **absence** of derived fields — the server must never
-      start emitting `sheetExpr`/`imageUrl`/`notePercents`
-- [ ] ETag/304 tests from `server-restructure` issue 07 folded in here
-- [ ] Rate-limit key test from `server-restructure` issue 08 folded in here
-- [ ] CLAUDE.md corrected — it claims no tests exist beyond `shared`'s scaffold
+- [x] Snapshot asserts the **absence** of derived fields, at any nesting depth
+- [x] ETag/304 tests from `server-restructure` issue 07 — already existed (6 on
+      `/catalog`, 2 on `/sync/manifest`); folded in by being counted, not rewritten
+- [x] Rate-limit key test from `server-restructure` issue 08 — already existed
+      (`routes/mod.rs`, plus 7 in `rate_limit.rs`)
+- [x] CLAUDE.md corrected (`test-foundation` 01's commit)
+
+## Stopped deliberately
+
+Paused partway. The API is being redesigned — see
+[`api-v2`](../api-v2/spec.md) — under transient coexistence: v2 is authored
+fresh, the frontend migrates endpoint by endpoint, and v1 is deleted once
+nothing calls it.
+
+That does **not** make these tests waste. They are the regression net the
+rewrite needs: the `/catalog` snapshot is the before-and-after comparison that
+says v2 returns the same data as v1, which is the thing a from-scratch rewrite
+most often gets wrong. That is worth more than the two remaining checkboxes.
+
+### The premise was stale
+
+Written against "six existing `#[sqlx::test]` handler tests". There were 121
+server tests passing when this was picked up, 16 of them on routes, and four of
+the eight checkboxes were already satisfied.
+
+### One checkbox was wrong, not just done
+
+`X-Total-Count` contradicted `api-contract.md` §6, which specified a body field
+and gave a reason. Resolved by
+[ADR-0015](../../adr/0015-pagination-total-as-a-response-header.md) — the
+contract's reason was conditional on being the only paginated endpoint, which
+`community-charts` ends — so the header won, but via its own feature rather than
+by smuggling an API change into a test ticket.
+
+### What landed
+
+- `/catalog` contract snapshot (`apps/server/tests/snapshots/catalog.json`),
+  seeded with one song, two sheets — one fully populated, one sparse — and every
+  lookup table, so optional-field handling is covered rather than just the happy
+  path. `update_time` is a fixed literal so the snapshot is byte-stable.
+- A separate recursive walk asserting the six client-derived fields appear at no
+  depth, with a guard proving the walk actually descends into
+  `songs[].sheets[]` — otherwise the assertion could pass vacuously.
+- Four tests for `/sheets/{sheet}/chart`: verbatim round-trip, `sheet_expr`
+  rebuilt from all three parts, `404`, and the `501` blob-only arm.
+- `routes/charts.rs` keeps its `(StatusCode, String)` return, now with a comment
+  pointing at contract §2. It is the documented plain-text exception, not an
+  oversight — converting it would change a shipped endpoint's wire format.
+
+### What is left
+
+`/sync/delta`'s `409` (needs `last_full_reload_revision` seeded directly, since
+`sync_catalog` never writes it) and a `/sheets/search` page-boundary test. Both
+should be written against v2, not v1.

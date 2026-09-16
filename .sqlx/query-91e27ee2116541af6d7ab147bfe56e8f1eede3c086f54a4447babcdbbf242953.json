@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO songs (song_id, category, title, artist, bpm, image_name, version,\n                                release_date, is_new, is_locked, comment, source_index)\n             VALUES ('example', 'POPS & ANIME', 'Example Song', 'Example Artist', 174,\n                     'example.png', 'PRiSM', DATE '2025-09-11', true, false, 'a comment', 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "91e27ee2116541af6d7ab147bfe56e8f1eede3c086f54a4447babcdbbf242953"
+}

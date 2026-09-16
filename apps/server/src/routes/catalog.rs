@@ -123,6 +123,236 @@ mod tests {
         Ok(())
     }
 
+    /// Fields the server must never emit. `preprocessData` derives all of them
+    /// client-side (`utils/data.ts`), and the split is a contract convention —
+    /// the server sends raw fields only.
+    const DERIVED_FIELDS: [&str; 6] = [
+        "songNo",
+        "imageUrl",
+        "imageUrlM",
+        "sheetExpr",
+        "notePercents",
+        "$canonicalSheet",
+    ];
+
+    /// Every key in the document, at any depth, with the path that reached it.
+    fn walk_keys(value: &Value, path: &str, out: &mut Vec<(String, String)>) {
+        match value {
+            Value::Object(map) => {
+                for (key, child) in map {
+                    out.push((key.clone(), path.to_string()));
+                    walk_keys(child, &format!("{path}.{key}"), out);
+                }
+            }
+            Value::Array(items) => {
+                for (i, child) in items.iter().enumerate() {
+                    walk_keys(child, &format!("{path}[{i}]"), out);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// A catalog with one song, two sheets and every lookup table populated —
+    /// enough that the snapshot covers each branch of the response assembly
+    /// rather than only the happy path of a bare song.
+    ///
+    /// `update_time` is fixed, not `now()`: the snapshot has to be byte-stable
+    /// across runs.
+    async fn seed_snapshot_catalog(pool: &sqlx::PgPool) {
+        // A literal rather than a bound parameter: binding a timestamp needs a
+        // chrono/time type, and `server` depends on neither directly.
+        sqlx::query!(
+            "INSERT INTO catalog_meta (id, update_time, revision)
+             VALUES (true, TIMESTAMPTZ '2026-01-02T03:04:05Z', 7)"
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+
+        sqlx::query!("INSERT INTO categories (category, ordinal) VALUES ('POPS & ANIME', 0)")
+            .execute(pool)
+            .await
+            .unwrap();
+        sqlx::query!(
+            "INSERT INTO versions (version, abbr, release_date, ordinal)
+             VALUES ('PRiSM', 'PRiSM', DATE '2025-09-11', 0)"
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query!(
+            "INSERT INTO types (type, name, abbr, icon_url, icon_height, ordinal)
+             VALUES ('dx', 'DX', 'DX', 'dx.png', 32, 0)"
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query!(
+            "INSERT INTO difficulties (difficulty, name, color, icon_url, icon_height, ordinal)
+             VALUES ('master', 'MASTER', '#9f51dc', 'master.png', 20, 0)"
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query!("INSERT INTO regions (region, name, ordinal) VALUES ('jp', 'Japan', 0)")
+            .execute(pool)
+            .await
+            .unwrap();
+
+        sqlx::query!(
+            "INSERT INTO songs (song_id, category, title, artist, bpm, image_name, version,
+                                release_date, is_new, is_locked, comment, source_index)
+             VALUES ('example', 'POPS & ANIME', 'Example Song', 'Example Artist', 174,
+                     'example.png', 'PRiSM', DATE '2025-09-11', true, false, 'a comment', 0)"
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+
+        // A fully-populated sheet, and a sparse one — the optional fields are
+        // where a serde rename or a skip_serializing_if would go unnoticed.
+        sqlx::query!(
+            "INSERT INTO sheets (song_id_fk, sheet_expr, type, difficulty, level, level_value,
+                                 internal_level, internal_level_value, note_designer, is_special,
+                                 source_index)
+             SELECT id, 'example|dx|master', 'dx', 'master', '14+', 14.5, '14.7', 14.7,
+                    'Example Designer', false, 0
+             FROM songs WHERE song_id = 'example'"
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query!(
+            "INSERT INTO sheets (song_id_fk, sheet_expr, type, difficulty, source_index)
+             SELECT id, 'example|std|basic', 'std', 'basic', 1
+             FROM songs WHERE song_id = 'example'"
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+
+        sqlx::query!(
+            "INSERT INTO sheet_note_counts (sheet_id, key, value)
+             SELECT id, k.key, k.value
+             FROM sheets, (VALUES ('total', 1000), ('tap', 500), ('hold', 100),
+                                  ('slide', 200), ('touch', 150), ('break', 50))
+                          AS k(key, value)
+             WHERE sheet_expr = 'example|dx|master'"
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+        sqlx::query!(
+            "INSERT INTO sheet_regions (sheet_id, region, available)
+             SELECT id, 'jp', true FROM sheets WHERE sheet_expr = 'example|dx|master'"
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    /// The response contract, pinned byte-for-byte.
+    ///
+    /// The frontend rebuilds a prototype-linked object graph from this payload
+    /// in `utils/data.ts:preprocessData`, so a dropped or renamed field is not a
+    /// compile error anywhere — it surfaces as a blank column or a crash deep in
+    /// the client. This is the cheap substitute for wiring the `shared` crate,
+    /// which would not help anyway: generated types would describe what the
+    /// server sends, and the risk is that what it sends stops matching what the
+    /// client reads.
+    ///
+    /// Regenerate deliberately:
+    /// `UPDATE_SNAPSHOT=1 cargo test -p server catalog_response_matches_snapshot`
+    /// — then read the diff. A snapshot refreshed without reading is a snapshot
+    /// that asserts nothing.
+    #[sqlx::test]
+    async fn catalog_response_matches_snapshot(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        seed_snapshot_catalog(&pool).await;
+
+        let response = catalog(
+            AxumQuery(CatalogQuery { region: None }),
+            axum::http::HeaderMap::new(),
+            AxumState(pool),
+        )
+        .await
+        .unwrap();
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+        let actual = format!("{}\n", serde_json::to_string_pretty(&json).unwrap());
+
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots/catalog.json");
+
+        if std::env::var_os("UPDATE_SNAPSHOT").is_some() {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, &actual).unwrap();
+            return Ok(());
+        }
+
+        let expected = std::fs::read_to_string(&path).unwrap_or_else(|_| {
+            panic!(
+                "{} is missing — create it with \
+                 UPDATE_SNAPSHOT=1 cargo test -p server catalog_response_matches_snapshot",
+                path.display()
+            )
+        });
+
+        assert_eq!(
+            expected, actual,
+            "\n/catalog's response shape changed. If that is intended:\n  \
+             UPDATE_SNAPSHOT=1 cargo test -p server catalog_response_matches_snapshot\n"
+        );
+        Ok(())
+    }
+
+    /// The server must never emit a field the client derives.
+    ///
+    /// Separate from the snapshot on purpose. The snapshot pins what *is* sent,
+    /// which catches an addition only if someone reads the diff; this asserts
+    /// the absence directly, at any nesting depth, so a derived field appearing
+    /// inside `songs[].sheets[]` fails by name rather than as one line in a
+    /// large diff.
+    #[sqlx::test]
+    async fn catalog_never_emits_derived_fields(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        seed_snapshot_catalog(&pool).await;
+
+        let response = catalog(
+            AxumQuery(CatalogQuery { region: None }),
+            axum::http::HeaderMap::new(),
+            AxumState(pool),
+        )
+        .await
+        .unwrap();
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: Value = serde_json::from_slice(&body).unwrap();
+
+        let mut keys = Vec::new();
+        walk_keys(&json, "$", &mut keys);
+        assert!(!keys.is_empty(), "walked an empty document");
+
+        for (key, path) in &keys {
+            assert!(
+                !DERIVED_FIELDS.contains(&key.as_str()),
+                "server emitted the client-derived field {key:?} at {path} — \
+                 see api-contract.md's raw-versus-derived rule"
+            );
+        }
+
+        // The walk reaches nested sheets, or the assertion above proves nothing.
+        assert!(
+            keys.iter()
+                .any(|(k, p)| k == "type" && p.contains("sheets")),
+            "walk never descended into songs[].sheets[]"
+        );
+        Ok(())
+    }
+
     async fn seed_minimal_catalog(pool: &sqlx::PgPool) {
         sqlx::query!(
             "INSERT INTO songs (song_id, title, source_index) VALUES ($1, $2, $3)",

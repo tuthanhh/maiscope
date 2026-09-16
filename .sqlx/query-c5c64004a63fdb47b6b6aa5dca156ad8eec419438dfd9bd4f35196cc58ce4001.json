@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO types (type, name, abbr, icon_url, icon_height, ordinal)\n             VALUES ('dx', 'DX', 'DX', 'dx.png', 32, 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "c5c64004a63fdb47b6b6aa5dca156ad8eec419438dfd9bd4f35196cc58ce4001"
+}

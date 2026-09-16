@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO categories (category, ordinal) VALUES ('POPS & ANIME', 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "b075b69184667d97f2838e18236f942b234e832e32261f9bf4a6cd5b52a76b00"
+}

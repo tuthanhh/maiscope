@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO versions (version, abbr, release_date, ordinal)\n             VALUES ('PRiSM', 'PRiSM', DATE '2025-09-11', 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "15e2df324b5e6d51f8e0c561c810488cfa3b2cf8e62d9bcc0c6ae905c8931df0"
+}
