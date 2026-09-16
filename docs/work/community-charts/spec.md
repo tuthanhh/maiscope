@@ -47,7 +47,9 @@ All from ADR-0013 unless noted.
 - **Official pages show only official charts.** `GET /sheets/{expr}` is
   unchanged. `community_songs.official_song_id` exists but only `/community/*`
   reads it.
-- **Live on upload.** No `pending` state anywhere in the schema.
+- **Published immediately, no review queue.** No `pending` state anywhere in
+  the schema. This concerns the absence of a moderation gate; the browse list
+  is an ordinary paginated page, not a self-updating feed.
 - **Parse on upload, reject on failure.** The server accepts exactly what the
   engine can render — one parser, shared via
   [`parser-crate-extraction`](../parser-crate-extraction/spec.md).

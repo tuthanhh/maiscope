@@ -7,7 +7,7 @@
 **Status:** todo
 
 - [ ] `api-contract.md` §5 rewritten from the contribution queue to the
-      community library: the `/community/*` routes, live-on-upload, no `pending`
+      community library: the `/community/*` routes, published-on-upload, no `pending`
       state, and an explicit statement that community content never appears in
       `/catalog` or `/sync/*`
 - [ ] §5's struck-audio note kept — it still applies, and ADR-0013 reaffirms it

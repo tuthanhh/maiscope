@@ -284,7 +284,7 @@ rather than losing by accident (ADR-0002).
 > **Superseded, not yet rewritten.** This section describes a moderation queue
 > that merges proposals into the canonical tables.
 > [ADR-0013](../adr/0013-community-charts-beside-the-catalog.md) replaced it with
-> a separate community library: `/community/*`, live on upload, reports instead
+> a separate community library: `/community/*`, published on upload, reports instead
 > of approvals, and no writes to `songs`/`sheets`/`charts` at all. The plan of
 > record is now [`community-charts`](../work/community-charts/spec.md); this
 > section is rewritten by its ticket 07, when there is shipped behaviour to

@@ -2,7 +2,7 @@
 
 **What to build:** takedown, by the uploader or a moderator.
 
-Soft delete — `status = 'removed'` — not a row delete. Under live-on-upload the
+Soft delete — `status = 'removed'` — not a row delete. With no review step the
 takedown record *is* the moderation history, and a hard delete leaves nothing to
 show that a report was acted on.
 

@@ -13,8 +13,10 @@ actually needs them.
 **Status:** todo
 
 - [ ] `GET /community/songs?title=&artist=&officialSongId=&page=&pageSize=`
-- [ ] Paginated with a `total` field in the envelope, matching the convention in
-      `api-contract.md` §6 — not an `X-Total-Count` header
+- [ ] Paginated with the total in an `X-Total-Count` response header, per
+      [ADR-0015](../../../adr/0015-pagination-total-as-a-response-header.md).
+      The header must also be listed in the CORS `expose_headers` — omitting it
+      fails silently and only cross-origin
 - [ ] `GET /community/songs/{id}` returns song metadata plus its charts
       (difficulty, level, designer, note counts) but **not** chart content —
       that is ticket 04, so a browse page does not ship simai bodies it will

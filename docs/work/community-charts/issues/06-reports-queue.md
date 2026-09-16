@@ -10,8 +10,9 @@ moves review after the fact, so this is where problems surface.
 
 - [ ] `POST /community/reports`, `user+` — target a song or a single chart, with
       a reason
-- [ ] `GET /community/reports?resolved=`, moderator+, paginated with a `total`
-      field
+- [ ] `GET /community/reports?resolved=`, moderator+, paginated with the total
+      in an `X-Total-Count` header, per
+      [ADR-0015](../../../adr/0015-pagination-total-as-a-response-header.md)
 - [ ] `POST /community/reports/{id}/resolve`, moderator+, records who and what
       was decided
 - [ ] One open report per reporter per target — resubmitting is not a second

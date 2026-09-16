@@ -23,7 +23,7 @@ outcome can reopen [ADR-0003](adr/0003-web-pwa-drop-tauri.md).
 ### Phase 2 — community charts
 
 GitHub authentication, then a second library beside the official catalog: anyone
-uploads a `maidata.txt`, anyone plays it. Live on upload with a report queue, not
+uploads a `maidata.txt`, anyone plays it. Published on upload with a report queue, not
 a moderation queue — [ADR-0013](adr/0013-community-charts-beside-the-catalog.md),
 which supersedes the contribution-queue design. Still no contributor audio
 ([ADR-0002](adr/0002-chart-data-only-no-audio-hosting.md)). Unscheduled.
@@ -39,7 +39,8 @@ which supersedes the contribution-queue design. Still no contributor audio
 | ├ [prod-data-and-infra](work/prod-data-and-infra/spec.md) | active | v1.0 |
 | ├ [catalog-sync](work/catalog-sync/spec.md) | shipped | v1.0 |
 | ├ [web-delivery](work/web-delivery/spec.md) | active | v1.0 |
-| └ [test-foundation](work/test-foundation/spec.md) | active | v1.0 |
+| ├ [test-foundation](work/test-foundation/spec.md) | active | v1.0 |
+| └ [api-pagination-header](work/api-pagination-header/spec.md) | active | v1.0 |
 | [parser-defects](work/parser-defects/spec.md) | active | v1.0 |
 | [mobile-webview-spike](work/mobile-webview-spike/) | planned | v1.1 |
 | [docs-restructure](work/docs-restructure/spec.md) | shipped | — |

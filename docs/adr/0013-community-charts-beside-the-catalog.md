@@ -41,8 +41,11 @@ Community charts live in their own tables, served by their own endpoints, and
 - `community_songs`, `community_charts`, `community_reports`. `songs`, `sheets`
   and `charts` are untouched, so `catalog_sync` keeps its "upsert by natural key,
   never delete" behaviour unchanged.
-- **Live on upload.** Published immediately; a report queue handles problems
-  after the fact. No `pending` state.
+- **Published immediately, no review queue.** An upload is visible as soon as
+  it is stored; a report queue handles problems after the fact. No `pending`
+  state. This is about the absence of a moderation gate, not about pushing
+  updates to open pages — the browse list is an ordinary page that reflects
+  new uploads on reload.
 - **The upload unit is a whole `maidata.txt`** — one song plus its `inote_N`
   difficulties, which is what a contributor already has on disk and what
   `parse_maidata` already reads.
@@ -94,8 +97,8 @@ mistaken for it.
 upload friction, and `seed_songs` already does it. Rejected on this project's own
 evidence: the 2026-09-14 production seed run reported `266 unmatched titles, 291
 songs skipped entirely` against a catalog that contains those songs
-(`prod-data-and-infra` issue 04). Under live-on-upload there is no reviewer to
-catch a misfile, so the uploader picks the song explicitly.
+(`prod-data-and-infra` issue 04). With no review step there is no one to catch
+a misfile, so the uploader picks the song explicitly.
 
 ## Consequences
 
