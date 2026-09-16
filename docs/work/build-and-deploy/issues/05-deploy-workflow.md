@@ -11,20 +11,22 @@ changes with no human in the loop.
 
 **Blocked by:** 03, 04
 
-**Status:** in-progress
+**Status:** done
 
 - [x] `.github/workflows/deploy.yml` with `workflow_dispatch`, taking a `ref` input
 - [x] Refuses to deploy unless CI is green **on that exact commit**
 - [x] `flyctl deploy --remote-only` using `FLY_API_TOKEN` from repo secrets
 - [x] Release command runs migrations first (issue 03); a failure aborts cleanly
 - [x] Post-deploy smoke check: `GET /api/v1/healthcheck` must return 200
-- [x] Rollback procedure written into this ticket — **not yet tested for real**
+- [x] Rollback procedure written into this ticket — **tested for real, see Comments**
 - [x] Deployed commit SHA surfaced in the startup log as `git_sha`
 - [x] `FLY_API_TOKEN` added as a **environment** secret on `production` (scoped
       tighter than a repo secret: only jobs declaring that environment can read it)
-- [ ] Fly's GitHub auto-deploy turned **off**, so this workflow is the only path
+- [x] Fly's GitHub auto-deploy turned **off** — GitHub repo unlinked from the Fly
+      app entirely (2026-09-16); no deploy shows up outside a `workflow_dispatch`
+      run in `gh run list`, so this workflow is the only path
 - [x] Verified: one real dispatch deployed and smoke-checked green (`56a9412`)
-- [ ] Verified: rollback exercised once for real
+- [x] Verified: rollback exercised once for real
 
 ## Rollback
 
@@ -84,6 +86,38 @@ from `ref`.
 workflow reporting itself, not a CI failure — the gate only inspects `rust` and
 `wasm-web` by name, so it does not feed back on itself.
 
-**The deploy token expires 2026-09-14.** Short-lived by default; deploys will start
+**Correction (2026-09-16):** the line below was stale — it warned about a
+short-lived token that had already been replaced same-day. The `FLY_API_TOKEN`
+GitHub secret has been unchanged since 2026-09-12T22:29:15Z, and the Fly-side
+token backing it expires 2027-09-12 (1 year out), confirmed against the Fly
+dashboard. No rotation needed.
+
+~~The deploy token expires 2026-09-14. Short-lived by default; deploys will start
 failing with an auth error that reads like a broken workflow. Reissue with a longer
-lifetime.
+lifetime.~~
+
+**Rollback exercised for real (2026-09-16).** Live version was v9 (`e9d028f5`,
+the current deployed commit). Rolled back:
+
+```sh
+flyctl deploy -a maiscope-api --image registry.fly.io/maiscope-api:deployment-46dc850d005fee1e50fc9aa13aee2d7d  # v6
+```
+
+`release_command` completed, rolling update swapped machine `080762df263448`,
+healthcheck passed. **Proof it was genuinely the old binary, not just an old
+tag:** v9's `listening` log line carries `"git_sha":"e9d028f5..."`; v6's carries
+no `git_sha` key at all. `main.rs` emits that field unconditionally (falls back
+to `"unknown"`, never omits it), so its total absence means the v6 image
+predates the git_sha-logging feature outright — independent proof of an older
+build, not just an older tag pointed at the same code.
+
+Rolled forward again immediately:
+
+```sh
+flyctl deploy -a maiscope-api --image registry.fly.io/maiscope-api:deployment-01M2EYPHZQ5Q9G3KDJ8PX426YT  # v9
+```
+
+Confirmed `git_sha: e9d028f5...` back in the logs and healthcheck 200. Prod
+left on v9, unchanged from before the test. Also confirmed along the way:
+`flyctl releases -a maiscope-api --image` is the right command to find image
+ids — the bare `flyctl releases` doesn't print them.
