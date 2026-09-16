@@ -13,7 +13,7 @@ Use a tiny `bin/migrate.rs` wrapping `sqlx::migrate!()` rather than installing
 
 **Blocked by:** 02
 
-**Status:** in-progress
+**Status:** done
 
 - [x] `apps/server/src/bin/migrate.rs` — connect, `sqlx::migrate!().run()`, log
       applied versions, exit non-zero on failure
@@ -34,7 +34,7 @@ Use a tiny `bin/migrate.rs` wrapping `sqlx::migrate!()` rather than installing
       a first `fly deploy`)
 - [x] **Deployed and serving** — `GET https://maiscope-api.fly.dev/api/v1/healthcheck`
       returns 200 `{"status":"good"}` in ~160ms, schema at `20260907110000`
-- [ ] Verified: a deliberately broken migration aborts the deploy and the previous
+- [x] Verified: a deliberately broken migration aborts the deploy and the previous
       version keeps serving
 - [x] Documented rule: destructive migrations are **not** deployed this way
       (expand-and-contract) — stated in both `fly.toml` and `migrate.rs`
@@ -96,9 +96,38 @@ ticket's test though: the failures were the wrong binary running, not a bad
 migration, and there was no previous version to keep serving. That test is only
 meaningful now that a good version is live.
 
-**Still owed.** The Neon side is done (project live in `ap-southeast-1`, schema
-applied). What remains needs a Fly account: create the `maiscope-api` app, set
-`DATABASE_URL` as a secret, and prove a deliberately broken migration aborts a
-deploy while the previous version keeps serving. `flyctl` is deliberately not
-installed locally — ticket 05 runs it on a GitHub runner instead, so the app can be
-created and the secret set from the Fly dashboard.
+**Broken-migration abort verified for real (2026-09-16).** A throwaway branch
+(`scratch/broken-migration-test`, never merged, deleted after) added a
+migration pair with deliberately invalid SQL
+(`99999999999999_broken_test.up.sql`: `THIS IS NOT VALID SQL;`), deployed
+directly with `flyctl deploy --remote-only` against the live app (v9 running):
+
+```
+migrate: applying (takes the migration advisory lock)
+migrate: failed: while executing migration 99999999999999: error returned
+  from database: syntax error at or near "THIS" at line 1236
+Error: release command failed - aborting deployment. machine d897352c155178
+  exited with non-zero status of 1
+```
+
+The release-command probe machine (`d897352c155178`) exited 1 and never took
+traffic; the serving machine (`080762df263448`) never restarted — confirmed by
+`git_sha: e9d028f5...` unchanged in its logs and `/api/v1/healthcheck`
+returning 200 throughout. Previous version kept serving, exactly as designed.
+
+**Caught mid-test:** the scratch branch inherited an unrelated uncommitted
+change on `engine/Cargo.toml` (a package rename, unrelated to this ticket)
+because `git checkout -b` carries uncommitted changes forward and
+`flyctl deploy` builds from the local filesystem, not git HEAD. That renamed
+package without a matching `Cargo.lock` update broke `cargo build --locked`
+on the first attempt — a real build failure, but the wrong one, and it never
+reached `release_command` at all. Stashed the unrelated change, reran, got the
+migration failure above, then restored the stash untouched. Worth remembering:
+**`flyctl deploy`'s build context is "whatever's on disk," including anything
+uncommitted** — an ad hoc deploy from a branch with unrelated WIP sitting in
+the working tree is not the same test as a clean checkout.
+
+**Now fully verified.** Neon: live in `ap-southeast-1`, schema applied. Fly:
+`maiscope-api` app created, `DATABASE_URL` set, and the abort path proven
+against the real app rather than just reasoned about from the `ENTRYPOINT`
+incident above.
