@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO regions (region, name, ordinal) VALUES ('jp', 'Japan', 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "e4906628cedc4691c450d37a8fdee7e18140a5f541355615965215b361e3733d"
+}

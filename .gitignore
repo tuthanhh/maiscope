@@ -16,3 +16,8 @@ apps/server/.env
 
 # A small sample of maimai songs for testing.
 songs/
+
+# Real charts used as a local parser smoke test. The committed fixtures beside
+# this directory are hand-written; upstream chart text stays out of the repo.
+# The corpus test sweeps these for panics when present and ignores them when not.
+engine/tests/fixtures/local/

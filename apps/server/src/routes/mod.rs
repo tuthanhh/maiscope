@@ -2,7 +2,7 @@ mod caching;
 mod catalog;
 mod charts;
 mod health;
-mod sheets;
+pub(crate) mod sheets;
 mod songs;
 mod sync;
 
@@ -85,7 +85,12 @@ pub fn router(state: AppState) -> Router {
         .layer(
             CorsLayer::new()
                 .allow_origin(cors_origins)
-                .allow_methods([Method::GET]),
+                .allow_methods([Method::GET])
+                // Without this the browser hides `X-Total-Count` from JS —
+                // `headers.get()` returns null, no error is raised, and it only
+                // happens cross-origin. A same-origin test cannot catch it, so
+                // `sheets::tests` exercises it through the assembled router.
+                .expose_headers([sheets::TOTAL_COUNT_HEADER]),
         )
         .with_state(state)
 }
@@ -166,6 +171,42 @@ mod tests {
                 "healthcheck must never be rate limited"
             );
         }
+        Ok(())
+    }
+
+    // The header is useless to the frontend unless CORS exposes it, and the
+    // failure is invisible: the browser drops it, `headers.get()` returns null,
+    // nothing is logged, and it only happens cross-origin. Neither a handler
+    // test nor a same-origin request can catch that, so this goes through the
+    // assembled router with an Origin the config allows.
+    #[sqlx::test]
+    async fn x_total_count_is_exposed_to_cross_origin_callers(pool: PgPool) -> sqlx::Result<()> {
+        let origin = "https://maiscope.pages.dev";
+        let mut state = test_state(pool);
+        Arc::make_mut(&mut state.config).cors_allowed_origins = vec![origin.to_string()];
+
+        let request = Request::builder()
+            .uri("/api/v1/sheets/search")
+            .header("fly-client-ip", "203.0.113.90")
+            .header("origin", origin)
+            .body(Body::empty())
+            .unwrap();
+
+        let response = router(state).oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let exposed = response
+            .headers()
+            .get("access-control-expose-headers")
+            .expect("CORS must expose headers, or the browser hides X-Total-Count")
+            .to_str()
+            .unwrap()
+            .to_ascii_lowercase();
+        assert!(
+            exposed.contains("x-total-count"),
+            "expose-headers was {exposed:?}"
+        );
+        assert!(response.headers().contains_key("x-total-count"));
         Ok(())
     }
 }

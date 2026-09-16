@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO catalog_meta (id, update_time, revision)\n             VALUES (true, TIMESTAMPTZ '2026-01-02T03:04:05Z', 7)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "41b0f40a9e49dcab0f45092dd5a3107d1cff1ca5089fb3545bc7a9060711dbe2"
+}

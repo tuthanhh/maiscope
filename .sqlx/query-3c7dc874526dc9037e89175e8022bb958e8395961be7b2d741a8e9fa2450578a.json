@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO songs (song_id, title, source_index)\n             VALUES ('example', 'Example Song', 0)\n             ON CONFLICT (song_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "3c7dc874526dc9037e89175e8022bb958e8395961be7b2d741a8e9fa2450578a"
+}

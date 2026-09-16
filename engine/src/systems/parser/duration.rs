@@ -9,6 +9,7 @@ use crate::systems::component::Duration;
 /// Supported formats (the outer `[` and `]` are included in `bracket_str`):
 ///
 /// - `[N:M]`           → Simple { divider: N, count: M }
+/// - `[#S]`             → Seconds(S), an absolute length independent of BPM
 /// - `[BPM#N:M]`       → BpmOverride { bpm, divider: N, count: M }
 /// - `[BPM#S]`          → BpmOverrideSeconds { bpm, seconds: S }
 /// - `[W##S]`           → ExplicitWaitAndTrace { wait: W, trace: S }
@@ -66,6 +67,12 @@ pub(super) fn parse_duration_bracket(bracket_str: &str) -> Option<Duration> {
         let bpm_part = &inner[..hash_pos];
         let rest = &inner[hash_pos + 1..]; // after "#"
 
+        // A leading '#' means there is no BPM to override — `[#5.678]` is an
+        // absolute length in seconds, the HOLD form from the notation doc.
+        if bpm_part.is_empty() {
+            return rest.parse::<f32>().ok().map(Duration::Seconds);
+        }
+
         let bpm = bpm_part.parse::<f32>().ok()?;
 
         // rest can be:
@@ -100,5 +107,170 @@ fn parse_beat_spec(s: &str) -> Option<(usize, usize)> {
         Some((divider, count))
     } else {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Parse a bracket that is expected to be valid.
+    fn ok(bracket: &str) -> Duration {
+        parse_duration_bracket(bracket)
+            .unwrap_or_else(|| panic!("expected {bracket:?} to parse, got None"))
+    }
+
+    #[test]
+    fn simple_beat_spec() {
+        assert_eq!(
+            ok("[8:1]"),
+            Duration::Simple {
+                divider: 8,
+                count: 1
+            }
+        );
+    }
+
+    // --- One test per bracket format ---------------------------------------
+    // Inputs match the worked examples in the SLIDE section of
+    // `docs/reference/simai-notation.md`, so these check the mapping against
+    // the spec rather than against the implementation's own idea of itself.
+
+    /// `[160#8:3]` — wait one beat at 160 BPM, trace three 8th notes at 160.
+    #[test]
+    fn bpm_override_with_beats() {
+        assert_eq!(
+            ok("[160#8:3]"),
+            Duration::BpmOverride {
+                bpm: 160.0,
+                divider: 8,
+                count: 3
+            }
+        )
+    }
+
+    /// `[160#2]` — single `#` with no colon after it, so the tail is seconds:
+    /// wait one beat at 160 BPM, trace for 2 seconds.
+    ///
+    /// The branch is selected purely by `parse_beat_spec` returning `None`, so
+    /// this is the case that breaks if that helper ever gets more permissive.
+    #[test]
+    fn bpm_override_with_seconds() {
+        assert_eq!(
+            ok("[160#2]"),
+            Duration::BpmOverrideSeconds {
+                bpm: 160.0,
+                seconds: 2.0
+            }
+        )
+    }
+
+    /// `[1.5##2.0]` — `##` then a bare float: wait, then trace, both seconds.
+    #[test]
+    fn explicit_wait_and_trace() {
+        assert_eq!(
+            ok("[1.5##2.0]"),
+            Duration::ExplicitWaitAndTrace {
+                wait_seconds: 1.5,
+                trace_seconds: 2.0
+            }
+        )
+    }
+
+    /// `[1.5##8:3]` — `##` then a beat spec: trace in beats at the current BPM.
+    #[test]
+    fn explicit_wait_with_beats() {
+        assert_eq!(
+            ok("[1.5##8:3]"),
+            Duration::ExplicitWaitBeats {
+                wait_seconds: 1.5,
+                divider: 8,
+                count: 3
+            }
+        )
+    }
+
+    /// `[1.5##160#8:3]` — `##` then BPM then beats. The three-way nesting is
+    /// the easiest to mis-slice; assert all four fields.
+    #[test]
+    fn explicit_wait_with_bpm_beats() {
+        assert_eq!(
+            ok("[1.5##160#8:3]"),
+            Duration::ExplicitWaitBpmBeats {
+                wait_seconds: 1.5,
+                bpm: 160.0,
+                divider: 8,
+                count: 3
+            }
+        )
+    }
+
+    /// Decimals are allowed wherever a BPM or a wait appears — the notation doc
+    /// calls for them explicitly, since BPM has to be exact.
+    #[test]
+    fn decimal_bpm_and_wait_are_accepted() {
+        assert_eq!(
+            ok("[174.5#8:3]"),
+            Duration::BpmOverride {
+                bpm: 174.5,
+                divider: 8,
+                count: 3,
+            }
+        );
+        assert_eq!(
+            ok("[1.234##2.5]"),
+            Duration::ExplicitWaitAndTrace {
+                wait_seconds: 1.234,
+                trace_seconds: 2.5,
+            }
+        );
+    }
+
+    // --- Rejection ----------------------------------------------------------
+
+    /// Every one of these returns `None`, never panics. `parse_duration_bracket`
+    /// is all `?` on `Option`, so a panic here would be a real bug.
+    #[test]
+    fn malformed_brackets_return_none() {
+        for input in [
+            "8:1",     // no brackets at all
+            "[]",      // empty
+            "[8:1",    // unclosed
+            "8:1]",    // unopened
+            "[a:b]",   // non-numeric
+            "[8]",     // divider with no count
+            "[-8:1]",  // negative divider
+            "[8:]",    // count missing
+            "[:1]",    // divider missing
+            "[#]",     // bare hash
+            "[##]",    // bare double hash
+            "[8:1:2]", // one colon too many
+        ] {
+            assert_eq!(
+                parse_duration_bracket(input),
+                None,
+                "expected {input:?} to be rejected"
+            );
+        }
+    }
+
+    /// `[#S]` is an absolute length in seconds, the HOLD form from the notation
+    /// doc: `4h[#5.678],` holds for exactly 5.678 seconds.
+    ///
+    /// A leading `#` is what distinguishes it from `[BPM#S]` — there is no BPM
+    /// to override, so it cannot be `BpmOverrideSeconds`.
+    #[test]
+    fn absolute_seconds_bracket() {
+        assert_eq!(ok("[#5.678]"), Duration::Seconds(5.678));
+        assert_eq!(ok("[#2]"), Duration::Seconds(2.0));
+
+        // Still distinct from the BPM-carrying form.
+        assert_eq!(
+            ok("[150#2]"),
+            Duration::BpmOverrideSeconds {
+                bpm: 150.0,
+                seconds: 2.0,
+            }
+        );
     }
 }

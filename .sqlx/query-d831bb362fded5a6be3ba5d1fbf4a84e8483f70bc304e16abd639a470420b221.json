@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO sheets (song_id_fk, sheet_expr, type, difficulty, level, level_value,\n                                 internal_level, internal_level_value, note_designer, is_special,\n                                 source_index)\n             SELECT id, 'example|dx|master', 'dx', 'master', '14+', 14.5, '14.7', 14.7,\n                    'Example Designer', false, 0\n             FROM songs WHERE song_id = 'example'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "d831bb362fded5a6be3ba5d1fbf4a84e8483f70bc304e16abd639a470420b221"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO sheets (song_id_fk, sheet_expr, type, difficulty, source_index)\n             SELECT id, 'example|std|basic', 'std', 'basic', 1\n             FROM songs WHERE song_id = 'example'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "4a6386e7d098a6ed62d3ec6efe575f1c21a35b4ea13d544e1df38988004b9742"
+}

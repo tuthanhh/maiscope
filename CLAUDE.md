@@ -135,8 +135,22 @@ Tests live per-module next to the code they cover, not centralized in
 (`config.rs`, `error.rs`, `rate_limit.rs`, `bin/seed_songs.rs`). Middleware
 behaviour is tested through an assembled `Router` via `tower::ServiceExt::oneshot`
 (`routes/mod.rs`) — handler tests call handlers directly and never exercise a
-layer. `engine/` and `apps/host/` have no tests
-yet — growing that is tracked in
+layer.
+
+`engine/` tests the simai parser. Per-note tests are inline `#[cfg(test)]`
+modules in `systems/parser/` — `parse_note`, `parse_slide_note` and
+`parse_duration_bracket` are private to that module tree, so an integration test
+cannot reach them. Shared helpers live in `systems/parser/testutil.rs`. The
+corpus test in `engine/tests/corpus.rs` drives the one public entry point,
+`parse_chart`, over the fixtures in `engine/tests/fixtures/` and snapshots event
+counts to `engine/tests/corpus-snapshot.txt`:
+
+```sh
+cargo test -p engine                              # needs libasound2-dev, libudev-dev
+UPDATE_SNAPSHOT=1 cargo test -p engine --test corpus   # accept a counts change
+```
+
+`apps/host/` still has no tests. Both are tracked in
 [`docs/work/test-foundation/`](docs/work/test-foundation/).
 
 **Do not let `DATABASE_URL` point at a data-laden database when running tests.**

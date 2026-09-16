@@ -11,5 +11,5 @@
 - [ ] `systems/visual/spawning.rs` (`next_event`, `apply_commands`) migrated
 - [ ] `systems/audio.rs` (`tick_metronome`, `start_bgm`) migrated
 - [ ] `systems/visual/movement/mod.rs` movement-speed system migrated
-- [ ] `cargo build -p maiscope-viewer` compiles clean, zero warnings about fields needing `#[allow(dead_code)]`
+- [ ] `cargo build -p engine` compiles clean, zero warnings about fields needing `#[allow(dead_code)]`
 - [ ] Manual smoke test via `./scripts/build-wasm.sh` + `pnpm dev`: notes spawn/scroll in sync, pause/resume, note/song speed sliders, restart, chart-completion stop, metronome-through-restart — all match pre-refactor behavior exactly

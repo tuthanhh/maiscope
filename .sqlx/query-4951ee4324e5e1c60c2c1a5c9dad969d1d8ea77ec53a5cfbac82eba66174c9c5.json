@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO sheet_note_counts (sheet_id, key, value)\n             SELECT id, k.key, k.value\n             FROM sheets, (VALUES ('total', 1000), ('tap', 500), ('hold', 100),\n                                  ('slide', 200), ('touch', 150), ('break', 50))\n                          AS k(key, value)\n             WHERE sheet_expr = 'example|dx|master'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "4951ee4324e5e1c60c2c1a5c9dad969d1d8ea77ec53a5cfbac82eba66174c9c5"
+}

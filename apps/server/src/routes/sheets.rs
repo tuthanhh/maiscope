@@ -1,6 +1,7 @@
 use axum::{
     Json, Router,
     extract::{Path, Query, State},
+    http::HeaderName,
     routing::get,
 };
 use serde::Deserialize;
@@ -81,11 +82,28 @@ fn default_search_page_size() -> i64 {
     22
 }
 
+/// The paginated total, per
+/// [ADR-0015](../../../../docs/adr/0015-pagination-total-as-a-response-header.md).
+///
+/// Must also appear in the CORS layer's `expose_headers` (`routes/mod.rs`) or
+/// the browser hides it from JS — silently, and only cross-origin.
+pub const TOTAL_COUNT_HEADER: HeaderName = HeaderName::from_static("x-total-count");
+
+/// Spelled out rather than `impl IntoResponse` so the handler test can
+/// destructure it and assert the header against the body — the invariant that
+/// makes dropping the body field safe later.
+type SearchResponse = ([(HeaderName, String); 1], Json<types::SheetSearchResponse>);
+
 // GET /sheets/search — filtered, paginated sheet list (contract §1.2).
+//
+// The total is currently sent twice: as `X-Total-Count` and as the body's
+// `total`. That is the expand step of ADR-0015's migration, not the end state —
+// `api-pagination-header` ticket 03 drops the body field once the deployed
+// frontend reads the header.
 async fn search_sheets(
     Query(q): Query<SheetSearchQuery>,
     State(pool): State<Pool<Postgres>>,
-) -> Result<Json<types::SheetSearchResponse>, AppError> {
+) -> Result<SearchResponse, AppError> {
     let params = queries::SheetSearchParams {
         title: q.title,
         match_exact_title: q.match_exact_title,
@@ -117,7 +135,10 @@ async fn search_sheets(
         })
         .collect();
 
-    Ok(Json(types::SheetSearchResponse { sheets, total }))
+    Ok((
+        [(TOTAL_COUNT_HEADER, total.to_string())],
+        Json(types::SheetSearchResponse { sheets, total }),
+    ))
 }
 
 #[cfg(test)]
@@ -207,8 +228,17 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(result.0.total, 1);
-        assert_eq!(result.0.sheets.len(), 1);
+        let (headers, Json(body)) = result;
+        assert_eq!(body.total, 1);
+        assert_eq!(body.sheets.len(), 1);
+
+        // The header and the body carry the same number. This is the invariant
+        // that makes `api-pagination-header` ticket 03 safe to take: the field
+        // can be dropped without changing what a client reads, because nothing
+        // depended on the two differing.
+        let (name, value) = &headers[0];
+        assert_eq!(name, &TOTAL_COUNT_HEADER);
+        assert_eq!(value, &body.total.to_string());
         Ok(())
     }
 }

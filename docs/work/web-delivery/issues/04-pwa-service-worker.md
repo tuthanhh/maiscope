@@ -57,7 +57,7 @@ Excluded via `globIgnores` and served by a runtime rule instead. Precache is now
 
 **Sprites use `StaleWhileRevalidate`, not `CacheFirst` like the wasm**, and the
 difference is invalidation, not preference. The wasm ships as
-`maiscope_viewer_bg-<hash>.wasm`, so a new build is a new URL and a stale entry
+`engine_bg-<hash>.wasm`, so a new build is a new URL and a stale entry
 can never shadow it. The sprites are copied verbatim out of `public/assets/`, keep
 their filenames forever, and would be pinned until expiry under cache-first. SWR
 serves the cached copy instantly and replaces it in the background, so a sprite

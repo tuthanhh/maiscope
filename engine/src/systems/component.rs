@@ -14,7 +14,7 @@ pub struct TimedEvent {
     pub bpm: f32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ChartEvent {
     BpmChange(f32),
     ResolutionChange(u32),
@@ -23,7 +23,7 @@ pub enum ChartEvent {
     Rest,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[allow(dead_code)]
 pub struct Note {
     /// Applies to Taps, Holds, Touches, and Slide Stars (Heads).
@@ -31,10 +31,17 @@ pub struct Note {
     pub is_break: bool,
     pub is_firework: bool,
     pub is_ex: bool,
+    /// Sub-comma delay from the pseudo-EACH backtick: `` 1`2, `` puts BUTTON-2
+    /// 1ms after BUTTON-1. Zero for every ordinary note.
+    ///
+    /// The delay does not advance the beat grid — a token is one comma however
+    /// many backticks it holds. Its visible effect is that notes at *different*
+    /// offsets are not simultaneous, so they must not render as an EACH.
+    pub offset_ms: u32,
     pub kind: NoteKind,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SlideSegment {
     pub shape: SlideShape,
     pub duration: Duration,
@@ -43,7 +50,7 @@ pub struct SlideSegment {
     pub is_break: bool,
 }
 
-#[derive(Debug, Clone, Component)]
+#[derive(Debug, Clone, PartialEq, Component)]
 pub enum NoteKind {
     Tap(ButtonId),
     TapHold {
@@ -96,6 +103,9 @@ pub enum Duration {
         bpm: f32,
         seconds: f32,
     },
+    /// An absolute length in seconds, independent of BPM: `[#5.678]`.
+    /// Distinct from `BpmOverrideSeconds`, which also restates the BPM.
+    Seconds(f32),
     // Specialy designed for slide.
     ExplicitWaitAndTrace {
         wait_seconds: f32,
@@ -114,7 +124,7 @@ pub enum Duration {
     },
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SlideShape {
     Straight {
         end: ButtonId,

@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO difficulties (difficulty, name, color, icon_url, icon_height, ordinal)\n             VALUES ('master', 'MASTER', '#9f51dc', 'master.png', 20, 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "175c6d95fd09d2b2ce7498d8bb282aa8d25261293be570fa0bb073d859dc1dae"
+}

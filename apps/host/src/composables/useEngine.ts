@@ -10,7 +10,7 @@
 import { GAME } from "~/app/game";
 import type { Sheet } from "~/types";
 
-type EngineModule = typeof import("~/wasm/maiscope_viewer.js");
+type EngineModule = typeof import("~/wasm/engine.js");
 
 let enginePromise: Promise<EngineModule> | null = null;
 
@@ -64,7 +64,7 @@ export function ensureEngine(): Promise<EngineModule> {
   if (!enginePromise) {
     enginePromise = (async () => {
       engineCanvas(); // ensure <canvas id="bevy"> is in the DOM before init
-      const mod = await import("~/wasm/maiscope_viewer.js");
+      const mod = await import("~/wasm/engine.js");
       // Default export is wasm-bindgen's init(); fetches + instantiates the .wasm
       // and runs the #[wasm_bindgen(start)] entry, which launches the Bevy App.
       await mod.default();

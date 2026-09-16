@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO sheet_regions (sheet_id, region, available)\n             SELECT id, 'jp', true FROM sheets WHERE sheet_expr = 'example|dx|master'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "f0b437270ff527cc97eb099258b86f0651a3093ef85e80a207d3548c583d2a4c"
+}

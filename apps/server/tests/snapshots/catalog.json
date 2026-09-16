@@ -1,0 +1,83 @@
+{
+  "categories": [
+    {
+      "category": "POPS & ANIME"
+    }
+  ],
+  "difficulties": [
+    {
+      "color": "#9f51dc",
+      "difficulty": "master",
+      "iconHeight": 20,
+      "iconUrl": "master.png",
+      "name": "MASTER"
+    }
+  ],
+  "regions": [
+    {
+      "name": "Japan",
+      "region": "jp"
+    }
+  ],
+  "songs": [
+    {
+      "artist": "Example Artist",
+      "bpm": 174.0,
+      "category": "POPS & ANIME",
+      "comment": "a comment",
+      "imageName": "example.png",
+      "isLocked": false,
+      "isNew": true,
+      "releaseDate": "2025-09-11",
+      "sheets": [
+        {
+          "difficulty": "master",
+          "hasChart": false,
+          "internalLevel": "14.7",
+          "internalLevelValue": 14.7,
+          "isSpecial": false,
+          "level": "14+",
+          "levelValue": 14.5,
+          "noteCounts": {
+            "break": 50,
+            "hold": 100,
+            "slide": 200,
+            "tap": 500,
+            "total": 1000,
+            "touch": 150
+          },
+          "noteDesigner": "Example Designer",
+          "regions": {
+            "jp": true
+          },
+          "type": "dx"
+        },
+        {
+          "difficulty": "basic",
+          "hasChart": false,
+          "type": "std"
+        }
+      ],
+      "songId": "example",
+      "title": "Example Song",
+      "version": "PRiSM"
+    }
+  ],
+  "types": [
+    {
+      "abbr": "DX",
+      "iconHeight": 32,
+      "iconUrl": "dx.png",
+      "name": "DX",
+      "type": "dx"
+    }
+  ],
+  "updateTime": "2026-01-02",
+  "versions": [
+    {
+      "abbr": "PRiSM",
+      "releaseDate": "2025-09-11",
+      "version": "PRiSM"
+    }
+  ]
+}

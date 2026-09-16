@@ -2,7 +2,7 @@
 # Build the Bevy engine to wasm and emit JS bindings the host app imports.
 #
 # Output lands in apps/host/src/wasm/ (gitignored). The host loads it lazily
-# from the visualizer page: `import init, { load_song } from '~/wasm/maiscope_viewer.js'`.
+# from the visualizer page: `import init, { load_song } from '~/wasm/engine.js'`.
 #
 # wasm-bindgen CLI version MUST match the wasm-bindgen crate version in
 # engine/Cargo.toml exactly, or you'll get a "schema version" mismatch at bindgen time.
@@ -32,7 +32,7 @@ fi
 echo ">> cargo build ($PROFILE) -> wasm32-unknown-unknown"
 ( cd "$ENGINE_DIR" && cargo build $CARGO_FLAGS --target wasm32-unknown-unknown )
 
-WASM_IN="$TARGET_ROOT/$TARGET_SUBDIR/maiscope_viewer.wasm"
+WASM_IN="$TARGET_ROOT/$TARGET_SUBDIR/engine.wasm"
 
 echo ">> wasm-bindgen -> $OUT_DIR"
 mkdir -p "$OUT_DIR"
@@ -49,4 +49,4 @@ rm -rf "$ASSETS_OUT/sprites"
 mkdir -p "$ASSETS_OUT"
 cp -R "$ENGINE_DIR/assets/sprites" "$ASSETS_OUT/sprites"
 
-echo ">> done. host imports from ~/wasm/maiscope_viewer.js"
+echo ">> done. host imports from ~/wasm/engine.js"

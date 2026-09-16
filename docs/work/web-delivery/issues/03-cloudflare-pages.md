@@ -57,9 +57,9 @@ while closing `build-and-deploy` 02:
 
 | Artifact | Size |
 |---|---|
-| `apps/host/src/wasm/maiscope_viewer_bg.wasm` (dev build) | 140 MB |
-| `apps/host/dist/assets/maiscope_viewer_bg-*.wasm` (what `pnpm build` emits) | 143 MB, gzip 16.4 MB |
-| `target/wasm32-unknown-unknown/release/maiscope_viewer.wasm` | 43 MB |
+| `apps/host/src/wasm/engine_bg.wasm` (dev build) | 140 MB |
+| `apps/host/dist/assets/engine_bg-*.wasm` (what `pnpm build` emits) | 143 MB, gzip 16.4 MB |
+| `target/wasm32-unknown-unknown/release/engine.wasm` | 43 MB |
 | the same, gzipped | 9.5 MB |
 
 Everything else `pnpm build` emits is negligible by comparison — the largest is
@@ -119,7 +119,7 @@ size problem makes Pages *more* attractive, not less.
 ## Deployment mechanism
 
 **Pages' git integration cannot build this project.** Tried it; the build failed at
-`vue-tsc` with the two `TS2307` errors for `~/wasm/maiscope_viewer.js`. The Pages
+`vue-tsc` with the two `TS2307` errors for `~/wasm/engine.js`. The Pages
 image provides `pnpm@10.33.0` and `nodejs@24.18.0` and no Rust, while
 `apps/host/src/wasm/` is gitignored and produced by `scripts/build-wasm.sh` —
 which needs Rust, `wasm-bindgen` 0.2.122, and a fat-LTO Bevy build that takes
@@ -145,6 +145,6 @@ can produce them via `--branch`, not yet wired), and two secrets are needed —
 `wasm-bindgen` shrinks the 17MB `wasm-release` binary to 14MB by dropping unused
 exports, so there is ~44% headroom under the 25 MiB cap.
 
-**Noted, not acted on:** the generated `maiscope_viewer.js` uses `eval`, which rollup
+**Noted, not acted on:** the generated `engine.js` uses `eval`, which rollup
 warns about. Harmless today, but it will conflict with a strict `Content-Security-Policy`
 — relevant when `web-delivery` 04 adds the service worker and headers.

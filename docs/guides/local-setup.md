@@ -37,7 +37,7 @@ Output lands in `apps/host/src/wasm/` (gitignored — rebuild after any change u
 `target/`, not `engine/target/`.
 
 This step is not optional for the frontend. `apps/host/src/composables/useEngine.ts`
-imports `~/wasm/maiscope_viewer.js` at type level, so `pnpm build` — which runs
+imports `~/wasm/engine.js` at type level, so `pnpm build` — which runs
 `vue-tsc --noEmit` first — fails without it, and the visualizer route fails at
 runtime. Skipping it leaves the rest of the app working.
 

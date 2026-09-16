@@ -3,11 +3,16 @@
 Defines the HTTP surface the global backend (`apps/server`, Rust/Axum/Postgres)
 exposes so the frontend (`apps/host/src/`) can drop its static `data.json`
 dependency: live catalog, per-sheet chart text for the visualizer, and a
-revision-probe sync tier. Auth (§4) and contributions (§5) are phase 2.
+revision-probe sync tier. Auth (§4) is phase 2; §5 is superseded by
+[ADR-0013](../adr/0013-community-charts-beside-the-catalog.md).
+
+> **This document describes `/api/v1`, which is frozen.** A from-scratch
+> replacement is planned — see [`api-v2`](../work/api-v2/spec.md). No further
+> behaviour lands here.
 
 Each section carries its implementation status:
 
-- **shipped** — routed in `apps/server/src/main.rs` and covered by handler tests
+- **shipped** — routed in `apps/server/src/routes/` and covered by handler tests
 - **phase 2** — designed, not built; no route exists. See
   [ROADMAP](../ROADMAP.md).
 
@@ -152,9 +157,20 @@ Response `200`:
 ```jsonc
 {
   "sheets": [ /* Sheet[] — same shape as GET /sheets/{sheetExpr}, see §1.1 */ ],
-  "total": 0   // total matches before pagination, for computing page count
+  "total": 0   // DEPRECATED, see below
 }
 ```
+
+Headers: `X-Total-Count: <n>` — total matches before pagination, for computing
+page count.
+
+> **Both are sent, permanently.** The header is the convention going forward
+> ([ADR-0015](../adr/0015-pagination-total-as-a-response-header.md)), but v1 is
+> frozen, so the body's `total` stays until v1 is deleted wholesale rather than
+> being removed from a version nobody is evolving. Read the header.
+>
+> The header is listed in `Access-Control-Expose-Headers` — it has to be, or a
+> cross-origin browser client cannot read it at all.
 
 No `superFilter` equivalent — the client-side arbitrary-JS filter was removed
 from the app (never had UI wiring); revisit if/when the app needs it again.
@@ -175,7 +191,7 @@ only cost the client a parse and an unwrap.
 
 The path segment is the **`songId` alone**, not the full `sheetExpr`; `type`
 and `difficulty` are query params. The server rebuilds `sheet_expr` from the
-three (`main.rs:get_chart`), so the cross-tier key is still what is matched —
+three (`routes/charts.rs:get_chart`), so the cross-tier key is still what is matched —
 it is just not URL-encoded into one segment here.
 
 | status | meaning |
@@ -279,7 +295,18 @@ rather than losing by accident (ADR-0002).
 
 ---
 
-## 5. Contributions — submit → pending → moderate → merge  *(phase 2)*
+## 5. Contributions — submit → pending → moderate → merge  *(phase 2, superseded)*
+
+> **Superseded, not yet rewritten.** This section describes a moderation queue
+> that merges proposals into the canonical tables.
+> [ADR-0013](../adr/0013-community-charts-beside-the-catalog.md) replaced it with
+> a separate community library: `/community/*`, published on upload, reports instead
+> of approvals, and no writes to `songs`/`sheets`/`charts` at all. The plan of
+> record is now [`community-charts`](../work/community-charts/spec.md); this
+> section is rewritten by its ticket 07, when there is shipped behaviour to
+> describe. Read what follows as history.
+>
+> §4 (auth) is unaffected and remains a prerequisite.
 
 **Not implemented.** No contribution route is mounted; the design below is the
 plan of record for `docs/work/server-contributions/`. No direct writes to
@@ -332,9 +359,11 @@ Status enum: `pending | approved | rejected | merged`.
   param today either parses or is optional.
   Exception: `GET /sheets/{songId}/chart` returns plain-text errors (§2).
 - **Pagination**: `?page` (1-based) + `?pageSize` (default 22, max 100). The
-  total is a `total` **field in the response body**, not an `X-Total-Count`
-  header — the only paginated endpoint (`GET /sheets/search`) returns an
-  envelope already, so a header would be a second place to look.
+  total is returned as an **`X-Total-Count` response header**
+  ([ADR-0015](../adr/0015-pagination-total-as-a-response-header.md)). It must
+  also be listed in `Access-Control-Expose-Headers`, or a cross-origin browser
+  cannot read it — silently. `GET /sheets/search` still sends a `total` body
+  field as well; v1 is frozen with both, and v2 sends the header only.
 - **Rate limits**: per-IP (keyed on `Fly-Client-IP`, not per-user — there is
   no auth yet), generous burst with a slow refill (`server-restructure` issue
   08). `429` + `Retry-After` (always at least `1` — the underlying limiter
@@ -345,7 +374,8 @@ Status enum: `pending | approved | rejected | merged`.
   only covers the shipped public reads.
 - **CORS**: allowlist built from `CORS_ALLOWED_ORIGINS` (`Config`, `server-restructure`
   issue 06) — no origin configured means no origin allowed, not a permissive
-  fallback. Local dev sets it to the Vite dev origin (`.env.example`).
+  fallback. `.env.example` still names the retired Tauri dev origin (`:1420`);
+  Vite serves on `:5173`, so a local frontend needs that set explicitly.
   Egress control, not a security control: `curl` ignores CORS entirely, so
   it doesn't gate access to public read-only data — the real cap on abuse is
   `server-restructure` issue 08's rate limiting. There is no native proxy
@@ -362,4 +392,4 @@ Status enum: `pending | approved | rejected | merged`.
 | §2 chart | `pages/visualizer.vue`, `composables/useEngine.ts` (auto-load real charts) |
 | §3 sync | IndexedDB catalog cache + manifest revision probe |
 | §4 auth *(phase 2)* | new login UI, token in browser storage |
-| §5 contributions *(phase 2)* | new contribution UI (web) |
+| §5 contributions *(superseded)* | replaced by the community library — [ADR-0013](../adr/0013-community-charts-beside-the-catalog.md) |

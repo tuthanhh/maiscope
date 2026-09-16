@@ -18,7 +18,7 @@ ticket just makes what exists run automatically.
 - [x] `cargo fmt --check`
 - [x] clippy under `-D warnings` — **scoped**, see Comments:
       `-p server -p shared --all-targets` natively, plus
-      `-p maiscope-viewer --target wasm32-unknown-unknown`
+      `-p engine --target wasm32-unknown-unknown`
 - [x] `cargo sqlx prepare --check --workspace -- -p server --all-targets`
 - [x] `cargo test -p server -p shared` — **scoped**, see Comments. Covers all 69
       tests; `engine` has none
@@ -78,17 +78,22 @@ cache against a 10GB per-repo Actions budget, and an apt install of
 a native build of a crate that only ever ships as wasm, and to run zero tests.
 
 Instead `engine` is gated by
-`cargo clippy -p maiscope-viewer --target wasm32-unknown-unknown -- -D warnings`,
+`cargo clippy -p engine --target wasm32-unknown-unknown -- -D warnings`,
 which needs no system libraries (ALSA/X11/Wayland are `cfg`-ed out on `wasm32`),
 lints the target that actually ships, and — since clippy compiles — subsumes the
 separate `cargo build --target …` step. Verified locally: passes clean in 45s.
 
 Rejected: `--workspace`, for the costs above. The trade accepted is that
 `engine`'s native-only code paths go unlinted; revisit if a native viewer build
-ever becomes real. Note the package is named **`maiscope-viewer`**, not `engine`.
+ever becomes real.
+
+> Superseded in part by `test-foundation` 01, which added a separate `engine`
+> job running `cargo test -p engine` natively. The package was named
+> `maiscope-viewer` when this ticket shipped and is now `engine`, matching its
+> directory.
 
 **The frontend cannot be its own job.** `pnpm build` fails without the wasm
-bindings — `useEngine.ts:13,67` import `~/wasm/maiscope_viewer.js`, and
+bindings — `useEngine.ts:13,67` import `~/wasm/engine.js`, and
 `apps/host/src/wasm/` is gitignored, so a bare checkout gives two `TS2307` errors.
 The engine and frontend are therefore one `wasm-web` job: clippy → `build-wasm.sh`
 → `pnpm build`. Keeping them together also lets clippy's dependency rlibs feed the

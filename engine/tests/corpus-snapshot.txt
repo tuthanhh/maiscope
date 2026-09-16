@@ -1,0 +1,8 @@
+holds: note=8 note_group=8 rest=1
+modifiers: note=12 note_group=10 rest=1
+slides_chained: note=4 note_group=4 rest=1
+slides_simple: note=13 note_group=13 rest=1
+slides_star: note=7 note_group=3 rest=1
+taps: note=8 note_group=6 rest=2
+timing: absolute_length=1 bpm_change=2 note=9 note_group=9 resolution_change=3 rest=1
+touches: note=9 note_group=9 rest=1
