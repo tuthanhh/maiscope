@@ -10,7 +10,7 @@ ticket just makes what exists run automatically.
 
 **Blocked by:** 01
 
-**Status:** in-progress
+**Status:** done
 
 - [x] `.github/workflows/ci.yml`, triggered on `pull_request` and pushes to master
 - [x] Postgres service container (`postgres:17`, matching `docker-compose.yml`),
@@ -28,8 +28,12 @@ ticket just makes what exists run automatically.
 - [x] Rust (`Swatinem/rust-cache`, one key per job) and pnpm
       (`setup-node cache: pnpm`) caching
 - [x] Verified green on `master` — `rust` 6m53s, `wasm-web` 1m31s (warm cache)
-- [ ] Verified on a real PR — deferred with branch protection below; `pull_request`
-      and `push` expose different contexts, so this is not covered by the master run
+- [x] Verified on a real PR — [#1](https://github.com/tuthanhh/maiscope/pull/1)
+      (2026-09-16). `mergeStateStatus` was `BLOCKED` while `rust`/`wasm-web` were
+      queued, confirming branch protection actually gates the merge button in the
+      `pull_request` context, not just the `push`-to-master context the master-only
+      run above covered. Went green (`rust` 2m25s, `wasm-web` 2m4s, `links` 10s)
+      and merged clean.
 - [x] Branch protection: ticket 05 landed (2026-09-16), revisited as planned.
       `master` now requires `rust` + `wasm-web` status checks via
       `PUT /branches/master/protection`, `strict: true`. **`enforce_admins:
