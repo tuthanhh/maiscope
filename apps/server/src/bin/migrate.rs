@@ -70,10 +70,20 @@ async fn run() -> Result<(), Box<dyn Error>> {
     // Empty counts as missing — GitHub Actions substitutes an absent secret with an
     // empty string, and Fly does the same for an unset one, so `env::var` succeeds
     // and sqlx fails later with a URL-parsing message instead of naming the secret.
-    let database_url = match std::env::var("DATABASE_URL") {
-        Ok(url) if !url.trim().is_empty() => url,
-        _ => return Err("DATABASE_URL is not set (or is empty)".into()),
+    //
+    // `MIGRATE_DATABASE_URL`, when set, takes priority over `DATABASE_URL`. The
+    // app should run against Neon's **pooled** endpoint, but `MIGRATOR.run()`
+    // takes a Postgres advisory lock and transaction-mode pooling does not
+    // guarantee the same backend across statements — sound only against the
+    // **direct** endpoint. Until both secrets exist in every environment, an
+    // unset `MIGRATE_DATABASE_URL` falls back to `DATABASE_URL` unchanged.
+    let non_empty = |var: &str| match std::env::var(var) {
+        Ok(url) if !url.trim().is_empty() => Some(url),
+        _ => None,
     };
+    let database_url = non_empty("MIGRATE_DATABASE_URL")
+        .or_else(|| non_empty("DATABASE_URL"))
+        .ok_or("MIGRATE_DATABASE_URL/DATABASE_URL are not set (or are empty)")?;
 
     // Progress lines exist so a stalled release command shows *where* it stalled.
     // Without them a hang is indistinguishable from a machine that never started.
