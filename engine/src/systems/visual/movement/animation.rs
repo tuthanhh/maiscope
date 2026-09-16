@@ -32,6 +32,7 @@ pub(super) fn duration_to_secs(duration: Duration, bpm: f32) -> f32 {
             count,
         } => count as f32 / divider as f32 * (240.0 / bpm),
         Duration::BpmOverrideSeconds { seconds, .. } => seconds,
+        Duration::Seconds(seconds) => seconds,
         _ => 0.0,
     }
 }

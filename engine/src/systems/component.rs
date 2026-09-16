@@ -96,6 +96,9 @@ pub enum Duration {
         bpm: f32,
         seconds: f32,
     },
+    /// An absolute length in seconds, independent of BPM: `[#5.678]`.
+    /// Distinct from `BpmOverrideSeconds`, which also restates the BPM.
+    Seconds(f32),
     // Specialy designed for slide.
     ExplicitWaitAndTrace {
         wait_seconds: f32,

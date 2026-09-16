@@ -47,6 +47,7 @@ fn slide_timing(duration: Duration, note_bpm: f32) -> (f32, f32) {
             count,
         } => (beat, count as f32 / divider as f32 * (240.0 / bpm)),
         Duration::BpmOverrideSeconds { seconds, .. } => (beat, seconds),
+        Duration::Seconds(seconds) => (beat, seconds),
     }
 }
 

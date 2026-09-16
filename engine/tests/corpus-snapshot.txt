@@ -1,4 +1,4 @@
-holds: note=6 note_group=6 rest=1
+holds: note=8 note_group=8 rest=1
 modifiers: note=12 note_group=10 rest=1
 slides_chained: note=4 note_group=4 rest=1
 slides_simple: note=13 note_group=13 rest=1

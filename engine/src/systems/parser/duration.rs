@@ -9,6 +9,7 @@ use crate::systems::component::Duration;
 /// Supported formats (the outer `[` and `]` are included in `bracket_str`):
 ///
 /// - `[N:M]`           → Simple { divider: N, count: M }
+/// - `[#S]`             → Seconds(S), an absolute length independent of BPM
 /// - `[BPM#N:M]`       → BpmOverride { bpm, divider: N, count: M }
 /// - `[BPM#S]`          → BpmOverrideSeconds { bpm, seconds: S }
 /// - `[W##S]`           → ExplicitWaitAndTrace { wait: W, trace: S }
@@ -65,6 +66,12 @@ pub(super) fn parse_duration_bracket(bracket_str: &str) -> Option<Duration> {
     else if let Some(hash_pos) = inner.find('#') {
         let bpm_part = &inner[..hash_pos];
         let rest = &inner[hash_pos + 1..]; // after "#"
+
+        // A leading '#' means there is no BPM to override — `[#5.678]` is an
+        // absolute length in seconds, the HOLD form from the notation doc.
+        if bpm_part.is_empty() {
+            return rest.parse::<f32>().ok().map(Duration::Seconds);
+        }
 
         let bpm = bpm_part.parse::<f32>().ok()?;
 
@@ -247,18 +254,23 @@ mod tests {
         }
     }
 
-    /// BUG: an absolute held-down length in seconds is unsupported.
+    /// `[#S]` is an absolute length in seconds, the HOLD form from the notation
+    /// doc: `4h[#5.678],` holds for exactly 5.678 seconds.
     ///
-    /// `docs/reference/simai-notation.md` (HOLD) specifies `4h[#5.678],` — hold
-    /// for exactly 5.678 seconds. Here the `#` sits at index 0, so `bpm_part` is
-    /// the empty string, `"".parse::<f32>()` fails, and the bracket is rejected.
-    /// `[150#2:1]` from the same table works, because it has a BPM before the `#`.
-    ///
-    /// This bracket never reaches here from a HOLD anyway: `TAP_TOUCH_RE` admits
-    /// only `\[(\d+):(\d+)\]`, so `4h[#5.678]` fails in `note.rs` first. See
-    /// `note::tests::hold_rejects_non_simple_durations`.
+    /// A leading `#` is what distinguishes it from `[BPM#S]` — there is no BPM
+    /// to override, so it cannot be `BpmOverrideSeconds`.
     #[test]
-    fn absolute_seconds_bracket_is_unsupported() {
-        assert_eq!(parse_duration_bracket("[#5.678]"), None);
+    fn absolute_seconds_bracket() {
+        assert_eq!(ok("[#5.678]"), Duration::Seconds(5.678));
+        assert_eq!(ok("[#2]"), Duration::Seconds(2.0));
+
+        // Still distinct from the BPM-carrying form.
+        assert_eq!(
+            ok("[150#2]"),
+            Duration::BpmOverrideSeconds {
+                bpm: 150.0,
+                seconds: 2.0,
+            }
+        );
     }
 }
