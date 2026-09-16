@@ -8,12 +8,17 @@ Operational procedures for the production database. Owned by
 
 | Name | Kind | Used by | Notes |
 |---|---|---|---|
-| `DATABASE_URL` | secret | `sync-catalog`, `deploy` (via Fly), `seed-charts`, `backup-database` | Currently the single `neondb_owner` role. Ticket 01 splits this. |
-| `SEED_DATABASE_URL` | secret | `seed-charts`, `backup-database` | Not yet created. Lower-privilege role; both workflows prefer it and fall back to `DATABASE_URL`. |
+| `DATABASE_URL` | secret | `sync-catalog`, `deploy` (via Fly, the app), `seed-charts`, `backup-database` | Role `maiscope_app` (2026-09-16), **pooled** endpoint. DML only (`SELECT`/`INSERT`/`UPDATE`/`DELETE`) — no DDL. |
+| `MIGRATE_DATABASE_URL` | secret (Fly app only) | `deploy`'s `release_command` (`bin/migrate`) | Role `neondb_owner`, **direct** (non-pooled) endpoint. Migrations need DDL, and `MIGRATOR.run()`'s advisory lock needs a pinned backend connection that pooled mode does not guarantee. Falls back to `DATABASE_URL` if unset (`bin/migrate.rs`). |
 | `FLY_API_TOKEN` | secret | `deploy` | |
 | `CHART_DATA_TOKEN` | secret | `seed-charts`, `backup-database` | PAT or deploy key with read (seed) and write (backup) on the chart-data repo. |
 | `CHART_DATA_REPO` | variable | `seed-charts`, `backup-database` | `owner/name` of the private chart-text repo. |
 | `CHART_DATA_SUBDIR` | variable | `seed-charts` | Path to the song tree inside that repo. Defaults to `songs`. |
+
+`SEED_DATABASE_URL`, planned earlier as a third credential for seeding
+specifically, was never created — `maiscope_app`'s single set of DML grants
+already covers `sync-catalog` and `seed-charts` alongside the app itself, so a
+fourth role would have added nothing.
 
 ## Bootstrap a database from empty
 
@@ -82,14 +87,19 @@ refetches `/catalog` in full — but expect a traffic spike.
 Tracked in [ticket 01](issues/01-neon-provisioning-runbook.md); recorded here
 because they change how the procedures above should be read.
 
-- **The app runs as `neondb_owner`.** Any logic bug has DDL rights on production.
-  Splitting the roles is the highest-value item in ticket 01.
-- **Migrations run through the pooler.** `MIGRATOR.run()` takes an advisory lock,
-  and transaction-mode pooling does not guarantee the same backend across
-  statements. It has worked, but it is not sound. Fix is a separate direct-endpoint
-  URL the migrator prefers.
-- **The current credential was pasted into a chat transcript** and should be
-  rotated as part of doing ticket 01.
-- **Neon's actual free-tier restore window is unverified.** Until it is measured
-  and recorded here, "we can roll back the data" is an assumption rather than a
-  fact — which is exactly why the `pg_dump` path exists.
+**Resolved (2026-09-16):** the app no longer runs as `neondb_owner` (split
+into `maiscope_app`, DML-only, and `neondb_owner` for migrations only — see
+the secret table above), and migrations no longer run through the pooler
+(`MIGRATE_DATABASE_URL` pins the direct endpoint). Verified against a real
+`deploy.yml` dispatch, not just reasoned about — see ticket 01's Comments for
+the three-attempt debugging trail.
+
+Still open:
+
+- **The current credential was pasted into a chat transcript** (predates
+  2026-09-16's work) and should be rotated.
+- **Restore has not been rehearsed into a real Neon branch**, only locally —
+  tracked in [ticket 05](issues/05-backups.md), not this ticket. Neon's
+  free-tier PITR window itself **is** now verified: 6 hours (ticket 01,
+  2026-09-16), against Neon's own docs. That window is short enough that the
+  nightly `pg_dump` is the real recovery path for anything older, not PITR.

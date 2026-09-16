@@ -22,7 +22,18 @@ Also resolve the facts the plan currently assumes rather than knows.
       endpoint for migrations — `DATABASE_URL` (`maiscope_app`, pooled) and
       `MIGRATE_DATABASE_URL` (`neondb_owner`, direct) as two separate Fly
       secrets, wired in `bin/migrate.rs`
-- [ ] Pool `max_connections` reconciled with Neon's free-tier ceiling (`server-restructure` issue 03)
+- [x] Pool `max_connections` reconciled with Neon's free-tier ceiling
+      (`server-restructure` issue 03) — verified against [Neon's connection
+      pooling docs](https://neon.com/docs/connect/connection-pooling)
+      (2026-09-16): at the smallest compute size (0.25 CU, the floor a Neon
+      project runs at), `max_connections` is 104, of which 7 are reserved for
+      Neon's own superuser, leaving 97 available. The server's default of
+      `4` (`DEFAULT_DATABASE_MAX_CONNECTIONS`, `config.rs`) is nowhere near
+      that ceiling — no change needed. Not reconciled *up* either: 256MB/1
+      shared CPU on a single Fly machine has no realistic path to needing
+      more than 4 concurrent DB connections without evidence from real
+      traffic first (same "raise only with evidence" rule as the VM sizing
+      in `fly.toml`).
 - [x] **Verified and recorded here**: Neon free-tier restore/PITR window —
       **6 hours** of change history (up to 1 GB-month), confirmed against
       [Neon's own plans page](https://neon.com/docs/introduction/plans)
@@ -35,8 +46,12 @@ Also resolve the facts the plan currently assumes rather than knows.
       here (would let CI run `#[sqlx::test]` against real ephemeral Postgres) —
       tracked as a future enhancement, not blocking this ticket.
 - [ ] Measured and recorded: cold-start latency of the first query after autosuspend
-- [ ] `runbook.md` in this directory: bootstrap steps, restore steps, role/secret
-      inventory (names only, never values)
+- [x] `runbook.md` in this directory: bootstrap steps, restore steps, role/secret
+      inventory (names only, never values) — bootstrap and restore were
+      already written (2026-09-13, rehearsed for real); secret inventory and
+      "known gaps" updated (2026-09-16) to match the role split actually
+      shipped, replacing the earlier `SEED_DATABASE_URL` plan that turned out
+      unnecessary
 - [ ] Fly billing alerts configured — there is no hard spend cap
 
 
