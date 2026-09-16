@@ -20,13 +20,20 @@ The Bevy visualizer running in a mobile browser and installed PWA. Gated on the
 spike in `work/mobile-webview-spike/issues/01-bevy-mobile-webview-spike.md`, whose
 outcome can reopen [ADR-0003](adr/0003-web-pwa-drop-tauri.md).
 
-### Phase 2 — community charts
+### v2.0 — community platform
 
-GitHub authentication, then a second library beside the official catalog: anyone
-uploads a `maidata.txt`, anyone plays it. Published on upload with a report queue, not
-a moderation queue — [ADR-0013](adr/0013-community-charts-beside-the-catalog.md),
-which supersedes the contribution-queue design. Still no contributor audio
-([ADR-0002](adr/0002-chart-data-only-no-audio-hosting.md)). Unscheduled.
+maiscope stops being a mirror people read and becomes a place people put charts
+into. GitHub authentication, a second library beside the official catalog
+(anyone uploads a `maidata.txt`, anyone plays it), an API authored from scratch,
+and a frontend rebuilt around all of it.
+
+Published on upload with a report queue, not a moderation queue —
+[ADR-0013](adr/0013-community-charts-beside-the-catalog.md), which supersedes the
+contribution-queue design. Still no contributor audio
+([ADR-0002](adr/0002-chart-data-only-no-audio-hosting.md)).
+
+Rules, risks and build order: [`production-v2`](work/production-v2/spec.md).
+Unscheduled.
 
 ## Features
 
@@ -41,17 +48,19 @@ which supersedes the contribution-queue design. Still no contributor audio
 | ├ [web-delivery](work/web-delivery/spec.md) | active | v1.0 |
 | ├ [test-foundation](work/test-foundation/spec.md) | active | v1.0 |
 | └ [api-pagination-header](work/api-pagination-header/spec.md) | shipped | v1.0 |
-| [catalog-difficulties](work/catalog-difficulties/spec.md) | planned | phase 2 |
-| [song-public-id](work/song-public-id/spec.md) | planned | phase 2 |
-| [api-rewrite](work/api-rewrite/spec.md) | planned | phase 2 |
+| [production-v2](work/production-v2/spec.md) — umbrella | planned | v2.0 |
+| ├ [frontend-redesign](work/frontend-redesign/spec.md) | planned | v2.0 |
+| ├ [catalog-difficulties](work/catalog-difficulties/spec.md) | planned | v2.0 |
+| ├ [song-public-id](work/song-public-id/spec.md) | planned | v2.0 |
+| ├ [parser-crate-extraction](work/parser-crate-extraction/spec.md) | planned | v2.0 |
+| ├ [server-auth-github-oauth](work/server-auth-github-oauth/) | planned | v2.0 |
+| ├ [api-rewrite](work/api-rewrite/spec.md) | planned | v2.0 |
+| └ [community-charts](work/community-charts/spec.md) | planned | v2.0 |
+| [server-contributions](work/server-contributions/spec.md) | superseded | — |
 | [parser-defects](work/parser-defects/spec.md) | active | v1.0 |
 | [mobile-webview-spike](work/mobile-webview-spike/) | planned | v1.1 |
 | [docs-restructure](work/docs-restructure/spec.md) | shipped | — |
 | [server-sync-tier](work/server-sync-tier/) | shipped | — |
-| [server-auth-github-oauth](work/server-auth-github-oauth/) | planned | phase 2 |
-| [parser-crate-extraction](work/parser-crate-extraction/spec.md) | planned | phase 2 |
-| [community-charts](work/community-charts/spec.md) | planned | phase 2 |
-| [server-contributions](work/server-contributions/spec.md) | superseded | phase 2 |
 | [server-catalog-typed-queries](work/server-catalog-typed-queries/) | shipped | — |
 | [server-side-sheet-search](work/server-side-sheet-search/) | shipped | — |
 | [frontend-server-side-search](work/frontend-server-side-search/) | shipped | — |

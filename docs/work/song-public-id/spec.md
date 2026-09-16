@@ -1,7 +1,8 @@
 # Spec — Stable public song ids
 
 **Status:** planned
-**Milestone:** phase 2
+**Milestone:** v2.0
+**Parent:** [`production-v2`](../production-v2/spec.md)
 
 Mint a stable, ASCII, never-derived-from-text identifier for every song, so the
 API can address one without percent-encoding a Japanese title.

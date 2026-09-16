@@ -1,7 +1,8 @@
 # Spec — Difficulties as a real set
 
 **Status:** planned
-**Milestone:** phase 2
+**Milestone:** v2.0
+**Parent:** [`production-v2`](../production-v2/spec.md)
 
 Make the `difficulties` table the authoritative set of difficulty values, with
 `sheets.difficulty` referencing it. Fixes a live bug and unblocks the API

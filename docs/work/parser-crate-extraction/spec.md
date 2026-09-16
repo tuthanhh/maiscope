@@ -1,7 +1,8 @@
 # Spec — Parser crate extraction
 
 **Status:** planned
-**Milestone:** phase 2
+**Milestone:** v2.0
+**Parent:** [`production-v2`](../production-v2/spec.md)
 
 Move the simai parser out of `engine` into `crates/simai`, a crate that does not
 depend on Bevy. Decided in

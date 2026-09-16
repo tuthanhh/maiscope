@@ -1,7 +1,8 @@
 # Spec — Community charts
 
 **Status:** planned
-**Milestone:** phase 2
+**Milestone:** v2.0
+**Parent:** [`production-v2`](../production-v2/spec.md)
 
 A second library, beside the official catalog: anyone uploads a `maidata.txt`,
 anyone plays it. Decided in

@@ -1,7 +1,8 @@
 # Spec — API rewrite
 
 **Status:** planned
-**Milestone:** phase 2
+**Milestone:** v2.0
+**Parent:** [`production-v2`](../production-v2/spec.md)
 
 Replace the HTTP API with one authored from scratch, on a branch, cutting over
 together with the redesigned frontend. There is no second API served alongside,

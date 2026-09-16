@@ -1,7 +1,7 @@
 # Spec — Server contributions
 
 **Status:** superseded
-**Milestone:** phase 2
+**Milestone:** —
 **Superseded by:** [`community-charts`](../community-charts/spec.md) and
 [ADR-0013](../../adr/0013-community-charts-beside-the-catalog.md)
 
