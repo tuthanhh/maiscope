@@ -31,11 +31,20 @@ export class ApiError extends Error {
   }
 }
 
-export async function fetchJson<T>(url: string): Promise<T> {
+/**
+ * Like `fetchJson`, but also hands back the response headers.
+ *
+ * Paginated endpoints carry their total in `X-Total-Count` rather than the body
+ * (ADR-0015), and a caller cannot read that through `fetchJson`. Error handling
+ * stays in one place: `fetchJson` delegates here.
+ */
+export async function fetchJsonWithHeaders<T>(
+  url: string,
+): Promise<{ data: T; headers: Headers }> {
   const response = await fetch(url);
 
   if (response.ok) {
-    return (await response.json()) as T;
+    return { data: (await response.json()) as T, headers: response.headers };
   }
 
   // The body is a stream and can only be read once, so read it a single time
@@ -50,4 +59,8 @@ export async function fetchJson<T>(url: string): Promise<T> {
     response.status,
     body.message ?? response.statusText ?? `request failed (${response.status})`,
   );
+}
+
+export async function fetchJson<T>(url: string): Promise<T> {
+  return (await fetchJsonWithHeaders<T>(url)).data;
 }
