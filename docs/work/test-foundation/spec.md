@@ -1,6 +1,6 @@
 # Spec — Test foundation
 
-**Status:** planned
+**Status:** active
 **Milestone:** v1.0
 **Parent:** [`production-v1`](../production-v1/spec.md)
 
@@ -45,6 +45,15 @@ Parser first, ahead of server tests, on four grounds:
   cannot start emitting them.
 - **A parser must never panic on malformed input.** A panic in wasm takes the whole
   canvas down; an error is recoverable.
+- **Contradictory input is rejected, not guessed at.** Duplicate meta markers in
+  one simai token are an error rather than a silent last-one-wins —
+  [ADR-0012](../../adr/0012-one-marker-of-each-kind-per-simai-token.md), which
+  also fixes the emission order at BPM → length → note.
+- **Assertions cite the notation spec, not the implementation.** Expected values
+  come from [`docs/reference/simai-notation.md`](../../reference/simai-notation.md),
+  so a failure means the parser disagrees with simai — not that a test drifted.
+  Where the two already disagree, the test pins current behaviour under a
+  `// BUG:` comment instead of being written to pass.
 - **Fixtures are chart text only** — never mp3, never bg images. The original 16
   `maidata.txt` were deleted with the audio on 2026-09-09 and have to be
   re-acquired into the private data repo.

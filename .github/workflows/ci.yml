@@ -21,9 +21,9 @@ jobs:
   #
   # Scoped to `server` and `shared` rather than `--workspace` on purpose. The
   # workspace also holds `engine` (Bevy), which would add ~300 crates, a
-  # multi-gigabyte cache, and an apt install of ALSA/X11/Wayland headers — for a
-  # native build that is never shipped and currently has zero tests. `engine` is
-  # gated by clippy in the wasm-web job instead, on the target it actually runs on.
+  # multi-gigabyte cache, and an apt install of ALSA/X11/Wayland headers. That
+  # cost is real but now buys something — the parser tests — so it is paid in a
+  # separate `engine` job with its own cache, rather than on every server PR.
   rust:
     runs-on: ubuntu-latest
 
@@ -91,6 +91,37 @@ jobs:
 
       - name: cargo test
         run: cargo test -p server -p shared
+
+  # The simai parser, tested natively. Pure functions — no browser, no wasm, no
+  # Postgres — but they live in a crate that depends on Bevy, so the job still
+  # pays for Bevy's system headers and dependency tree.
+  #
+  # Its own cache key, not `native` or `wasm`: sharing with `native` would grow
+  # the server job's cache by Bevy's whole tree, and sharing with `wasm` would
+  # mix two target triples in one cache.
+  engine:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the pinned toolchain
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: engine-native
+
+      # A native Bevy build links ALSA (bevy_kira_audio -> cpal) and libudev
+      # (winit's gamepad/input probing). Neither is used by the parser tests,
+      # but both are needed to link the test binary at all.
+      - name: Install Bevy's native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libasound2-dev libudev-dev
+
+      - name: cargo test (engine)
+        run: cargo test -p maiscope-viewer
 
   # The engine and the frontend are one job because they are one dependency
   # chain: `pnpm build` fails without the wasm bindings, since useEngine.ts

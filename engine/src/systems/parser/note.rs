@@ -194,3 +194,285 @@ fn build_touch_note(
         }]
     }
 }
+
+#[cfg(test)]
+mod tests {
+    // `parse` and `parse_err` are imported for the stubs below, not for the
+    // tests that already exist.
+    #[allow(unused_imports)]
+    use super::super::testutil::{parse, parse_err, parse_one, plain, simple};
+    use crate::systems::component::NoteKind;
+
+    #[test]
+    fn bare_digit_is_a_tap() {
+        assert_eq!(parse_one("1"), plain(NoteKind::Tap(1)));
+    }
+
+    #[test]
+    fn hold_carries_its_bracket_duration() {
+        assert_eq!(
+            parse_one("3h[4:1]"),
+            plain(NoteKind::TapHold {
+                button: 3,
+                duration: simple(4, 1),
+            })
+        );
+    }
+
+    /// Every button 1-8 is a tap, and nothing outside that range is.
+    #[test]
+    fn all_eight_buttons_are_taps() {
+        for btn in 1..=8 {
+            assert_eq!(parse_one(&btn.to_string()), plain(NoteKind::Tap(btn)));
+        }
+    }
+
+    // --- Note kinds ---------------------------------------------------------
+
+    /// A pseudo-hold is `h` with no bracket: `3h,`. Per the notation doc it is
+    /// treated as `[1280:1]` — SEGA's fan book gives the implied held-down
+    /// length as a 1280th note.
+    ///
+    /// Asserted explicitly because it is exactly the kind of magic number that
+    /// gets "cleaned up" into a round 1024 and silently changes note lengths.
+    #[test]
+    fn pseudo_hold_defaults_to_1280_1() {
+        assert_eq!(
+            parse_one("3h"),
+            plain(NoteKind::TapHold {
+                button: 3,
+                duration: simple(1280, 1),
+            })
+        );
+    }
+
+    /// Touch notes name a sensor group A-E and an index. `group` is stored
+    /// uppercased, so the lowercase spelling the regex also accepts must agree.
+    #[test]
+    fn touch_zones_normalise_case() {
+        for (input, group, value) in [
+            ("A1", 'A', 1),
+            ("B5", 'B', 5),
+            ("D7", 'D', 7),
+            ("E3", 'E', 3),
+            ("e3", 'E', 3),
+            ("b5", 'B', 5),
+        ] {
+            assert_eq!(parse_one(input), plain(NoteKind::Touch { value, group }));
+        }
+    }
+
+    /// Group C has two sensors, but no TOUCH ever appears at one individually —
+    /// a centre touch is written bare, `C,`. `build_touch_note` defaults the
+    /// index to 1 via `unwrap_or(1)`.
+    ///
+    /// Divergence from the notation doc: it says `C1,` and `C2,` both behave
+    /// exactly as `C,`. Here `C2` keeps `value: 2`. Harmless as long as nothing
+    /// downstream distinguishes the two — `systems/visual/` draws the centre
+    /// either way — but it is a difference, so it is pinned here.
+    #[test]
+    fn bare_centre_touch_defaults_to_index_one() {
+        let centre = plain(NoteKind::Touch {
+            value: 1,
+            group: 'C',
+        });
+        assert_eq!(parse_one("C"), centre);
+        assert_eq!(parse_one("C1"), centre);
+        assert_eq!(
+            parse_one("C2"),
+            plain(NoteKind::Touch {
+                value: 2,
+                group: 'C',
+            })
+        );
+    }
+
+    /// TOUCH HOLD is a HOLD with the button number replaced by a sensor. The
+    /// pseudo-hold fallback applies here too (`Ch,` judges instantly), and `h`
+    /// and `f` may appear in either order.
+    #[test]
+    fn touch_hold_with_and_without_duration() {
+        assert_eq!(
+            parse_one("C1h[4:3]"),
+            plain(NoteKind::TouchHold {
+                value: 1,
+                group: 'C',
+                duration: simple(4, 3),
+            })
+        );
+        assert_eq!(
+            parse_one("Ch"),
+            plain(NoteKind::TouchHold {
+                value: 1,
+                group: 'C',
+                duration: simple(1280, 1),
+            })
+        );
+
+        // `Chf[1:2]` and `Cfh[1:2]` are the same note.
+        let firework = parse_one("Chf[1:2]");
+        assert_eq!(firework, parse_one("Cfh[1:2]"));
+        assert!(firework.is_firework);
+        assert_eq!(
+            firework.kind,
+            NoteKind::TouchHold {
+                value: 1,
+                group: 'C',
+                duration: simple(1, 2),
+            }
+        );
+    }
+
+    // --- Modifiers ----------------------------------------------------------
+
+    /// `b`=BREAK, `x`=EX, `f`=firework. `parse_note_modifiers` reads both the
+    /// pre-bracket and post-bracket slots, so each flag must be settable from
+    /// either side: `5hb[2:1]` and `5bh[2:1]` are the same note per the doc.
+    #[test]
+    fn modifiers_are_read_before_and_after_the_bracket() {
+        assert!(parse_one("1b").is_break);
+        assert!(parse_one("1h[4:1]b").is_break);
+        assert!(parse_one("1x").is_ex);
+        assert!(parse_one("1h[4:1]x").is_ex);
+        assert!(parse_one("B7f").is_firework);
+        assert!(parse_one("Ch[4:1]f").is_firework);
+
+        // Order around `h` does not matter.
+        assert_eq!(parse_one("5hb[2:1]"), parse_one("5bh[2:1]"));
+    }
+
+    /// `x`, `h` and `b` combine in any order — the doc's `7bxh[α:β]` is an
+    /// EX BREAK HOLD.
+    #[test]
+    fn modifiers_combine() {
+        let n = parse_one("1bx");
+        assert!(n.is_break && n.is_ex && !n.is_firework);
+        assert_eq!(n.kind, NoteKind::Tap(1));
+        assert_eq!(parse_one("1xb"), n);
+
+        let hold = parse_one("7bxh[4:1]");
+        assert!(hold.is_break && hold.is_ex);
+        assert_eq!(
+            hold.kind,
+            NoteKind::TapHold {
+                button: 7,
+                duration: simple(4, 1),
+            }
+        );
+    }
+
+    // --- EACH shorthand -----------------------------------------------------
+
+    /// `12,` is two simultaneous taps, not button twelve — the one EACH that
+    /// may omit the `/`. This is also the only place a non-slide returns more
+    /// than one note.
+    ///
+    /// The regex earns its keep here: `TAP_TOUCH_RE`'s alternation lists
+    /// `[1-8]` *before* `[1-8][1-8]`, and alternation is leftmost-first, not
+    /// longest-match. `"12"` first matches just `"1"`, fails at `$` with `"2"`
+    /// left over, and only parses because the engine backtracks into the
+    /// two-digit branch. Reordering that alternation would break this silently.
+    #[test]
+    fn two_digit_shorthand_is_two_taps() {
+        assert_eq!(
+            parse("12"),
+            vec![plain(NoteKind::Tap(1)), plain(NoteKind::Tap(2))]
+        );
+        // Order is positional, not sorted.
+        assert_eq!(
+            parse("21"),
+            vec![plain(NoteKind::Tap(2)), plain(NoteKind::Tap(1))]
+        );
+    }
+
+    /// Divergence: the doc says only an EACH made *entirely of non-BREAK TAPs*
+    /// may drop the `/`, so `12b` is not legal notation. It is accepted here
+    /// and marks both taps BREAK.
+    ///
+    /// Being lenient about input nobody should write is defensible; silently
+    /// reinterpreting it is what this pins down. If a future change makes `12b`
+    /// an error instead, that is a deliberate call and this test should be
+    /// updated to match, not deleted.
+    #[test]
+    fn two_digit_shorthand_accepts_a_break_the_spec_forbids() {
+        let notes = parse("12b");
+        assert_eq!(notes.len(), 2);
+        assert!(notes.iter().all(|n| n.is_break));
+    }
+
+    // --- Rejection ----------------------------------------------------------
+
+    /// `parse_note` returns `Err`, never panics. `build_button_note` and
+    /// `build_touch_note` both lean on `unwrap_or`, so anything that reaches
+    /// them with a surprising capture would fall back rather than fail loudly —
+    /// these inputs confirm nothing reaches them at all.
+    #[test]
+    fn malformed_notes_return_err_never_panic() {
+        for input in [
+            "",      // empty
+            "9",     // above the 1-8 range
+            "0",     // below it
+            "99",    // two-digit, both out of range
+            "Z1",    // unknown sensor group
+            "F1",    // group letter past E
+            "1[",    // stray bracket
+            "1[4:",  // unterminated bracket
+            "b",     // lone modifier
+            "h",     // lone hold marker
+            "[4:1]", // duration with no note
+        ] {
+            parse_err(input);
+        }
+    }
+
+    /// BUG: a HOLD may only carry a `[N:M]` duration.
+    ///
+    /// `TAP_TOUCH_RE` hard-codes `\[(\d+):(\d+)\]`, so the other two forms the
+    /// notation doc gives for HOLD are rejected outright:
+    ///
+    /// - `4h[#5.678],` — hold for exactly 5.678 seconds
+    /// - `4h[150#2:1],` — hold one half note at 150 BPM
+    ///
+    /// `parse_duration_bracket` already handles the second of these; the regex
+    /// never gives it the chance. Fixing means widening the capture to the whole
+    /// bracket and delegating, which changes `hold_duration`'s type — a real
+    /// change, not a one-liner, so it is documented rather than done here.
+    /// See `duration::tests::absolute_seconds_bracket_is_unsupported`.
+    #[test]
+    fn hold_rejects_non_simple_durations() {
+        parse_err("4h[#5.678]");
+        parse_err("4h[150#2:1]");
+    }
+
+    /// BUG: pseudo-EACH is unsupported.
+    ///
+    /// The doc's `` 1`2, `` places BUTTON-2 one millisecond after BUTTON-1. The
+    /// backtick appears in neither `TAP_TOUCH_RE` nor `SLIDE_PATTERN_RE`, so the
+    /// whole token fails to parse.
+    ///
+    /// This is not theoretical — `engine/tests/fixtures/BIRTH.txt` uses it three
+    /// times (`` E6`B5 ``, `` B3`E4 ``, `` B2`E2 ``). Combined with the dropped-token
+    /// defect in `chart.rs`, those three note groups vanish from the chart with
+    /// nothing surfaced to the user. See
+    /// `chart::tests::unparseable_token_drops_the_event_and_shifts_the_chart`.
+    #[test]
+    fn pseudo_each_backtick_is_unsupported() {
+        parse_err("1`2");
+        parse_err("E6`B5");
+    }
+
+    /// BUG: the UTAGE star/normal-TAP modifiers are unsupported.
+    ///
+    /// `1$,` forces a star-shaped TAP and `1$$,` makes it rotate. Neither `$`
+    /// nor `@` appears in `TAP_TOUCH_RE`'s modifier class, so both fail.
+    ///
+    /// `@`, `?` and `!` *do* parse on a slide — `SLIDE_RE` admits them and then
+    /// ignores them — so the gap is inconsistent rather than uniform. Lowest
+    /// priority of the three: UTAGE charts are out of scope for v1.
+    #[test]
+    fn utage_star_tap_modifiers_are_unsupported() {
+        parse_err("1$");
+        parse_err("1$$");
+        parse_err("1@");
+    }
+}

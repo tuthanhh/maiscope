@@ -14,7 +14,7 @@ pub struct TimedEvent {
     pub bpm: f32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ChartEvent {
     BpmChange(f32),
     ResolutionChange(u32),
@@ -23,7 +23,7 @@ pub enum ChartEvent {
     Rest,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[allow(dead_code)]
 pub struct Note {
     /// Applies to Taps, Holds, Touches, and Slide Stars (Heads).
@@ -34,7 +34,7 @@ pub struct Note {
     pub kind: NoteKind,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SlideSegment {
     pub shape: SlideShape,
     pub duration: Duration,
@@ -43,7 +43,7 @@ pub struct SlideSegment {
     pub is_break: bool,
 }
 
-#[derive(Debug, Clone, Component)]
+#[derive(Debug, Clone, PartialEq, Component)]
 pub enum NoteKind {
     Tap(ButtonId),
     TapHold {
@@ -114,7 +114,7 @@ pub enum Duration {
     },
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SlideShape {
     Straight {
         end: ButtonId,

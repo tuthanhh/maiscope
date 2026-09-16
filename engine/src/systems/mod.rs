@@ -5,7 +5,7 @@ use crate::systems::chart_playback::ChartPlayback;
 
 mod audio;
 mod chart_playback;
-mod component;
+pub(crate) mod component;
 pub mod parser;
 mod visual;
 
