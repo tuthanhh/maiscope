@@ -121,11 +121,11 @@ jobs:
           sudo apt-get install -y --no-install-recommends libasound2-dev libudev-dev
 
       - name: cargo test (engine)
-        run: cargo test -p maiscope-viewer
+        run: cargo test -p engine
 
   # The engine and the frontend are one job because they are one dependency
   # chain: `pnpm build` fails without the wasm bindings, since useEngine.ts
-  # imports ~/wasm/maiscope_viewer.js and apps/host/src/wasm/ is gitignored.
+  # imports ~/wasm/engine.js and apps/host/src/wasm/ is gitignored.
   # Keeping them together also lets the clippy run's dependency rlibs feed the
   # wasm build from the same target/ directory, instead of shipping a ~140MB
   # artifact between two jobs.
@@ -152,7 +152,7 @@ jobs:
       # Compiling is checking, so this also covers "does engine still build for
       # wasm" — no separate `cargo build --target ...` step is needed.
       - name: cargo clippy (engine, wasm target)
-        run: cargo clippy -p maiscope-viewer --target wasm32-unknown-unknown -- -D warnings
+        run: cargo clippy -p engine --target wasm32-unknown-unknown -- -D warnings
 
       - name: Build wasm bindings
         run: ./scripts/build-wasm.sh

@@ -2458,6 +2458,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "engine"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy_kira_audio",
+ "bevy_prototype_lyon",
+ "once_cell",
+ "regex",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3760,18 +3772,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d640282b302c0bb0a2a8e0233ead9035e3bed871f0b7e81fe4a1ec829765db44"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "maiscope-viewer"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "bevy_kira_audio",
- "bevy_prototype_lyon",
- "once_cell",
- "regex",
- "wasm-bindgen",
 ]
 
 [[package]]

@@ -41,7 +41,7 @@ counting events by kind. It sits *outside* this directory on purpose — anythin
 itself. Regenerate with:
 
 ```sh
-UPDATE_SNAPSHOT=1 cargo test -p maiscope-viewer --test corpus
+UPDATE_SNAPSHOT=1 cargo test -p engine --test corpus
 ```
 
 Read the resulting diff before committing it.

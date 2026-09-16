@@ -146,8 +146,8 @@ corpus test in `engine/tests/corpus.rs` drives the one public entry point,
 counts to `engine/tests/corpus-snapshot.txt`:
 
 ```sh
-cargo test -p maiscope-viewer                              # needs libasound2-dev, libudev-dev
-UPDATE_SNAPSHOT=1 cargo test -p maiscope-viewer --test corpus   # accept a counts change
+cargo test -p engine                              # needs libasound2-dev, libudev-dev
+UPDATE_SNAPSHOT=1 cargo test -p engine --test corpus   # accept a counts change
 ```
 
 `apps/host/` still has no tests. Both are tracked in

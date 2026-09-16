@@ -14,7 +14,7 @@
 //! entering the repo. They are deliberately left out of the snapshot, so the
 //! committed expectations do not depend on files a fresh clone will not have.
 
-use maiscope_viewer::chart::{ChartEvent, parse_chart};
+use engine::chart::{ChartEvent, parse_chart};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -115,7 +115,7 @@ fn every_fixture_parses_without_panicking() {
 
 /// Event counts match `tests/fixtures/snapshot.txt`.
 ///
-/// To accept an intended change: `UPDATE_SNAPSHOT=1 cargo test -p maiscope-viewer`,
+/// To accept an intended change: `UPDATE_SNAPSHOT=1 cargo test -p engine`,
 /// then **read the diff before committing it**. A snapshot you regenerate without
 /// reading is a snapshot that asserts nothing.
 #[test]
@@ -130,7 +130,7 @@ fn event_counts_match_snapshot() {
 
     let expected = fs::read_to_string(&snapshot_path).unwrap_or_else(|_| {
         panic!(
-            "{} is missing — create it with UPDATE_SNAPSHOT=1 cargo test -p maiscope-viewer",
+            "{} is missing — create it with UPDATE_SNAPSHOT=1 cargo test -p engine",
             snapshot_path.display()
         )
     });
@@ -139,6 +139,6 @@ fn event_counts_match_snapshot() {
         expected.trim(),
         actual.trim(),
         "\nevent counts changed. If this is intended:\n  \
-         UPDATE_SNAPSHOT=1 cargo test -p maiscope-viewer\n"
+         UPDATE_SNAPSHOT=1 cargo test -p engine\n"
     );
 }

@@ -7,7 +7,7 @@ Parser first, ahead of server tests, because:
 
 - **Highest defect density.** simai is a gnarly text format: mid-chart BPM
   changes, slide syntax, touch notes, `/` and `*` groupings, `h[...]` holds.
-- **Zero infrastructure.** Pure functions, native `cargo test -p maiscope-viewer`,
+- **Zero infrastructure.** Pure functions, native `cargo test -p engine`,
   no Postgres, no browser, no wasm. Milliseconds in CI.
 - **Failures are silent.** A bad SQL change 500s loudly into the logs from issue
   06. A misparsed slide renders a *plausible but wrong* chart — nobody reports
@@ -30,7 +30,7 @@ Parser first, ahead of server tests, because:
 - [x] Malformed-input tests: parser returns an error, never panics — a panic in
       wasm takes the whole canvas down (one rejection test per module, plus
       `chart::tests::parse_chart_never_panics` over 16 hostile inputs)
-- [x] `cargo test -p maiscope-viewer` wired into CI as its own `engine` job
+- [x] `cargo test -p engine` wired into CI as its own `engine` job
 
 ## Scaffold notes
 
@@ -60,7 +60,7 @@ Decisions taken while scaffolding:
 ## Result
 
 58 tests, none ignored: `duration.rs` 8, `note.rs` 15, `chart.rs` 17,
-`slide.rs` 17, plus 2 corpus tests. `cargo clippy -p maiscope-viewer
+`slide.rs` 17, plus 2 corpus tests. `cargo clippy -p engine
 --all-targets` is clean.
 
 Assertions are checked against
