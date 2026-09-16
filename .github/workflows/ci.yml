@@ -112,13 +112,18 @@ jobs:
         with:
           shared-key: engine-native
 
-      # A native Bevy build links ALSA (bevy_kira_audio -> cpal) and libudev
-      # (winit's gamepad/input probing). Neither is used by the parser tests,
-      # but both are needed to link the test binary at all.
+      # A native Bevy build needs all four, none of which the parser tests use:
+      # ALSA (bevy_kira_audio -> cpal), libudev (winit's input probing), and
+      # wayland + xkbcommon, which `wayland-sys` resolves through pkg-config at
+      # *build* time because engine/Cargo.toml enables Bevy's `wayland` feature.
+      #
+      # This is the cost ADR-0014 exists to remove: once the parser is its own
+      # Bevy-free crate, testing it needs none of this.
       - name: Install Bevy's native build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libasound2-dev libudev-dev
+          sudo apt-get install -y --no-install-recommends \
+            libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
 
       - name: cargo test (engine)
         run: cargo test -p engine

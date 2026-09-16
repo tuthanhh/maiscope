@@ -13,10 +13,16 @@ The parser lives inside a Bevy crate for historical reasons only. Two things now
 make that cost real.
 
 **CI pays Bevy to run parser tests.** `test-foundation` 01 added 63 tests to
-`engine`, so `ci.yml` grew an `engine` job that installs `libasound2-dev` and
-`libudev-dev` and compiles ~300 crates — to test functions whose only dependency
-is `regex`. The same workflow goes out of its way to avoid that cost everywhere
+`engine`, so `ci.yml` grew an `engine` job that installs four system dev
+packages and compiles ~300 crates — to test functions whose only dependency is
+`regex`. The same workflow goes out of its way to avoid that cost everywhere
 else: the `rust` job is scoped `-p server -p shared` for exactly this reason.
+
+That job failed on its first run for `wayland-client` not found: `wayland-sys`
+resolves it through `pkg-config` at *build* time because `engine/Cargo.toml`
+enables Bevy's `wayland` feature, and the apt list was short two packages. It
+passed locally only because the dev machine already had them. Every one of those
+four packages is needed to link a test binary that never opens a window.
 
 **The server is about to need the parser.**
 [ADR-0013](../../adr/0013-community-charts-beside-the-catalog.md) validates
