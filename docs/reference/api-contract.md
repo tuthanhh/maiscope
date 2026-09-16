@@ -279,7 +279,18 @@ rather than losing by accident (ADR-0002).
 
 ---
 
-## 5. Contributions — submit → pending → moderate → merge  *(phase 2)*
+## 5. Contributions — submit → pending → moderate → merge  *(phase 2, superseded)*
+
+> **Superseded, not yet rewritten.** This section describes a moderation queue
+> that merges proposals into the canonical tables.
+> [ADR-0013](../adr/0013-community-charts-beside-the-catalog.md) replaced it with
+> a separate community library: `/community/*`, live on upload, reports instead
+> of approvals, and no writes to `songs`/`sheets`/`charts` at all. The plan of
+> record is now [`community-charts`](../work/community-charts/spec.md); this
+> section is rewritten by its ticket 07, when there is shipped behaviour to
+> describe. Read what follows as history.
+>
+> §4 (auth) is unaffected and remains a prerequisite.
 
 **Not implemented.** No contribution route is mounted; the design below is the
 plan of record for `docs/work/server-contributions/`. No direct writes to

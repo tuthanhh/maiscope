@@ -22,8 +22,11 @@ outcome can reopen [ADR-0003](adr/0003-web-pwa-drop-tauri.md).
 
 ### Phase 2 — community charts
 
-GitHub authentication, the contribution and moderation queue, and
-contributor-supplied audio. Unscheduled.
+GitHub authentication, then a second library beside the official catalog: anyone
+uploads a `maidata.txt`, anyone plays it. Live on upload with a report queue, not
+a moderation queue — [ADR-0013](adr/0013-community-charts-beside-the-catalog.md),
+which supersedes the contribution-queue design. Still no contributor audio
+([ADR-0002](adr/0002-chart-data-only-no-audio-hosting.md)). Unscheduled.
 
 ## Features
 
@@ -36,12 +39,15 @@ contributor-supplied audio. Unscheduled.
 | ├ [prod-data-and-infra](work/prod-data-and-infra/spec.md) | active | v1.0 |
 | ├ [catalog-sync](work/catalog-sync/spec.md) | shipped | v1.0 |
 | ├ [web-delivery](work/web-delivery/spec.md) | active | v1.0 |
-| └ [test-foundation](work/test-foundation/spec.md) | planned | v1.0 |
+| └ [test-foundation](work/test-foundation/spec.md) | active | v1.0 |
+| [parser-defects](work/parser-defects/spec.md) | active | v1.0 |
 | [mobile-webview-spike](work/mobile-webview-spike/) | planned | v1.1 |
 | [docs-restructure](work/docs-restructure/spec.md) | shipped | — |
 | [server-sync-tier](work/server-sync-tier/) | shipped | — |
 | [server-auth-github-oauth](work/server-auth-github-oauth/) | planned | phase 2 |
-| [server-contributions](work/server-contributions/) | planned | phase 2 |
+| [parser-crate-extraction](work/parser-crate-extraction/spec.md) | planned | phase 2 |
+| [community-charts](work/community-charts/spec.md) | planned | phase 2 |
+| [server-contributions](work/server-contributions/spec.md) | superseded | phase 2 |
 | [server-catalog-typed-queries](work/server-catalog-typed-queries/) | shipped | — |
 | [server-side-sheet-search](work/server-side-sheet-search/) | shipped | — |
 | [frontend-server-side-search](work/frontend-server-side-search/) | shipped | — |
