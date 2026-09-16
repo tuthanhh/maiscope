@@ -75,8 +75,9 @@ relitigated.
 
 **Identity**
 
-- **Mint a stable `public_id` per song.** Never derived from text. `song_id`
-  is demoted to upstream's natural key, used only for sync matching.
+- **Mint a stable id per song, and make it the primary key.** Never derived
+  from text. `song_id` is demoted to upstream's natural key, used only for sync
+  matching.
 - **Renames are not chased.** A renamed song is a tombstone plus an insert, as
   today; it is fixed by hand if noticed. A heuristic match on
   `image_name` + `artist` was rejected: 180 non-UTAGE songs share a jacket, so a
@@ -86,8 +87,8 @@ relitigated.
   carry a UTAGE sheet, none has more than one. Upstream already prefixes the
   label — `[好]好きな惣菜発表ドラゴン` — in 100 cases and uses `(宴) X` in the
   other 76. That scheme is *not* unique: across 172 local maidata files, 22
-  `(label, origin)` pairs collide. Another reason `public_id` is minted rather
-  than derived.
+  `(label, origin)` pairs collide. Another reason the id is minted rather than
+  derived.
 
 **Addressing**
 
@@ -134,8 +135,9 @@ must name a difficulty that exists in that table.
   libraries — a second library beside the catalog, not a second API. Keeps every
   route reachable under one prefix for CORS, rate limiting and anything later
   mounted per-subtree.
-- **`public_id` is a UUID v7** in a native `uuid` column, canonical hyphenated in
-  paths. See [`song-public-id`](../song-public-id/spec.md) issue 01.
+- **The song id is a UUID v7** in a native `uuid` column, canonical hyphenated
+  in paths, and it is `songs.id` itself rather than a second column beside a
+  bigserial. See [`song-public-id`](../song-public-id/spec.md) issue 01.
 
 ## Open questions
 

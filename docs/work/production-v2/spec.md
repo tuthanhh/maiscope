@@ -28,7 +28,7 @@ revision-probe design is working and is not what is broken.
 | Layer | v1.0 | v2.0 |
 |---|---|---|
 | API path | `/api/v1/...` | `/api/...` — the version segment is retired |
-| Song identity | `song_id`, which *is the title* | minted `public_id`: **UUID v7**, native `uuid` column, canonical hyphenated in URLs |
+| Song identity | `song_id` (the title) as natural key, bigserial `id` as PK | `songs.id` **is** a minted UUID v7 — one id per row, hyphenated in URLs |
 | Sheet address | `sheetExpr` URL-encoded, *or* songId + query params | `/api/songs/{publicId}/sheets/{type}/{difficulty}` |
 | Difficulty | 5-variant enum over a `TEXT` column holding 55 values | `Basic..ReMaster \| Utage(String)`, checked against `difficulties` |
 | Difficulty spelling | `【協】` on sheets, `協` from maidata, no reconciliation | `difficulties.name` (`【協】`, display) and `difficulties.code` (`協`, matching + URLs) |
@@ -65,19 +65,31 @@ revision-probe design is working and is not what is broken.
    to song ids, and to any identifier community charts acquire.
 
    The mint is **UUID v7 in a native `uuid` column, canonical hyphenated in
-   URLs** — `songs.public_id`, `community_songs.public_id`,
-   `community_charts.public_id`, one scheme across both libraries. v7 over v4
-   because the embedded timestamp publishes only the creation time, which both
-   libraries already display; a native `uuid` over `TEXT` because a distinct
-   Rust type makes "passed a `song_id` where a `public_id` belongs" a
+   URLs**, and it **is the primary key** — `songs.id`, `community_songs.id`,
+   `community_charts.id`. One scheme across both libraries, and one id per row
+   rather than a bigserial with a `public_id` beside it. Two ids for one row is
+   two things to keep in step, two things to pick the wrong one of in a query,
+   and a standing question of which one any given function takes.
+
+   v7 over v4 because the embedded timestamp publishes only the creation time,
+   which both libraries already display; a native `uuid` over `TEXT` because a
+   distinct Rust type makes "passed a `song_id` where a song id belongs" a
    compile error rather than a silent lookup miss. A short bespoke id was
    rejected: 3× shorter URLs are not worth a generator, a format `CHECK` and
    collision handling that this project would own and test itself. sqlx already
    builds with its `uuid` feature; only the `uuid` crate is new.
 
-   Bigserial primary keys stay as storage details and never appear in a URL,
-   including `community_songs.id` — a sequence in a path publishes the library's
-   size, which cannot be unpublished later.
+   **The primary key is therefore identity-bearing, and that is a new hazard.**
+   Previously a re-insert re-minted a bigserial nothing linked to. Now it
+   changes every URL for that row, so any path that re-inserts a song — notably
+   an identity-breaking full reload, which `catalog_meta.last_full_reload_revision`
+   exists to signal — must reuse the existing id by matching on `song_id`. That
+   has to be a tested property, not a convention.
+
+   Bigserial keys survive where nothing addresses the row publicly: `sheets`,
+   `charts`, the `sheet_*` tables, `users` and `community_reports`. Only
+   `sheets.song_id_fk` widens, the single column in the schema referencing
+   `songs(id)`.
 5. **v1's additive-only response rule does not apply.** It existed because an
    installed PWA could run an arbitrarily old frontend against a current API.
    v2 replaces both on one branch, so the constraint is lifted — deliberately,

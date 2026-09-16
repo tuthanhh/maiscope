@@ -61,8 +61,9 @@ All from ADR-0013 unless noted.
 - **Everything lives under `/api/community/...`.** One API root, two named
   libraries — not a second API. The bare `/community/...` paths these tickets
   were first written with predate the decision that retired `/api/v1`.
-- **Songs and charts are addressed by minted `public_id`** (UUID v7), the same
-  scheme as the official catalog. The bigserial never reaches a URL.
+- **Songs and charts are addressed by a minted UUID v7 primary key**, the same
+  scheme as the official catalog — one id per row, no bigserial beside it.
+  `community_reports` keeps a bigserial: it is never public.
 - **No ban, no per-user quota, in this milestone.** The tools against a repeat
   abuser are per-song takedown and the reports queue, and that is knowingly all
   of them — `production-v2`'s *Accepted, not solved* records why.

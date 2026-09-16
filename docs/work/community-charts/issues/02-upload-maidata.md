@@ -26,8 +26,8 @@ themselves. Surface all three; do not flatten to "invalid chart".
       difficulty. Without it the feedback loop is half-built: the error reaches
       the contributor and nothing reaches the maintainer, because a rejected
       upload writes no row and `community_reports` only targets songs that exist
-- [ ] `?officialPublicId=` validated against `songs.public_id` (the UUID, not
-      the bigserial, not `song_id`); absent means standalone
+- [ ] `?officialPublicId=` validated against `songs.id` (the UUID primary
+      key, not `song_id`); absent means standalone
 - [ ] Note counts computed from the upload parse, not a second pass
 - [ ] `DefaultBodyLimit::max(512 * 1024)` on this route, enforced before
       parsing. Chosen from the corpus — p99 38 KB, observed max 353 KB — rather
