@@ -11,16 +11,24 @@ Also resolve the facts the plan currently assumes rather than knows.
 
 **Status:** todo (inherits a partly-provisioned state — see Comments)
 
-- [ ] Neon project created; region chosen to match the Fly region (note the
-      latency cost if they differ)
+- [x] Neon project created; region chosen to match the Fly region (note the
+      latency cost if they differ) — `ap-southeast-1`, paired with Fly `sin`
 - [ ] **Two roles**: an owner/migration role, and a lower-privilege role for
       seeding and for the app. The app must not run as owner.
 - [ ] Connection string uses Neon's **pooled** endpoint for the app; the direct
       endpoint for migrations
 - [ ] Pool `max_connections` reconciled with Neon's free-tier ceiling (`server-restructure` issue 03)
-- [ ] **Verified and recorded here**: Neon free-tier restore/PITR window
-- [ ] **Verified and recorded here**: whether free-tier branching allows a branch
-      per PR (would let CI run `#[sqlx::test]` against real ephemeral Postgres)
+- [x] **Verified and recorded here**: Neon free-tier restore/PITR window —
+      **6 hours** of change history (up to 1 GB-month), confirmed against
+      [Neon's own plans page](https://neon.com/docs/introduction/plans)
+      (2026-09-16), not a third-party aggregator. Combined with the nightly
+      `pg_dump` backup (`prod-data-and-infra` 05), the true recovery window is
+      "last night's dump" for anything older than 6 hours, not just PITR.
+- [x] **Verified and recorded here**: whether free-tier branching allows a branch
+      per PR — **yes**, Free plan allows **10 branches/project**, comfortably
+      above the concurrent-PR count a solo repo ever has open. Not implemented
+      here (would let CI run `#[sqlx::test]` against real ephemeral Postgres) —
+      tracked as a future enhancement, not blocking this ticket.
 - [ ] Measured and recorded: cold-start latency of the first query after autosuspend
 - [ ] `runbook.md` in this directory: bootstrap steps, restore steps, role/secret
       inventory (names only, never values)
