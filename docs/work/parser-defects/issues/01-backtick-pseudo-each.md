@@ -16,17 +16,39 @@ times: `` E6`B5 ``, `` B3`E4 ``, `` B2`E2 ``.
 
 **Blocked by:** None.
 
-**Status:** todo
+**Status:** done
 
-- [ ] `parse_chart` splits a token on `` ` `` into ordered sub-groups, each of
+- [x] `parse_chart` splits a token on `` ` `` into ordered sub-groups, each of
       which is then split on `/` as today
-- [ ] Decide how the 1ms offset is represented — `ChartEvent::NoteGroup` carries
+- [x] Decide how the 1ms offset is represented — `ChartEvent::NoteGroup` carries
       no time, so this likely needs either a new event or a per-group offset
       field that `compute_timestamps` adds to `current_time`
-- [ ] The offset does not advance the beat grid: a token is still one comma
+- [x] The offset does not advance the beat grid: a token is still one comma
       regardless of how many `` ` `` it contains
-- [ ] Notes in a pseudo-EACH are not an EACH — whatever marks EACH-ness for
+- [x] Notes in a pseudo-EACH are not an EACH — whatever marks EACH-ness for
       rendering must not treat them as simultaneous
-- [ ] `note::tests::pseudo_each_backtick_is_unsupported` becomes a test that
+- [x] `note::tests::pseudo_each_backtick_is_unsupported` becomes a test that
       asserts the parse, renamed accordingly
-- [ ] `BIRTH.txt` parses with zero warnings
+- [x] `BIRTH.txt` parses with zero warnings
+
+## Outcome
+
+Represented as `Note.offset_ms: u32` — a sub-comma delay carried by the note
+itself, rather than a new event or a nested group. `parse_chart` splits a token
+on `` ` `` first, then each group on `/`, and stamps the group index onto every
+note it produced. All of it stays in one `NoteGroup`, so the beat grid is
+untouched.
+
+`compute_timestamps` needed no change: it advances once per `NoteGroup`, and
+there is still exactly one per token.
+
+The EACH consequence turned out to be live. `spawning.rs` computed
+`is_paired = notes.len() >= 2` for the whole group, which would have rendered a
+pseudo-EACH as a pair — precisely what the notation says it is not. Pairing is
+now counted per offset.
+
+**Not done:** the 1ms delay is parsed, stored and used for pairing, but not
+applied to spawn time. At 1ms it is two orders of magnitude below a frame, so
+nothing could render differently; applying it would mean threading a sub-frame
+offset through the spawn path for no visible gain. Revisit only if judgement
+ever moves off the frame clock.

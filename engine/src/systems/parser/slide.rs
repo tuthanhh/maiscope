@@ -60,6 +60,7 @@ pub(super) fn parse_slide_note(note_str: &str) -> Result<Vec<Note>, String> {
         is_break,
         is_firework,
         is_ex,
+        offset_ms: 0,
         kind: NoteKind::Slide {
             head_button: start_btn,
             segments,
@@ -357,6 +358,7 @@ fn parse_star_chained_slides(
             is_break,
             is_firework,
             is_ex,
+            offset_ms: 0,
             kind,
         });
     }

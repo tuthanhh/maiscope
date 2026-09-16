@@ -134,12 +134,14 @@ fn build_two_digit_tap_notes(
             is_break,
             is_firework,
             is_ex,
+            offset_ms: 0,
             kind: NoteKind::Tap(btn1),
         },
         Note {
             is_break,
             is_firework,
             is_ex,
+            offset_ms: 0,
             kind: NoteKind::Tap(btn2),
         },
     ]
@@ -165,6 +167,7 @@ fn build_button_note(
             is_break,
             is_firework,
             is_ex,
+            offset_ms: 0,
             kind: NoteKind::TapHold {
                 button: btn_num,
                 duration: hold_duration.unwrap_or(PSEUDO_HOLD),
@@ -175,6 +178,7 @@ fn build_button_note(
             is_break,
             is_firework,
             is_ex,
+            offset_ms: 0,
             kind: NoteKind::Tap(btn_num),
         }]
     }
@@ -194,6 +198,7 @@ fn build_touch_note(
             is_break,
             is_firework,
             is_ex,
+            offset_ms: 0,
             kind: NoteKind::TouchHold {
                 value: index,
                 group: zone,
@@ -205,6 +210,7 @@ fn build_touch_note(
             is_break,
             is_firework,
             is_ex,
+            offset_ms: 0,
             kind: NoteKind::Touch {
                 value: index,
                 group: zone,
@@ -514,21 +520,16 @@ mod tests {
         assert!(err.contains("Slide shape"), "{err}");
     }
 
-    /// BUG: pseudo-EACH is unsupported.
+    /// The backtick is a *token*-level separator, not a note-level one, so
+    /// `parse_note` never sees it — `parse_chart` splits on it first.
     ///
-    /// The doc's `` 1`2, `` places BUTTON-2 one millisecond after BUTTON-1. The
-    /// backtick appears in neither `TAP_TOUCH_RE` nor `SLIDE_PATTERN_RE`, so the
-    /// whole token fails to parse.
-    ///
-    /// This is not theoretical — `engine/tests/fixtures/BIRTH.txt` uses it three
-    /// times (`` E6`B5 ``, `` B3`E4 ``, `` B2`E2 ``). Combined with the dropped-token
-    /// defect in `chart.rs`, those three note groups vanish from the chart with
-    /// nothing surfaced to the user. See
-    /// `chart::tests::unparseable_token_drops_the_event_and_shifts_the_chart`.
+    /// Asserted here so the split cannot quietly move down a layer: if it ever
+    /// did, a backtick would start parsing as part of a note and the sub-comma
+    /// offset would be lost. See
+    /// `chart::tests::backtick_delays_the_following_notes`.
     #[test]
-    fn pseudo_each_backtick_is_unsupported() {
+    fn backtick_is_handled_above_parse_note() {
         parse_err("1`2");
-        parse_err("E6`B5");
     }
 
     /// BUG: the UTAGE star/normal-TAP modifiers are unsupported.

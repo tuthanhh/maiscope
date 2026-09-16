@@ -32,13 +32,22 @@ pub(super) fn parse_err(s: &str) -> String {
     }
 }
 
-/// A note with no modifiers set — the common case.
+/// A note with no modifiers and no sub-comma offset — the common case.
 pub(super) fn plain(kind: NoteKind) -> Note {
     Note {
         is_break: false,
         is_firework: false,
         is_ex: false,
+        offset_ms: 0,
         kind,
+    }
+}
+
+/// A note delayed by a pseudo-EACH backtick: `` 1`2 `` puts the second at 1.
+pub(super) fn delayed(offset_ms: u32, kind: NoteKind) -> Note {
+    Note {
+        offset_ms,
+        ..plain(kind)
     }
 }
 

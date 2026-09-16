@@ -48,8 +48,17 @@ pub fn next_event(
     // so chart.chart_speed() / chart.note_speed() are accessible in the loop body.
     while let Some((event, bpm)) = chart.advance().map(|e| (e.event.clone(), e.bpm)) {
         if let ChartEvent::NoteGroup(notes) = event {
-            let is_paired = notes.len() >= 2;
             for note in &notes {
+                // EACH-ness is per sub-comma offset, not per token. Notes split
+                // by a pseudo-EACH backtick are 1ms apart, so the notation is
+                // explicit that they are *not* an EACH and must not render as
+                // a pair. Groups are at most a handful of notes, so the scan is
+                // cheaper than building a map.
+                let is_paired = notes
+                    .iter()
+                    .filter(|other| other.offset_ms == note.offset_ms)
+                    .count()
+                    >= 2;
                 spawn_note(
                     &mut commands,
                     note,

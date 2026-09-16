@@ -37,9 +37,28 @@ pub fn parse_chart(inp: &str) -> Result<Vec<ChartEvent>, std::io::Error> {
             continue;
         }
 
+        // A token splits first on '`' (pseudo-EACH: each group lands 1ms after
+        // the previous one), then each group on '/' (a true EACH, simultaneous).
+        // Everything ends up in one NoteGroup because the whole token is still
+        // one comma — the offset is sub-comma and must not advance the grid.
         let notes_result: Result<Vec<Note>, String> = current_str
-            .split('/')
-            .map(parse_note)
+            .split('`')
+            .enumerate()
+            .map(|(offset_ms, group)| {
+                group
+                    .split('/')
+                    .map(parse_note)
+                    .collect::<Result<Vec<Vec<Note>>, String>>()
+                    .map(|v| {
+                        v.into_iter()
+                            .flatten()
+                            .map(|mut note| {
+                                note.offset_ms = offset_ms as u32;
+                                note
+                            })
+                            .collect::<Vec<Note>>()
+                    })
+            })
             .collect::<Result<Vec<Vec<Note>>, String>>()
             .map(|v| v.into_iter().flatten().collect());
 
@@ -149,7 +168,7 @@ fn reject_duplicate(already_set: bool, token: &str, marker: Marker) -> Result<()
 
 #[cfg(test)]
 mod tests {
-    use super::super::testutil::{plain, simple};
+    use super::super::testutil::{delayed, plain, simple};
     use super::*;
     use crate::systems::component::NoteKind;
 
@@ -255,6 +274,63 @@ mod tests {
                 }),
             ])]
         );
+    }
+
+    /// The pseudo-EACH backtick delays everything after it by 1ms per step, so
+    /// `` 1`2 `` is BUTTON-1 then BUTTON-2 a millisecond later.
+    ///
+    /// All of it stays in **one** `NoteGroup`: the offset is sub-comma, and a
+    /// token is one comma however many backticks it holds. Emitting separate
+    /// events would advance the beat grid and shift the rest of the chart.
+    #[test]
+    fn backtick_delays_the_following_notes() {
+        assert_eq!(
+            events("1`2"),
+            vec![ChartEvent::NoteGroup(vec![
+                plain(NoteKind::Tap(1)),
+                delayed(1, NoteKind::Tap(2)),
+            ])]
+        );
+
+        // The doc's compound example: 2 one step after 1, then the EACH of
+        // 3+4 one step after that. Both members of that EACH share offset 2.
+        assert_eq!(
+            events("1`2`3/4"),
+            vec![ChartEvent::NoteGroup(vec![
+                plain(NoteKind::Tap(1)),
+                delayed(1, NoteKind::Tap(2)),
+                delayed(2, NoteKind::Tap(3)),
+                delayed(2, NoteKind::Tap(4)),
+            ])]
+        );
+
+        // Touch notes too — this is the form BIRTH.txt actually uses.
+        assert_eq!(
+            events("E6`B5"),
+            vec![ChartEvent::NoteGroup(vec![
+                plain(NoteKind::Touch {
+                    value: 6,
+                    group: 'E',
+                }),
+                delayed(
+                    1,
+                    NoteKind::Touch {
+                        value: 5,
+                        group: 'B',
+                    }
+                ),
+            ])]
+        );
+    }
+
+    /// A backtick does not advance the beat grid: the token is still one comma,
+    /// so every later note keeps its timing.
+    #[test]
+    fn backtick_does_not_shift_the_chart() {
+        let with = events("1`2,5,");
+        let without = events("1,5,");
+        assert_eq!(with.len(), without.len());
+        assert_eq!(with[1], tap(5));
     }
 
     /// Line breaks, spaces and tabs may be inserted anywhere for readability

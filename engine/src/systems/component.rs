@@ -31,6 +31,13 @@ pub struct Note {
     pub is_break: bool,
     pub is_firework: bool,
     pub is_ex: bool,
+    /// Sub-comma delay from the pseudo-EACH backtick: `` 1`2, `` puts BUTTON-2
+    /// 1ms after BUTTON-1. Zero for every ordinary note.
+    ///
+    /// The delay does not advance the beat grid — a token is one comma however
+    /// many backticks it holds. Its visible effect is that notes at *different*
+    /// offsets are not simultaneous, so they must not render as an EACH.
+    pub offset_ms: u32,
     pub kind: NoteKind,
 }
 
