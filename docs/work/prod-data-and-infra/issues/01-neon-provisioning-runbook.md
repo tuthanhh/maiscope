@@ -13,10 +13,15 @@ Also resolve the facts the plan currently assumes rather than knows.
 
 - [x] Neon project created; region chosen to match the Fly region (note the
       latency cost if they differ) — `ap-southeast-1`, paired with Fly `sin`
-- [ ] **Two roles**: an owner/migration role, and a lower-privilege role for
-      seeding and for the app. The app must not run as owner.
-- [ ] Connection string uses Neon's **pooled** endpoint for the app; the direct
-      endpoint for migrations
+- [x] **Two roles**: an owner/migration role, and a lower-privilege role for
+      seeding and for the app. The app must not run as owner. `maiscope_app`
+      created with `SELECT, INSERT, UPDATE, DELETE` on `public` (plus
+      `ALTER DEFAULT PRIVILEGES` so future migrations extend the grant
+      automatically); `neondb_owner` kept for migrations only.
+- [x] Connection string uses Neon's **pooled** endpoint for the app; the direct
+      endpoint for migrations — `DATABASE_URL` (`maiscope_app`, pooled) and
+      `MIGRATE_DATABASE_URL` (`neondb_owner`, direct) as two separate Fly
+      secrets, wired in `bin/migrate.rs`
 - [ ] Pool `max_connections` reconciled with Neon's free-tier ceiling (`server-restructure` issue 03)
 - [x] **Verified and recorded here**: Neon free-tier restore/PITR window —
       **6 hours** of change history (up to 1 GB-month), confirmed against
@@ -50,15 +55,45 @@ What exists, and where it already diverges from this ticket's requirements:
 | Pool `max_connections` reconciled with the free-tier ceiling | **Not done** — still the default 4 |
 | Bootstrap runbook written down | **Not done** — the sequence was run by hand from a laptop |
 
-Two of those are worth treating as defects rather than pending work:
+Both defects above are now fixed (2026-09-16) — see below for how, including two
+real failed deploys along the way.
 
-- **The app runs as owner.** Any SQL-injection or logic bug has DDL rights on
-  production. Splitting the roles is the single highest-value item here.
-- **Migrations run through the pooler.** `MIGRATOR.run()` takes a Postgres advisory
-  lock, and transaction-mode pooling does not guarantee the same backend across
-  statements. It has worked so far, but it is not sound. The fix is a separate
-  direct-endpoint URL for the migrator — `bin/migrate` would prefer a
-  `MIGRATE_DATABASE_URL` when set.
+**Fixing the role split, live, took three attempts.**
 
-Also note the credential currently in use was pasted into a chat transcript and
-should be rotated as part of doing this ticket properly.
+1. `DATABASE_URL` swapped to `maiscope_app` before it had any grants at all.
+   Every deploy — local `flyctl deploy` and a real `deploy.yml` dispatch —
+   failed identically: `migrate: failed: ... permission denied for schema
+   public`. Release command aborted cleanly both times; the old machine kept
+   serving throughout, exactly as `build-and-deploy` 03 verified it would.
+2. Ran the `GRANT`/`ALTER DEFAULT PRIVILEGES` SQL as `neondb_owner`, added a
+   new `MIGRATE_DATABASE_URL` Fly secret, and shipped `bin/migrate`'s
+   preference for it over `DATABASE_URL`. Still failed — **same error, same
+   pooler hostname.** Diagnostic in itself: `neondb_owner` owns the schema, so
+   it can never get "permission denied for schema public" regardless of
+   pooled vs. direct. The error proved the role in `MIGRATE_DATABASE_URL`'s
+   *value* was still `maiscope_app` — Neon's Connection Details panel has a
+   role dropdown independent of the pooled/direct toggle, and only the toggle
+   had been changed.
+3. Re-copied the connection string with the role dropdown explicitly set to
+   `neondb_owner`. Real `deploy.yml` dispatch (run `35054247917`,
+   2026-09-16T04:09:53Z): `release_command 080d16ef12e248 completed
+   successfully`, healthcheck 200. First clean deploy since the split.
+
+**Separately caught mid-fix:** the code change in step 2 was made on disk but
+never committed before the first `deploy.yml` dispatch in step 1 — GitHub
+Actions checks out git HEAD, so that run had none of the `MIGRATE_DATABASE_URL`
+logic regardless of secrets. Local `flyctl` commands build from the working
+directory and picked it up anyway, which is why local and CI runs briefly gave
+different-looking failures for the same underlying cause. Fixed by committing
+and merging before dispatching again.
+
+**Correction to the credential-rotation note below:** re-checked against this
+session's own transcript — every log line captured used the app's own
+`redact_database_url`/`migrate.rs`'s `redact` (`postgres://***@host/db`), and
+`gh api` secret calls returned only metadata, never values. Nothing was
+exposed here. The note predates this session and still stands as a real,
+separate to-do — not yet done.
+
+Also note the credential currently in use was pasted into a chat transcript
+(before this session) and should be rotated as part of doing this ticket
+properly.
