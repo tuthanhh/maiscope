@@ -30,9 +30,14 @@ ticket just makes what exists run automatically.
 - [x] Verified green on `master` — `rust` 6m53s, `wasm-web` 1m31s (warm cache)
 - [ ] Verified on a real PR — deferred with branch protection below; `pull_request`
       and `push` expose different contexts, so this is not covered by the master run
-- [ ] Branch protection: **deliberately deferred.** Work continues directly on
-      `master` until the backend is deployed and working; requiring checks before
-      merge only bites once there are PRs to gate. Revisit when ticket 05 lands.
+- [x] Branch protection: ticket 05 landed (2026-09-16), revisited as planned.
+      `master` now requires `rust` + `wasm-web` status checks via
+      `PUT /branches/master/protection`, `strict: true`. **`enforce_admins:
+      false`, deliberately** — solo repo, sole collaborator is the admin, so
+      enforcing on admins would make a red CI run capable of locking out the
+      only person who can push at all. Checks are still required for any
+      non-admin PR; the admin can override a red run rather than being
+      blocked by it.
 
 ## Comments
 
