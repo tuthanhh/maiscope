@@ -152,9 +152,22 @@ Response `200`:
 ```jsonc
 {
   "sheets": [ /* Sheet[] — same shape as GET /sheets/{sheetExpr}, see §1.1 */ ],
-  "total": 0   // total matches before pagination, for computing page count
+  "total": 0   // DEPRECATED, see below
 }
 ```
+
+Headers: `X-Total-Count: <n>` — total matches before pagination, for computing
+page count.
+
+> **Migrating.** The total is sent twice during
+> [`api-pagination-header`](../work/api-pagination-header/spec.md): as the header
+> and as the body's `total`. The header is the convention going forward
+> ([ADR-0015](../adr/0015-pagination-total-as-a-response-header.md)); the body
+> field is dropped by that feature's ticket 03 once the deployed frontend reads
+> the header. New clients should read the header only.
+>
+> The header is listed in `Access-Control-Expose-Headers` — it has to be, or a
+> cross-origin browser client cannot read it at all.
 
 No `superFilter` equivalent — the client-side arbitrary-JS filter was removed
 from the app (never had UI wiring); revisit if/when the app needs it again.
