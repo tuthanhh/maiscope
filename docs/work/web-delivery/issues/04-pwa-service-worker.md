@@ -20,8 +20,9 @@ more than any of the configuration around them.
 
 **Blocked by:** 03
 
-**Status:** in-progress — configured and verified against the build output; the
-three checks that need a browser or a deploy are still open
+**Status:** in-progress — install (desktop + Android Chrome) and offline reload
+verified for real (2026-09-16); only the broken-build recovery rehearsal is
+still open
 
 - [x] `vite-plugin-pwa` added, `registerType: 'autoUpdate'`
 - [x] Web manifest: name, short name, theme/background colour, maskable icons,
@@ -31,8 +32,10 @@ three checks that need a browser or a deploy are still open
       a bounded entry count — see Comments on where the size limit actually applies
 - [x] API responses **not** cached by the service worker — that is HTTP's job
       (`server-restructure` issue 07) and IndexedDB's (issue 02). Three layers, three lifetimes.
-- [ ] Install tested on desktop Chrome and on Android Chrome
-- [ ] Offline test: reload with network off, app shell still loads
+- [x] Install tested on desktop Chrome and on Android Chrome (2026-09-16,
+      maintainer-tested on both)
+- [x] Offline test: reload with network off, app shell still loads
+      (2026-09-16, maintainer-tested)
 - [ ] Recovery rehearsed: deploy a broken build, confirm the next deploy actually
       reaches installed clients
 
