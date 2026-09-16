@@ -1,4 +1,4 @@
-# 03 — GET /community/songs and /community/songs/{id}
+# 03 — GET /api/community/songs and /api/community/songs/{publicId}
 
 **What to build:** browse and detail for the community library.
 
@@ -12,16 +12,16 @@ actually needs them.
 
 **Status:** todo
 
-- [ ] `GET /community/songs?title=&artist=&officialSongId=&page=&pageSize=`
+- [ ] `GET /api/community/songs?title=&artist=&officialPublicId=&page=&pageSize=`
 - [ ] Paginated with the total in an `X-Total-Count` response header, per
       [ADR-0015](../../../adr/0015-pagination-total-as-a-response-header.md).
       The header must also be listed in the CORS `expose_headers` — omitting it
       fails silently and only cross-origin
-- [ ] `GET /community/songs/{id}` returns song metadata plus its charts
+- [ ] `GET /api/community/songs/{publicId}` returns song metadata plus its charts
       (difficulty, level, designer, note counts) but **not** chart content —
       that is ticket 04, so a browse page does not ship simai bodies it will
       not render
 - [ ] `status = 'removed'` rows are excluded from both, and the detail route
       404s rather than 410s — a takedown should not confirm what was there
-- [ ] Tests: pagination boundaries, the officialSongId filter, removed rows
+- [ ] Tests: pagination boundaries, the officialPublicId filter, removed rows
       absent from both

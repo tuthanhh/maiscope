@@ -1,0 +1,30 @@
+# 01 — Fail the sync run on the rename signature
+
+**What to build:** `bin/sync_catalog` exits non-zero when one run both loses a
+song and gains one, and `sync-catalog.yml` writes the run's stats to the job
+summary.
+
+The detection is a comparison, not an algorithm — `SyncStats` already carries
+both counters. What is missing is anywhere for them to be seen.
+
+**Blocked by:** None.
+
+**Status:** todo
+
+- [ ] `bin/sync_catalog` exits non-zero when `songs_vanished > 0 && songs_inserted > 0`
+- [ ] The failure message names the vanished `song_id`s and the inserted ones,
+      so the job log shows the candidate pairing without a database session
+- [ ] The database transaction still **commits** — the sync's work is correct and
+      keeping it is the point; only the process exit code changes. A rolled-back
+      sync would re-trip the alarm on every subsequent run forever
+- [ ] An override for an acknowledged rename, so a known one does not fail every
+      run until it is fixed by hand — an env var read by the binary, documented
+      in `.env.example` and settable as a workflow input
+- [ ] `sync-catalog.yml` writes insert/update/vanish counts to
+      `$GITHUB_STEP_SUMMARY` on **every** run, tripped or not
+- [ ] Tests: the alarm trips when both counters are positive; it does not trip
+      when only one is; the transaction is committed in both cases
+
+> Renames are not chased — [`api-rewrite`](../../api-rewrite/spec.md) rejected
+> heuristic rematching on measured collision risk. This ticket reports; it must
+> not repoint, merge or reconcile anything.

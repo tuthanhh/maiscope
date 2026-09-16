@@ -4,8 +4,7 @@
 
 **Blocked by:** 03 — approve/reject, 04 — audio upload presigning (docs describe what actually shipped).
 
-**Status:** todo
-
+**Status:** dropped — the feature is superseded by [ADR-0013](../../../adr/0013-community-charts-beside-the-catalog.md); this ticket holds no work
 - [ ] api-contract.md §5 approve section documents the `edit`-only merge scope and the `501` behavior for other kinds, with a pointer to the follow-up
 - [ ] schema.md: `contributions`, `audit_log`, `chart_revisions` rows removed from "Planned tables" (remove the whole section if now empty), documented under a new "Contribution tables (built)" section
 - [ ] `grep -n "^| \`contributions\`\|^| \`audit_log\`" apps/server/docs/schema.md` returns no output

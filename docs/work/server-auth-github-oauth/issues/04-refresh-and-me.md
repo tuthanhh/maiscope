@@ -20,12 +20,48 @@ visible as an unexpected logout.
 - [ ] `POST /auth/refresh` takes `{ "refreshToken": "<opaque>" }`
 - [ ] Presented token hashed and matched against `users.refresh_token_hash`;
       no match → `401`
+- [ ] A token past `users.refresh_token_expires_at` → `401`, even if the hash
+      matches
+- [ ] A user with `deleted_at` set → `401`; reactivation happens through the
+      OAuth callback (issue 03), never through refresh
 - [ ] On success: issue a new JWT **and** a new refresh token, replacing the stored
-      hash (rotation)
+      hash and setting `refresh_token_expires_at` to **now + 30 days** (rotation)
 - [ ] Response: `{ "token": "<jwt>", "refreshToken": "<opaque>" }`
 - [ ] `GET /auth/me` uses the `AuthUser` extractor and returns
       `{ id, login, avatarUrl, role }`
 - [ ] `GET /auth/me` without a token, or with an expired one, returns `401`
-- [ ] Both routes registered under the existing `/api/v1` nest
-- [ ] Tests: refresh rotates and invalidates the previous token; `me` returns the
-      authenticated user; both reject unauthenticated calls
+- [ ] Both routes registered under `/api` — the version segment is retired in
+      v2 ([`api-rewrite`](../../api-rewrite/spec.md)), and this feature builds on
+      the v2 branch, so it never sees `/api/v1`
+- [ ] Tests: refresh rotates and invalidates the previous token; an expired
+      token is rejected; a deleted user is rejected; `me` returns the
+      authenticated user; all reject unauthenticated calls
+
+## Comments
+
+**2026-09-16 — the refresh token stays in client storage, and it is not a
+preference.**
+
+The obvious hardening is an httpOnly `Secure` cookie so XSS cannot read the
+credential. It is unavailable on the current hosts. The frontend is
+`https://maiscope.pages.dev` and the API is `https://maiscope-api.fly.dev`
+(`fly.toml:46`, `deploy-web.yml:27`), and **`pages.dev` and `fly.dev` are both
+Public Suffix List entries** — so a cookie set by the API while the user is on
+the frontend is a third-party cookie. Safari blocks it by default and Chrome is
+restricting it. Not harder: unavailable.
+
+So the token stays in the response body, the client stores it, and requests use
+`Authorization: Bearer`. Consequences accepted:
+
+- XSS on the frontend origin is credential theft, not just defacement. A strict
+  CSP on the Pages deploy is the mitigation that remains available.
+- Rotation on every use means a stolen token is usable once and the theft
+  surfaces as an unexpected logout — but rotation bounds nothing on its own,
+  which is why `refresh_token_expires_at` exists. **30 days.**
+
+A custom domain (`maiscope.dev` + `api.maiscope.dev`) would make same-site
+cookies possible and is deliberately **optional**: `CORS_ALLOWED_ORIGINS` is
+already config-driven, so adopting one later needs no code change, and buying
+one now would add infra work to the branch whose length is the milestone's
+largest risk.
+

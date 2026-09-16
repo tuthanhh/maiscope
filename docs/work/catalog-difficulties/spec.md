@@ -39,15 +39,21 @@ is silently skipped — 172 local files. That is a real contributor to the
 
 | # | Ticket | Note |
 |---|---|---|
-| 01 | [Difficulties table covers UTAGE](issues/01-difficulties-cover-utage.md) | Migration + `catalog_sync` |
+| 01 | [Difficulties table covers UTAGE](issues/01-difficulties-cover-utage.md) | Migration + `catalog_sync`. Settles the `name`/`code` split |
 | 02 | [`sheets.difficulty` foreign key](issues/02-sheets-difficulty-fk.md) | Blocked by 01 |
-| 03 | [Seed UTAGE charts (slot 7)](issues/03-seed-utage-slot-7.md) | Independent of 01/02 |
+| 03 | [Seed UTAGE charts (slot 7)](issues/03-seed-utage-slot-7.md) | Blocked by 01 — it writes chart rows keyed on the representation 01 decides |
 
 ## Decisions that constrain this work
 
 - **The table is the source of truth, not a list in Rust.** A hardcoded set
   drifts the first time upstream adds a label, and nothing would stop a sheet
   holding a value the code rejects. A foreign key makes that impossible.
+- **Display form and matching form are separate columns.** `name` holds `【協】`,
+  `code` holds `協`. The catalog stores the bracketed form and maidata emits the
+  bare one; storing one and deriving the other puts a strip-or-add
+  transformation on every path — parser output, URL parsing, display, upload
+  validation — and one missed application makes a chart unfindable. `code` is
+  what appears in v2 URLs.
 - **Synthesised rows must survive the sync.** `catalog_sync` currently `DELETE`s
   the lookup tables and re-inserts them from upstream, which does not send UTAGE
   difficulty rows. Whatever this adds has to be reconstructed each run rather

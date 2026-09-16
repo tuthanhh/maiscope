@@ -34,6 +34,9 @@ at a row nothing will ever update again.
 - **Minted, not derived.** Not a slug, not a hash of the title, not
   `image_name`. Anything derived from text inherits the instability being fixed;
   `image_name` is stable but not unique — 180 non-UTAGE songs share a jacket.
+- **The mint is UUID v7 in a native `uuid` column**, canonical hyphenated in
+  URLs. Reasoning in issue 01's comments. The same scheme is reused for
+  `community_songs` and `community_charts`, so both libraries address alike.
 - **Distinct from `songs.id`.** The bigserial is a storage detail with no
   guarantee across an identity-breaking reload, which is exactly what
   `catalog_meta.last_full_reload_revision` exists to signal. `public_id` is
@@ -56,3 +59,7 @@ Changing how the frontend indexes. That moves with the rewrite.
 
 Every song has a `public_id`, it is `UNIQUE NOT NULL`, a newly synced song gets
 one automatically, and none of them contains a character needing percent-encoding.
+
+`song_id` remains the sync's conflict key, so this feature does not fix renames —
+it only stops a rename from breaking every URL. Detection of renames is
+[`sync-rename-alarm`](../sync-rename-alarm/spec.md).

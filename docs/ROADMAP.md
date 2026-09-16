@@ -32,6 +32,11 @@ Published on upload with a report queue, not a moderation queue —
 contribution-queue design. Still no contributor audio
 ([ADR-0002](adr/0002-chart-data-only-no-audio-hosting.md)).
 
+Accounts store a GitHub identity and no email; deleting one strips identity and
+keeps the published charts. The frontend is redesigned visually as well as
+structurally, and the API and frontend cut over together on a single branch —
+master stands still while it is open.
+
 Rules, risks and build order: [`production-v2`](work/production-v2/spec.md).
 Unscheduled.
 
@@ -53,7 +58,8 @@ Unscheduled.
 | ├ [catalog-difficulties](work/catalog-difficulties/spec.md) | planned | v2.0 |
 | ├ [song-public-id](work/song-public-id/spec.md) | planned | v2.0 |
 | ├ [parser-crate-extraction](work/parser-crate-extraction/spec.md) | planned | v2.0 |
-| ├ [server-auth-github-oauth](work/server-auth-github-oauth/) | planned | v2.0 |
+| ├ [sync-rename-alarm](work/sync-rename-alarm/spec.md) | planned | v2.0 |
+| ├ [server-auth-github-oauth](work/server-auth-github-oauth/spec.md) | planned | v2.0 |
 | ├ [api-rewrite](work/api-rewrite/spec.md) | planned | v2.0 |
 | └ [community-charts](work/community-charts/spec.md) | planned | v2.0 |
 | [server-contributions](work/server-contributions/spec.md) | superseded | — |

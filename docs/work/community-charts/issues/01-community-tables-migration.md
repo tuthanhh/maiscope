@@ -4,7 +4,8 @@
 `songs`, `sheets` or `charts` changes — not a column, not an index.
 
 ```
-community_songs     id
+community_songs     id                -- bigserial, storage only, never in a URL
+                    public_id         -- uuid v7, UNIQUE NOT NULL, the API's address
                     uploader_user_id  → users (NOT NULL)
                     official_song_id  → songs (NULL = standalone fan song)
                     title, artist, bpm, genre, version   -- from &title= &artist= &wholebpm= &genre= &version=
@@ -12,7 +13,8 @@ community_songs     id
                     status TEXT CHECK (published|removed)
                     created_at, updated_at
 
-community_charts    id
+community_charts    id                -- bigserial, storage only, never in a URL
+                    public_id         -- uuid v7, UNIQUE NOT NULL, the API's address
                     community_song_id → community_songs ON DELETE CASCADE
                     difficulty        -- inote slot mapped to sheets.difficulty codes
                     level, designer   -- from &lv_N= &des_N=
@@ -45,6 +47,15 @@ them per request would mean parsing on every page view.
 - [ ] Migration adds the three tables and nothing else
 - [ ] No `pending` value anywhere — ADR-0013 has no review state
 - [ ] `status` defaults to `published`
+- [ ] `public_id` on `community_songs` and `community_charts` is `uuid`,
+      `UNIQUE NOT NULL`, minted v7 by the same code as `songs.public_id`
+      ([`song-public-id`](../../song-public-id/spec.md)) — one addressing scheme
+      across both libraries. The bigserial `id` stays a storage detail and never
+      reaches a URL: a sequence in a path publishes the library's size, and that
+      cannot be unpublished afterwards
+- [ ] `difficulty` references `difficulties.code`, not a free string — the bare
+      form (`協`), which is what the parser emits
+      ([`catalog-difficulties`](../../catalog-difficulties/spec.md) issue 01)
 - [ ] Index on `community_songs(official_song_id)` — the community-side
       "fan charts of this song" lookup
 - [ ] Index on `community_reports(resolved_at)` filtered to open reports

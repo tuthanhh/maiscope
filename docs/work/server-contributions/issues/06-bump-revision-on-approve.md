@@ -4,8 +4,7 @@
 
 **Blocked by:** 03 — approve and reject, `server-sync-tier/issues/01-revision-tracking-migration.md`.
 
-**Status:** todo
-
+**Status:** dropped — the feature is superseded by [ADR-0013](../../../adr/0013-community-charts-beside-the-catalog.md); this ticket holds no work
 - [ ] `edit` branch of `approve_contribution` bumps `catalog_meta.revision` (`+1`, `RETURNING revision`) and `update_time` in one atomic query
 - [ ] Same call stamps the new revision onto the edited sheet's `revision` column
 - [ ] Old standalone `UPDATE catalog_meta SET update_time = now()` call after the match block removed (folded into the branch-local bump)

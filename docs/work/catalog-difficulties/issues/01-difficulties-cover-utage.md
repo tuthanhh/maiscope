@@ -18,9 +18,33 @@ the sheets themselves during the sync.
       preserved by accident
 - [ ] `ordinal` places UTAGE labels after the five standard ones, so the
       frontend's index maps keep their existing meaning for existing rows
-- [ ] `name` for a synthesised row: decide whether it is the bare label, the
-      bracketed form, or something readable. The catalog stores `【協】` on
-      sheets while maidata emits `協`
+- [ ] **Two columns, not one.** `name` is the display form (`【協】`, matching
+      what `sheets` already stores); `code` is the matching and URL form (`協`,
+      matching what maidata emits). The five standard rows get a `code` too
+      (`basic`, `master`, …), which they effectively already have
+- [ ] A `UNIQUE` constraint on `code` — it becomes a URL component
 - [ ] A test asserting no value in `sheets.difficulty` is absent from
       `difficulties` after a sync
-- [ ] `docs/reference/schema.md` notes that `difficulties` is now partly derived
+- [ ] A test asserting `code` is `name` with the brackets stripped, for every
+      synthesised row — the two columns must not drift
+- [ ] `docs/reference/schema.md` notes that `difficulties` is now partly derived,
+      and documents the `name`/`code` split
+
+## Comments
+
+**2026-09-16 — why two columns rather than picking one.**
+
+Measured against dev Postgres: 176 UTAGE sheets, **50 distinct labels**, and all
+176 match `^【.】$` exactly — always full-width brackets, always one character
+inside. Some of those characters are ASCII (`【X】`, `【J】`, `【r】`), and `r` is
+lowercase, so whichever form is chosen is case-sensitive.
+
+Storing one form and deriving the other means a strip-or-add transformation
+applied in every direction: parser output, URL parsing, display, and community
+upload validation. That is the class of bug that produces "the chart is there
+but nothing finds it". A column is cheaper than a convention, and `difficulties`
+is becoming derived infrastructure rather than a dumb mirror anyway.
+
+The URL component is `code` — see [`api-rewrite`](../../api-rewrite/spec.md),
+which asked the same question separately and must not get a different answer.
+

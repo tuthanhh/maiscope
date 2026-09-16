@@ -13,12 +13,19 @@ Three separate mismatches, all of which have to be handled:
 172 local maidata files carry `inote_7`. The catalog holds 176 songs with a
 UTAGE sheet, so the two sets nearly agree — the seeder simply never matches them.
 
-**Blocked by:** None, though 01 makes the label question easier to answer.
+**Blocked by:** 01 — and this is a hard block, not a convenience.
+
+Chart text is keyed by `sheet_expr = songId|type|difficulty`, so the difficulty
+representation is baked into every chart row this ticket creates. Today that
+costs nothing to change: `charts` holds 6849 rows and **zero** are UTAGE,
+precisely because this bug skips them. The moment this ticket runs, changing the
+representation means re-keying real chart text. 01 settles it first.
 
 **Status:** todo
 
 - [ ] Slot 7 maps to a UTAGE difficulty rather than being dropped
-- [ ] The `協` / `【協】` normalisation happens in one place, named, not inline
+- [ ] Lookup goes through `difficulties.code` — 01 stores `協` there
+      specifically so the seeder matches maidata without transforming anything
 - [ ] Title matching handles the `[宴/…] X [13?]` form against `(宴) X` and
       `[好]X`. This is the hard part and may not be fully solvable — matching is
       already too strict (`prod-data-and-infra` issue 03), and a wrong match

@@ -4,8 +4,7 @@
 
 **Blocked by:** `server-auth-github-oauth/issues/01-users-table-migration.md` (users table must exist for the FKs).
 
-**Status:** todo
-
+**Status:** dropped — the feature is superseded by [ADR-0013](../../../adr/0013-community-charts-beside-the-catalog.md); this ticket holds no work
 - [ ] Confirmed `charts` table already exists (migration only adds `chart_revisions`, doesn't duplicate `charts`)
 - [ ] `contributions` table: `kind`/`status` CHECK constraints, `author_user_id`/`reviewed_by_user_id` FKs to `users`, indexes on `status` and `author_user_id`
 - [ ] `audit_log` table: `actor_user_id` FK, `contribution_id` FK, indexed on `contribution_id`

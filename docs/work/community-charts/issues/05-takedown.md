@@ -1,4 +1,4 @@
-# 05 — DELETE /community/songs/{id}
+# 05 — DELETE /api/community/songs/{publicId}
 
 **What to build:** takedown, by the uploader or a moderator.
 

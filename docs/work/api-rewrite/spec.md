@@ -54,6 +54,14 @@ relitigated.
   `test-foundation` 02's `/catalog` snapshot is the only mechanical check that
   the new API returns what the old one did — it is worth more under this plan,
   not less.
+
+  **Master stands still while that branch is open** (`production-v2`
+  cross-cutting rule 7). The deployable v2 work — `catalog-difficulties`,
+  `song-public-id`, `parser-crate-extraction`, `sync-rename-alarm` — merges
+  first, and the branch is cut after. A long-lived branch that has to be
+  re-synced against a moving master is a coordination cost with no compensating
+  throughput when there is one developer, and this branch rewrites the very
+  queries that work changes.
 - **No version segment.** `/api/...`. With no external consumers and only ever
   one API deployed, a version in the path names a distinction that does not
   exist. §6's "breaking changes → `/api/v2`" rule is retired with it.
@@ -101,17 +109,43 @@ against the `difficulties` table rather than a list in code
 ([`catalog-difficulties`](../catalog-difficulties/spec.md)). Community uploads
 must name a difficulty that exists in that table.
 
+## Settled 2026-09-16
+
+- **UTAGE difficulties appear in URLs as `協`, not `【協】`.**
+  [`catalog-difficulties`](../catalog-difficulties/spec.md) issue 01 splits the
+  column: `name` holds the bracketed display form, `code` holds the bare
+  matching form, and `code` is the URL component. Storing one and deriving the
+  other would put a strip-or-add transformation on every path — parser output,
+  URL parsing, display, upload validation — and one missed application makes a
+  chart unfindable. Measured: all 176 UTAGE sheets are exactly `^【.】$`, 50
+  distinct labels, some ASCII (`【X】`, `【J】`, `【r】`) and therefore
+  case-sensitive.
+- **The chart endpoints keep plain-text errors, routed through `AppError`.** The
+  original justification stands — the success body is simai for the engine, so a
+  JSON error beside it is arguably *less* consistent. What does not stand is the
+  bespoke error path it grew: `routes/charts.rs:51` returns a raw `sqlx::Error`
+  string to the client, so the documented exception to the error envelope
+  quietly became an exception to error redaction too. `AppError` gains a
+  plain-text rendering; the wire format is unchanged, the leak closes by
+  construction, and a future handler cannot reintroduce it by copying this one.
+  Applies to `/api/songs/{publicId}/sheets/{type}/{difficulty}/chart` and to
+  `/api/community/charts/{publicId}/chart` alike.
+- **Community routes nest under `/api/community/...`.** One root, two named
+  libraries — a second library beside the catalog, not a second API. Keeps every
+  route reachable under one prefix for CORS, rate limiting and anything later
+  mounted per-subtree.
+- **`public_id` is a UUID v7** in a native `uuid` column, canonical hyphenated in
+  paths. See [`song-public-id`](../song-public-id/spec.md) issue 01.
+
 ## Open questions
 
 - **Payload: raw versus derived.** Blocked on the frontend's data requirements —
   "should the server send what the client renders?" has no answer until the
   client is specified. Today's answer is knowable; a redesigned frontend's is not.
-- **Does the chart endpoint keep plain-text errors?** Currently justified (the
-  engine wants simai text, so a JSON error beside a text success is arguably the
-  *less* consistent design), but a from-scratch API should decide rather than
-  inherit.
-- **Does a UTAGE difficulty appear in URLs as `協` or `【協】`?** The catalog
-  stores bracketed; maidata emits bare.
+  This is the only one left, and it is blocked on purpose:
+  [`frontend-redesign`](../frontend-redesign/spec.md) issue 01 is item 1 of the
+  build order precisely so this can be answered from a written list rather than
+  from the API someone already had in mind.
 
 ## Blocked by
 

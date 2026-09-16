@@ -4,8 +4,7 @@
 
 **Blocked by:** 02 — submit/list contributions.
 
-**Status:** todo
-
+**Status:** dropped — the feature is superseded by [ADR-0013](../../../adr/0013-community-charts-beside-the-catalog.md); this ticket holds no work
 - [ ] `require_moderator` guard: non-moderator/admin gets `403`
 - [ ] Approve: `edit` kind merges into `sheets` via COALESCE (only payload-present fields change), bumps `catalog_meta.update_time`, sets status `merged`, writes an `audit_log` row
 - [ ] Approve: `sheet`/`song`/`chart` kinds return `501` with a clear message, do not silently no-op

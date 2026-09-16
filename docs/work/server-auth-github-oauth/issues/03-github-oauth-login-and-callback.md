@@ -29,7 +29,12 @@ an additive field. Ticket 05 updates the contract to match in the same feature.
       fetches the profile
 - [ ] User upserted by `github_id`: insert on first login, update `login` and
       `avatar_url` on subsequent ones. `role` is never overwritten by a login.
-- [ ] Refresh token generated, hashed, stored in `users.refresh_token_hash`
+- [ ] **A tombstoned account reactivates.** If the matched row has `deleted_at`
+      set, clear it and repopulate `login` and `avatar_url` from the profile.
+      This is the only path that reactivates — refresh does not (issue 04).
+      `role` is still not overwritten
+- [ ] Refresh token generated, hashed, stored in `users.refresh_token_hash`,
+      with `refresh_token_expires_at` set to now + 30 days
 - [ ] Response body: `{ "token": "<jwt>", "refreshToken": "<opaque>", "user": { ... } }`
 - [ ] Failure paths return the contract error shape, never a raw OAuth error
 - [ ] Client secret never logged, never returned

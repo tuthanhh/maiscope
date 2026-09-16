@@ -55,7 +55,17 @@ All from ADR-0013 unless noted.
   engine can render — one parser, shared via
   [`parser-crate-extraction`](../parser-crate-extraction/spec.md).
 - **Auth is a hard prerequisite.** Every write needs a GitHub identity so a
-  takedown has someone to act against.
+  takedown has someone to act against. That identity survives account deletion
+  as a tombstone (`production-v2` cross-cutting rule 6), so an uploader cannot
+  orphan their uploads by leaving.
+- **Everything lives under `/api/community/...`.** One API root, two named
+  libraries — not a second API. The bare `/community/...` paths these tickets
+  were first written with predate the decision that retired `/api/v1`.
+- **Songs and charts are addressed by minted `public_id`** (UUID v7), the same
+  scheme as the official catalog. The bigserial never reaches a URL.
+- **No ban, no per-user quota, in this milestone.** The tools against a repeat
+  abuser are per-song takedown and the reports queue, and that is knowingly all
+  of them — `production-v2`'s *Accepted, not solved* records why.
 
 ## Out of scope
 

@@ -28,12 +28,14 @@ revision-probe design is working and is not what is broken.
 | Layer | v1.0 | v2.0 |
 |---|---|---|
 | API path | `/api/v1/...` | `/api/...` — the version segment is retired |
-| Song identity | `song_id`, which *is the title* | minted `public_id`, ASCII, never derived from text |
+| Song identity | `song_id`, which *is the title* | minted `public_id`: **UUID v7**, native `uuid` column, canonical hyphenated in URLs |
 | Sheet address | `sheetExpr` URL-encoded, *or* songId + query params | `/api/songs/{publicId}/sheets/{type}/{difficulty}` |
 | Difficulty | 5-variant enum over a `TEXT` column holding 55 values | `Basic..ReMaster \| Utage(String)`, checked against `difficulties` |
-| Charts | official only, one per sheet | plus a community library in its own tables |
+| Difficulty spelling | `【協】` on sheets, `協` from maidata, no reconciliation | `difficulties.name` (`【協】`, display) and `difficulties.code` (`協`, matching + URLs) |
+| Charts | official only, one per sheet | plus a community library in its own tables, under `/api/community/...` |
 | Parser | inside the Bevy crate | `crates/simai`, usable by the server |
 | Writes | none | authenticated uploads, published immediately |
+| Accounts | none | GitHub OAuth; deletion is a tombstone, not a row removal |
 
 ### Decisions behind this scope
 
@@ -61,11 +63,38 @@ revision-probe design is working and is not what is broken.
 4. **Identity is minted, never derived.** Anything computed from a title
    inherits the instability that motivated v2 in the first place. This applies
    to song ids, and to any identifier community charts acquire.
+
+   The mint is **UUID v7 in a native `uuid` column, canonical hyphenated in
+   URLs** — `songs.public_id`, `community_songs.public_id`,
+   `community_charts.public_id`, one scheme across both libraries. v7 over v4
+   because the embedded timestamp publishes only the creation time, which both
+   libraries already display; a native `uuid` over `TEXT` because a distinct
+   Rust type makes "passed a `song_id` where a `public_id` belongs" a
+   compile error rather than a silent lookup miss. A short bespoke id was
+   rejected: 3× shorter URLs are not worth a generator, a format `CHECK` and
+   collision handling that this project would own and test itself. sqlx already
+   builds with its `uuid` feature; only the `uuid` crate is new.
+
+   Bigserial primary keys stay as storage details and never appear in a URL,
+   including `community_songs.id` — a sequence in a path publishes the library's
+   size, which cannot be unpublished later.
 5. **v1's additive-only response rule does not apply.** It existed because an
    installed PWA could run an arbitrarily old frontend against a current API.
    v2 replaces both on one branch, so the constraint is lifted — deliberately,
    not by omission. It returns the moment anything but this project's own
    frontend consumes the API.
+6. **Deleting an account strips identity; it does not delete published work.**
+   A deletion nulls `login` and `avatar_url`, sets `deleted_at` and revokes
+   `refresh_token_hash`, keeping the row so uploads stay attributed and a
+   moderator still has a target. `github_id` is *retained* — without it a
+   re-login mints a second account and the tombstone is unreachable — so
+   re-authenticating with the same GitHub account reactivates the tombstone.
+   This is identity erasure, not erasure; say so plainly wherever it is
+   described to a user.
+7. **One branch, and master stands still while it is open.** See *The cutover
+   is the risk*. This is a rule rather than a preference because every
+   alternative spends a solo developer's time on merges that a team structure
+   would be paying for.
 
 ## The cutover is the risk
 
@@ -78,22 +107,45 @@ What makes it survivable:
 - [`test-foundation`](../test-foundation/spec.md)'s `/catalog` snapshot is the
   mechanical before-and-after check that the new API returns what the old one
   did. It is worth more under this plan than under a gradual one.
-- `catalog-difficulties`, `song-public-id` and `parser-crate-extraction` are all
-  deployable against the *current* app. Only `api-rewrite`, `frontend-redesign`
-  and `community-charts` are branch-bound.
+- `catalog-difficulties`, `song-public-id`, `parser-crate-extraction` and
+  [`sync-rename-alarm`](../sync-rename-alarm/spec.md) are all deployable against
+  the *current* app. Only `api-rewrite`, `frontend-redesign` and
+  `community-charts` are branch-bound.
 - The engine is untouched by the cutover.
+- **The branch is not cut until the master-side work is merged.** Every
+  deployable item above lands on master first; only then is the v2 branch
+  created, and master does not move again until it merges back. A long-lived
+  branch that has to be re-synced with a moving master is a coordination cost
+  with no compensating throughput when there is one developer. The branch cannot
+  fall behind a master that is standing still.
 
 What does not:
 
 - The branch is live-or-dead at the end, and its length is bounded by the
-  frontend redesign, which is the least specified piece.
+  frontend redesign — which now carries a **visual** redesign as well as a
+  structural one, and so is bounded in turn by the design-direction reference
+  (`frontend-redesign` issue 06). Without that document committed, the branch's
+  completion test is subjective, which is the definition of a branch that does
+  not land.
+- **Production gets no fixes while the branch is open.** Accepted knowingly: v1
+  is browse-only and stable, so the exposure is small. If something does break,
+  the choice is a hotfix on master — paying the merge cost once — or living with
+  it until cutover. Decide that in the moment; do not discover it mid-outage.
 
 ## Verify before relying on (facts I do not trust)
 
-- **How often upstream actually renames a song.** The whole
-  rename-handling decision rests on it being rare, and the project has no
-  record either way. If it turns out common, the "fix it by hand" answer fails
-  quietly — a renamed song loses its chart and reappears as new.
+- **How often upstream actually renames a song.** The whole rename-handling
+  decision rests on it being rare, and the project has no record either way. If
+  it turns out common, the "fix it by hand" answer fails quietly — a renamed
+  song loses its chart and reappears as new, and because the sync never deletes,
+  the catalog shows the song *twice*: once under the dead title holding the
+  chart text, once under the live title reporting `hasChart: false`.
+
+  This is now being measured rather than assumed.
+  [`sync-rename-alarm`](../sync-rename-alarm/spec.md) fails the sync run when
+  `songs_vanished > 0` and `songs_inserted > 0` coincide, which is the rename
+  signature, and both counters already exist in `SyncStats`. It is deployable
+  now, so by the time `song-public-id` lands the number will be known.
 - Whether `catalog_sync`'s wholesale `DELETE`/re-insert of lookup tables can
   keep synthesised UTAGE difficulty rows without a special case.
 - Whether any upstream `songId` will ever exceed what a path segment tolerates
@@ -104,9 +156,23 @@ What does not:
 
 ## Known-unresolved risks
 
-- **The parser is now an admissions policy.** UTAGE `$`/`@` is still unsupported
-  ([`parser-defects` 03](../parser-defects/issues/03-utage-tap-modifiers.md)), so
-  a legitimate UTAGE chart is refused by our incompleteness rather than its own.
+- **The parser is now an admissions policy, and its floor is measured.** Across
+  the 1928 local `maidata.txt` files, **56 use the tap-star `$`** that
+  [`parser-defects` 03](../parser-defects/issues/03-utage-tap-modifiers.md)
+  does not accept — and **19 of those are ordinary non-UTAGE charts**. So that
+  ticket is not a UTAGE nicety; it is a rejection rate on normal content, and
+  that ticket's own note calling it "lowest value of the five" was written
+  before the parser gated uploads.
+
+  2.9% is a *floor*, not the rate: it counts one known defect, and nobody has
+  run `parse_chart` over the whole corpus — `engine/tests/corpus.rs` sweeps nine
+  hand-written fixtures plus a gitignored `local/` that takes chart bodies, not
+  `maidata.txt`. Gating `community-charts` 02 on a measured pass rate was
+  considered and **rejected**: the endpoint ships as designed and defects are
+  fixed as they are reported. The rejection is not graceful — one `$` anywhere
+  refuses every difficulty in that upload — so the contributor-facing error must
+  carry the token, and every rejection logs at `warn` with it (see
+  `community-charts` issue 02).
 - **UTAGE title matching may not be solvable.** Three forms disagree —
   `[宴/バディ/1P] X [13?]`, `(宴) X`, `[好]X` — and matching is already too
   strict. Loosening it trades a missed chart for a *mismatched* one, which is
@@ -117,8 +183,43 @@ What does not:
   problems are found after they are visible. Trust tiers were considered and
   deferred; revisit if reports outpace the ability to handle them.
 - **No PII rule is gone.** v1 held none by design, which kept the project clear
-  of needing a privacy policy. Accounts end that. Decide what is stored, and
-  what is not, before the first user exists — not after.
+  of needing a privacy policy. Accounts end that. What is stored is settled —
+  `github_id`, `login`, `avatar_url`, `role`, a refresh-token *hash*, and no
+  email — and deletion is settled by cross-cutting rule 6. What is not settled
+  is whether that set obliges a privacy policy anywhere it has users.
+
+## Accepted, not solved
+
+Each of these was put as a decision and deferred on purpose. They are listed so
+a later reader does not mistake a choice for an oversight.
+
+- **No ban or suspension in v2.** `users.role` stays `user | moderator | admin`.
+  The only tools against a repeat abuser are per-song takedown and the reports
+  queue. Deferred to a later release because `ALTER TABLE users ADD COLUMN
+  banned_at TIMESTAMPTZ` is nullable, instant and needs no table rewrite even
+  against live accounts — nothing is lost by waiting.
+
+  **When it lands, reactivation must clear `deleted_at` and not `banned_at`.**
+  Otherwise cross-cutting rule 6 hands every banned user an escape: delete the
+  account, re-authenticate, arrive clean.
+- **The JWT is authoritative for 15 minutes.** `AuthUser` verifies the token and
+  reads no database, so a role change — or a deletion — takes up to one token
+  lifetime to bite. A per-write `SELECT` on `users` was the alternative and was
+  not taken.
+- **No per-user write quota.** Uploads are covered by the one global limiter
+  (burst 30, refill 1/s, keyed by IP), which permits roughly 86,400 uploads per
+  IP per day — four orders of magnitude above real use, and keyed by address
+  when auth means the user id is known. The bounded piece is the body: 512 KB on
+  the upload route, chosen from the corpus (p99 38 KB, observed max 353 KB), not
+  from Axum's 2 MB default.
+- **Refresh tokens live in client storage.** Not a preference — an httpOnly
+  cookie is unavailable on the current hosts. `pages.dev` and `fly.dev` are both
+  Public Suffix List entries, so a cookie set by `maiscope-api.fly.dev` while
+  the user is on `maiscope.pages.dev` is third-party; Safari blocks it outright.
+  A custom domain would make same-site cookies possible and stays **optional** —
+  `CORS_ALLOWED_ORIGINS` is already config-driven, so adopting one needs no code
+  change. Until then XSS on the frontend origin is credential theft, bounded by
+  a 30-day `refresh_token_expires_at` and rotation on every use.
 
 ## Child features
 
@@ -126,19 +227,32 @@ This directory is an **umbrella**: cross-cutting rules above, no tickets of its
 own. Build roughly in this order — the ordering is the dependency graph, not a
 preference.
 
+The order is split by *where the work lands*, because master freezes when the
+branch is cut (cross-cutting rule 7).
+
+**On master, before the branch exists.** Each ships on its own against the
+current app, and each removes a dependency from the branch-bound work.
+
 | Order | Feature | Why here |
 |---|---|---|
-| 1 | [`frontend-redesign`](../frontend-redesign/spec.md) ticket 01 | The data-requirements list. Not code, and it blocks `api-rewrite`'s payload — start it first even though the rest of the feature comes last. |
-| 2 | [`catalog-difficulties`](../catalog-difficulties/spec.md) | Fixes a live bug: `/catalog` ships 5 difficulties while its sheets use 55, and `seed_songs` silently skips every UTAGE chart. Deployable today. |
-| 3 | [`song-public-id`](../song-public-id/spec.md) | Mint and backfill. Mechanical, independent, and everything in `api-rewrite` depends on it. Deployable today. |
-| 4 | [`parser-crate-extraction`](../parser-crate-extraction/spec.md) | Gets the parser off Bevy so the server can validate uploads. Earns its place on CI cost alone. Deployable today. |
-| 5 | [`server-auth-github-oauth`](../server-auth-github-oauth/) | Hard prerequisite for any write endpoint. |
-| 6 | [`api-rewrite`](../api-rewrite/spec.md) | Needs 1, 2 and 3. Branch-bound from here on. |
-| 7 | [`frontend-redesign`](../frontend-redesign/spec.md) tickets 02–05 | Cuts over with 6. |
-| 8 | [`community-charts`](../community-charts/spec.md) | Needs 4, 5, and 6's conventions. |
+| 1 | [`frontend-redesign`](../frontend-redesign/spec.md) tickets 01 and 06 | Two documents, no code. Ticket 01 is the data-requirements list and blocks `api-rewrite`'s payload; ticket 06 is the design direction and bounds the visual work. Neither depends on anything, so both can be written alongside items 2–5. |
+| 2 | [`catalog-difficulties`](../catalog-difficulties/spec.md) | Fixes a live bug: `/catalog` ships 5 difficulties while its sheets use 55, and `seed_songs` silently skips every UTAGE chart. |
+| 3 | [`song-public-id`](../song-public-id/spec.md) | Mint and backfill. Mechanical, independent, and everything in `api-rewrite` depends on it. |
+| 4 | [`parser-crate-extraction`](../parser-crate-extraction/spec.md) | Gets the parser off Bevy so the server can validate uploads. Earns its place on CI cost alone. |
+| 5 | [`sync-rename-alarm`](../sync-rename-alarm/spec.md) | One ticket. Starts measuring rename frequency now, so the number exists before the decision that rests on it is load-bearing. |
 
-Items 2, 3 and 4 are the ones worth starting now: each ships on its own against
-the current app, and each removes a dependency from the branch-bound work.
+**On the v2 branch, cut once the above is merged.**
+
+| Order | Feature | Why here |
+|---|---|---|
+| 6 | [`server-auth-github-oauth`](../server-auth-github-oauth/spec.md) | Hard prerequisite for any write endpoint. |
+| 7 | [`api-rewrite`](../api-rewrite/spec.md) | Needs 1, 2 and 3. |
+| 8 | [`frontend-redesign`](../frontend-redesign/spec.md) tickets 02–05 | Cuts over with 7, against the direction written in ticket 06. |
+| 9 | [`community-charts`](../community-charts/spec.md) | Needs 4, 6, and 7's conventions. |
+
+Auth moved onto the branch rather than ahead of it: nothing on master consumes
+it, so shipping login to production months before a single write endpoint exists
+would put an unused attack surface in front of users for no return.
 
 [`server-contributions`](../server-contributions/spec.md) is **superseded** and
 holds no work — kept as the record of the moderation-queue design that ADR-0013

@@ -4,8 +4,7 @@
 
 **Blocked by:** 01 — contributions tables migration, `server-auth-github-oauth/issues/02-jwt-and-authuser-extractor.md` (needs `AuthUser`).
 
-**Status:** todo
-
+**Status:** dropped — the feature is superseded by [ADR-0013](../../../adr/0013-community-charts-beside-the-catalog.md); this ticket holds no work
 - [ ] `POST /contributions` inserts a row, returns `201` with `{ id, status: "pending" }`; invalid `kind` returns `400` not `500`
 - [ ] `GET /contributions` — plain `user` role always restricted to own contributions server-side (not just an optional `mine` filter a caller could omit); moderators see all or filter by `mine`
 - [ ] `GET /contributions/{id}` — plain `user` accessing someone else's contribution gets `404`, not `403`

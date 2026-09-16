@@ -281,19 +281,45 @@ If `since` is too old to diff, respond `409` with
 **Not implemented.** No auth route is mounted; the design below is the plan of
 record for `docs/work/server-auth-github-oauth/`. Required to gate §5.
 
-v1 has no accounts and holds no PII — a property worth preserving deliberately
-rather than losing by accident (ADR-0002).
+Paths are shown under `/api`, without a version segment — auth is built on the
+v2 branch, which retires `/api/v1` entirely
+([`api-rewrite`](../work/api-rewrite/spec.md)).
 
-- `GET /auth/github/login` → `302` to GitHub OAuth.
-- `GET /auth/github/callback?code=...` → sets session / returns
-  `{ "token": "<jwt>", "user": { ... } }`.
-- `POST /auth/refresh` → new JWT from refresh token.
-- `GET /auth/me` → current user:
+v1 has no accounts and holds no PII. v2 ends that deliberately rather than by
+accident: the stored set is `github_id`, `login`, `avatar_url`, `role`, a
+refresh-token **hash**, and timestamps. **No email address**, and adding one
+later is a decision about privacy obligations rather than a schema convenience.
+
+- `GET /api/auth/github/login` → `302` to GitHub OAuth.
+- `GET /api/auth/github/callback?code=...` → exchanges the code and returns
+  `{ "token": "<jwt>", "refreshToken": "<opaque>", "user": { ... } }`.
+  Re-authenticating a deleted account **reactivates** it (see below).
+- `POST /api/auth/refresh` → `{ "refreshToken": "<opaque>" }` in, a new JWT *and*
+  a new refresh token out. Refresh tokens rotate on every use and expire 30 days
+  after issue; a token past its expiry is rejected even if its hash matches.
+- `GET /api/auth/me` → current user:
 ```jsonc
 { "id": "string", "login": "string", "avatarUrl": "string",
   "role": "user|moderator|admin" }
 ```
 `401` when no/invalid token.
+- `DELETE /api/auth/me` → deletes the caller's account. See below.
+
+**Tokens live in client storage, not a cookie.** The frontend and API are on
+different registrable domains (`pages.dev` and `fly.dev` are both Public Suffix
+List entries), so an API-set cookie is third-party and browsers block it. Hence
+`Authorization: Bearer` and an opaque refresh token the client stores itself.
+
+**Deleting an account strips identity; it does not delete published work.** The
+row is kept with `login` and `avatar_url` nulled, `deleted_at` set and the
+refresh token revoked. `github_id` is retained so a later login reaches the same
+row rather than minting a second one. Community uploads stay published,
+attributed to a deleted user. Describe it to users as identity removal, not
+deletion.
+
+**The JWT is authoritative for its 15-minute lifetime.** `AuthUser` verifies the
+token without reading the database, so a role change or a deletion takes up to
+one token lifetime to take effect.
 
 ---
 
@@ -371,9 +397,10 @@ Status enum: `pending | approved | rejected | merged`.
   08). `429` + `Retry-After` (always at least `1` — the underlying limiter
   reports whole seconds and would otherwise say `0`, i.e. "retry now"), same
   `{ "error": "rate_limited", "message": ... }` shape as every other error.
-  `/healthcheck` is exempt. Phase 2 write
-  endpoints (§5) will need their own, tighter, per-user limits — this ticket
-  only covers the shipped public reads.
+  `/healthcheck` is exempt. Phase 2 write endpoints (§5) reuse this same
+  limiter: a per-user quota was considered and **deferred**, so the only
+  write-specific bound is a 512 KB body limit on the upload route (see
+  `production-v2`'s *Accepted, not solved*).
 - **CORS**: allowlist built from `CORS_ALLOWED_ORIGINS` (`Config`, `server-restructure`
   issue 06) — no origin configured means no origin allowed, not a permissive
   fallback. `.env.example` still names the retired Tauri dev origin (`:1420`);

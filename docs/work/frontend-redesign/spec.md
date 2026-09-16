@@ -32,11 +32,15 @@ that now has uploads, accounts and a second library.
 
 | # | Ticket | Note |
 |---|---|---|
-| 01 | [Data requirements per screen](issues/01-data-requirements.md) | **Blocks `api-rewrite`'s payload.** Not code |
+| 01 | [Data requirements per screen](issues/01-data-requirements.md) | **Blocks `api-rewrite`'s payload.** Not code. Written first |
+| 06 | [Design direction](issues/06-design-direction.md) | **Bounds the visual work.** Not code. Written first, alongside 01 |
 | 02 | [Identity and indexing off `sheetExpr`](issues/02-identity-off-sheetexpr.md) | Needs `song-public-id` |
 | 03 | [Split the visualizer page](issues/03-split-visualizer.md) | Independent, doable now |
-| 04 | [Screens against the new API](issues/04-screens-on-new-api.md) | Blocked by `api-rewrite` |
-| 05 | [Community library screens](issues/05-community-screens.md) | Blocked by `community-charts` |
+| 04 | [Screens against the new API](issues/04-screens-on-new-api.md) | Blocked by `api-rewrite` and 06 |
+| 05 | [Community library screens](issues/05-community-screens.md) | Blocked by `community-charts` and 06 |
+
+Ticket numbers are creation order, not execution order — 01 and 06 are both
+documents and both come first. The umbrella's build order is the authority.
 
 ## Decisions that constrain this work
 
@@ -53,6 +57,22 @@ that now has uploads, accounts and a second library.
 - **The visualizer is not being redesigned.** Ticket 03 is a split for
   legibility, not a rework of playback. The engine boundary
   (`wasm_bridge.rs`'s mailbox, drained once per frame) is unchanged.
+- **"Redesign" means visual as well as structural, on the same branch.** Decided
+  2026-09-16 against two alternatives: renaming the feature to something
+  structural-only, or splitting the visual work into a separate feature shipped
+  incrementally after cutover. The deciding argument for one branch is that
+  `community-charts` adds upload, browse and reports screens with **no existing
+  look to inherit** — building them in the old skin and reskinning later means
+  designing them twice.
+
+  The cost is named plainly in the umbrella: this is what makes the branch's
+  length unbounded, and branch length is the milestone's largest risk.
+- **Ticket 06 is what bounds it.** Taste-driven work ends when it looks right,
+  which is not a completion test. The design direction — type scale, colour
+  tokens, spacing scale, component inventory — is written first and **committed
+  to `docs/reference/`**, so tickets 04 and 05 implement against a checklist
+  instead of iterating on taste. A direction that stays in a chat session is not
+  a bound.
 
 ## Out of scope
 
