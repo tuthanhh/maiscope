@@ -1,6 +1,6 @@
 # Spec — Pagination total as a response header
 
-**Status:** active
+**Status:** shipped
 **Milestone:** v1.0
 **Parent:** [`production-v1`](../production-v1/spec.md)
 
@@ -29,7 +29,7 @@ assertions that get rewritten.
 |---|---|---|
 | 01 | [Emit the header, keep the field](issues/01-emit-header.md) | Expand |
 | 02 | [Frontend reads the header](issues/02-frontend-switch.md) | Blocked by 01 **being deployed** |
-| 03 | [Drop the body field](issues/03-drop-body-field.md) | Blocked by 02 **being deployed** |
+| 03 | [Drop the body field](issues/03-drop-body-field.md) | **dropped** — v1 is frozen, see [`api-v2`](../api-v2/spec.md) |
 
 ## Decisions that constrain this work
 
@@ -63,6 +63,10 @@ already written against this convention.
 
 ## Done when
 
-`/sheets/search` returns `X-Total-Count`, the header is readable cross-origin,
-`SheetSearchResponse` has no `total` field, and `api-contract.md` §1.2 and §6
-describe what shipped.
+`/sheets/search` returns `X-Total-Count` and the header is readable
+cross-origin. Both hold.
+
+The original third condition — `SheetSearchResponse` having no `total` field —
+is dropped along with ticket 03: v1 is frozen, so it keeps both until it is
+deleted wholesale. The convention itself carries forward into v2, where it is
+native rather than migrated.

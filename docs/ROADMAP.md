@@ -40,7 +40,8 @@ which supersedes the contribution-queue design. Still no contributor audio
 | ├ [catalog-sync](work/catalog-sync/spec.md) | shipped | v1.0 |
 | ├ [web-delivery](work/web-delivery/spec.md) | active | v1.0 |
 | ├ [test-foundation](work/test-foundation/spec.md) | active | v1.0 |
-| └ [api-pagination-header](work/api-pagination-header/spec.md) | active | v1.0 |
+| └ [api-pagination-header](work/api-pagination-header/spec.md) | shipped | v1.0 |
+| [api-v2](work/api-v2/spec.md) | planned | phase 2 |
 | [parser-defects](work/parser-defects/spec.md) | active | v1.0 |
 | [mobile-webview-spike](work/mobile-webview-spike/) | planned | v1.1 |
 | [docs-restructure](work/docs-restructure/spec.md) | shipped | — |
