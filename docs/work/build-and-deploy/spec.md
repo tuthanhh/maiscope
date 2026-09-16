@@ -1,6 +1,6 @@
 # Spec — Build and deploy
 
-**Status:** active
+**Status:** shipped
 **Milestone:** v1.0
 **Parent:** [`production-v1`](../production-v1/spec.md)
 
@@ -28,23 +28,17 @@ The repo also has no CI. Nothing runs the six existing tests automatically, so
 | 04 | [CI: pull-request checks](issues/04-ci-pr-checks.md) | |
 | 05 | [CD: manual-dispatch deploy workflow](issues/05-deploy-workflow.md) | |
 
-## Decisions that constrain this work
+## Decisions that constrained this work
 
-- **Migrations run as a Fly release command, not at startup.** A bad migration in
-  a release command fails the deploy, Fly aborts, and the old machine keeps
-  serving. At startup the new machine boots, panics, restarts — a crash loop
-  instead of a clean rollback. It also keeps schema work off the cold-start path,
-  which matters under scale-to-zero.
-- **Expand-and-contract** (umbrella spec, rule 1). Additive migrations may deploy
-  automatically. `DROP COLUMN` / `DROP TABLE` are a separate, deliberate, manual
-  step — Postgres holds the only copy of chart text.
-- **Deploy stays manual first.** The recorded progression is *manual dispatch →
-  tag-triggered → auto-on-merge*, so it is a plan and not a drift. Auto-on-merge is
-  only safe once the expand-and-contract rule is habit; otherwise a merge can apply
-  schema changes with no human in the loop.
-- **`.sqlx/` is committed generated state**, deliberately. `cargo sqlx prepare --check`
-  in CI turns a stale cache into a build failure with a clear message instead of a
-  runtime surprise.
+Migrations-as-release-command and the manual-dispatch-first deploy progression
+are now [ADR-0004](../../adr/0004-fly-compute-neon-postgres.md) and
+[ADR-0011](../../adr/0011-manual-dispatch-deploy-first.md) — both since
+verified for real against the live app, not just reasoned about (see their
+Consequences sections). Expand-and-contract is the umbrella spec's rule, not
+this feature's. `.sqlx/` as committed generated state remains documented in
+`CLAUDE.md` and [ticket 01](issues/01-sqlx-offline.md) rather than promoted to
+an ADR — a build mechanic with no seriously contested alternative, not an
+architecture choice.
 
 ## Out of scope
 
