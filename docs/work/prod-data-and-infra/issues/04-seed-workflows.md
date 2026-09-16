@@ -17,8 +17,8 @@ and bumps `last_full_reload_revision`, which invalidates every client's delta sy
 **Blocked by:** 01 (role split), `server-restructure/issues/09-chart-revision-service-fn.md`.
 No longer blocked by 02, which is obsolete.
 
-**Status:** in-progress — `.github/workflows/seed-charts.yml` written 2026-09-13,
-cannot run until the setup below exists
+**Status:** in-progress — setup complete and run for real against production
+(2026-09-14); the title-matching gap below is the one thing still open
 
 ## Assessment (2026-09-13)
 
@@ -38,19 +38,33 @@ chart-text repo is therefore an ordinary git repo: no LFS, no object storage.
 
 **Setup this workflow still needs** (none of it is code):
 
-- [ ] Private chart-text repo created, holding the flat `songs/<song>/maidata.txt`
+- [x] Private chart-text repo created, holding the flat `songs/<song>/maidata.txt`
       tree. Set repo **variable** `CHART_DATA_REPO` to `owner/name`, and
-      `CHART_DATA_SUBDIR` if the tree is not at `songs/`.
-- [ ] Secret `CHART_DATA_TOKEN` — read access for seeding, write for the backup job.
-- [ ] Secret `SEED_DATABASE_URL` — the lower-privilege role from ticket 01. The
-      workflow falls back to `DATABASE_URL` so it works before that split, but
-      then it seeds as owner.
+      `CHART_DATA_SUBDIR` if the tree is not at `songs/`. Verified
+      (2026-09-16): `CHART_DATA_REPO` = `tuthanhh/maiscope-chart-data` exists
+      as a `production` environment variable; `CHART_DATA_SUBDIR` unset,
+      using the `songs/` default.
+- [x] Secret `CHART_DATA_TOKEN` — read access for seeding, write for the backup job.
+      Confirmed present.
+- [x] Secret `SEED_DATABASE_URL` — turned out unnecessary, not a gap. The
+      role split (ticket 01, 2026-09-16) means the fallback `DATABASE_URL`
+      **is now** `maiscope_app` (lower-privilege), not owner — so the
+      workflow already runs as the intended role without a fourth secret.
+      Superseded; see `runbook.md`.
 
 **It will fail until the title matching is fixed.** The acceptance criterion below
 — fail on anything unmatched, i.e. do not pass `--allow-unmatched` — is currently
 unmeetable: 266 titles and 9 difficulties do not match. See ticket 03's assessment.
 The workflow exposes `allow_unmatched` as an explicit, warned-about dispatch input
 so the failure is a deliberate override rather than a silent default.
+
+**Still true (verified 2026-09-16 against the last real run, `34815437919`,
+2026-09-14):** `seeded 0 sheets (6559 already up to date), 9 unmatched
+difficulties, 266 unmatched titles, 291 songs skipped entirely` — run with
+`--allow-unmatched`. Charts are live and serving (confirmed by fetching one
+from the production API), but this is a standing data-quality gap covered by
+the explicit override, not a met acceptance criterion. Fixing the 266
+mismatched titles is unscoped work, not part of this ticket.
 
 **Delivered by the workflow as written:**
 
@@ -73,9 +87,9 @@ so the failure is a deliberate override rather than a silent default.
       truncates. See the header comment in `.github/workflows/seed-charts.yml`:
       "There is no truncating counterpart to this workflow... Ticket 04's
       `reload-catalog.yml` is obsolete for that reason."
-- [ ] Both use the lower-privilege Neon role (issue 01), not owner (needs human
-      setup: the private repo, `CHART_DATA_TOKEN`, `SEED_DATABASE_URL`, and issue
-      01 itself — the workflow falls back to `DATABASE_URL` today)
+- [x] Both use the lower-privilege Neon role (issue 01), not owner — satisfied
+      via the `DATABASE_URL` fallback now pointing at `maiscope_app`, not a
+      dedicated `SEED_DATABASE_URL` (see above)
 - [x] Both take a `pg_dump` first (issue 05) and upload it as a run artifact
 - [x] `seed-charts` fails the run on anything unmatched — both titles and
       difficulties (`server-restructure` issue 09). This is the default: just
