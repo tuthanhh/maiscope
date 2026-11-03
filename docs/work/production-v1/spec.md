@@ -1,5 +1,8 @@
 # Spec — Production v1.0
 
+**Status:** active
+**Milestone:** v1.0
+
 Decision record from the 2026-09-09 grilling session. Every choice below was
 made explicitly; the rationale is kept because the *reasons* constrain future
 work more than the choices do.
@@ -22,7 +25,7 @@ local SQLite cache, Tauri (any target).
 | API | Axum on Fly.io, Docker image, scale-to-zero. |
 | Database | Neon Postgres, free tier, **separate from compute** so a redeploy can never touch data. |
 | Source of truth | Postgres for chart text + revisions. A private repo is the seed *input* and *backup*, never the authority. |
-| Upstream catalog | Vendored `data.json` snapshot in-repo; a scheduled job opens a PR to refresh it. |
+| Upstream catalog | Fetched from upstream on a nightly differential sync. Nothing is vendored, nothing is truncated ([ADR-0010](../../adr/0010-differential-catalog-sync.md)). |
 
 ### Decisions behind this scope
 
@@ -41,8 +44,10 @@ local SQLite cache, Tauri (any target).
    deliberate, manual step. Postgres holds the only copy of chart text.
 2. **Additive-only response shapes.** An installed PWA can run an arbitrarily
    old frontend against the current API. Never remove or rename a response field.
-3. **`ingest` truncates.** The catalog-reload job and the chart-seed job must
-   stay separate so the destructive one is never fired by reflex.
+3. **The catalog job and the chart-seed job stay separate.** Neither truncates —
+   `bin/ingest` is gone and `bin/sync_catalog` never deletes — but they write
+   different tables on different cadences, and chart text must never be written by
+   a job running on a schedule nobody watches.
 4. **No PII in v1.** No accounts, no analytics identifiers. Keeps the project out
    of needing a privacy policy at all — preserve this when adding client error
    reporting.
@@ -64,8 +69,6 @@ answers and the wrong one gets checked first.
   data" is true.
 - Whether Neon's free tier allows a branch per PR (would let CI run
   `#[sqlx::test]` against real ephemeral Postgres).
-- Upstream `zetaraku/arcade-songs` license terms — the README credits it in
-  prose, which is not the same as retaining a copyright notice.
 - Release wasm size, raw and brotli'd.
 
 ## Known-unresolved risks
@@ -75,8 +78,10 @@ answers and the wrong one gets checked first.
 - **PWA install identity is its origin.** Moving `*.pages.dev` → custom domain
   orphans installed apps. Do not promote installs until the domain lands.
 - **`seed_songs` matches by NFC-normalized title.** Upstream renames silently
-  drop charts (`server-restructure` issue 09 makes this loud;
-  `prod-data-and-infra` issue 02 makes it reviewable).
+  drop charts, and the loss is measured, not hypothetical: on 2026-09-13, 266 of
+  1927 song directories matched no catalog row. `server-restructure` issue 09
+  makes a dropped chart loud at seed time; making a rename loud at sync time is
+  [`sync-rename-alarm`](../sync-rename-alarm/spec.md), which is v2.0.
 
 ## Child features
 
@@ -90,9 +95,11 @@ dependency graph, not a preference.
 | 1 | [`repo-hygiene`](../repo-hygiene/spec.md) | A live hazard — `songs/` is untracked but not ignored, and the upstream licence is unverified. Do it before the repo goes public. |
 | 2 | [`server-restructure`](../server-restructure/spec.md) | Config, errors, state, modules, tracing, HTTP layer, caching, rate limiting. In place, tests green throughout ([ADR-0005](../../adr/0005-restructure-server-in-place.md)). |
 | 3 | [`build-and-deploy`](../build-and-deploy/spec.md) | Hermetic build and deploy mechanics: `.sqlx/`, Dockerfile, `fly.toml`, CI, CD. |
-| 4 | [`prod-data-and-infra`](../prod-data-and-infra/spec.md) | Neon provisioning, the vendored upstream snapshot and its refresh PR, seed workflows, backups. |
-| 5 | [`web-delivery`](../web-delivery/spec.md) | De-Tauri, catalog freshness, Cloudflare Pages, PWA, the mobile visualizer gate. |
-| 6 | [`test-foundation`](../test-foundation/spec.md) | Engine parser tests first — highest defect density, zero infrastructure — then server tests and the contract snapshot. |
+| 4 | [`prod-data-and-infra`](../prod-data-and-infra/spec.md) | Neon provisioning, seed workflows, backups. |
+| 5 | [`catalog-sync`](../catalog-sync/spec.md) | Replaces truncate-and-reload with a differential sync, so a catalog refresh can no longer destroy chart text. |
+| 6 | [`web-delivery`](../web-delivery/spec.md) | De-Tauri, catalog freshness, Cloudflare Pages, PWA, the mobile visualizer gate. |
+| 7 | [`test-foundation`](../test-foundation/spec.md) | Engine parser tests first — highest defect density, zero infrastructure — then server tests and the contract snapshot. |
+| — | [`api-pagination-header`](../api-pagination-header/spec.md) | Off the dependency chain. Moves `/sheets/search`'s total to `X-Total-Count` ([ADR-0015](../../adr/0015-pagination-total-as-a-response-header.md)). |
 | — | [`mobile-webview-spike`](../mobile-webview-spike/) | Gates **v1.1**, not v1.0. Run it early and in parallel; a bad result reopens [ADR-0003](../../adr/0003-web-pwa-drop-tauri.md). |
 
 The split itself, and the rules it changed, are recorded in

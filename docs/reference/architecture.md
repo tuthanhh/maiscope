@@ -1,6 +1,6 @@
 # Architecture
 
-How the pieces fit together. Decisions and their rationale live in [`adr/`](adr/);
+How the pieces fit together. Decisions and their rationale live in [`adr/`](../adr/);
 this document describes the result.
 
 ## Tiers
@@ -50,7 +50,7 @@ between debugging staleness in one minute and three.
 
 | Layer | Holds | Invalidated by |
 |---|---|---|
-| Service worker (v1.0, not yet built) | App shell (precached); wasm (runtime, cache-first) | Content-hashed filenames; `index.html` is network-first |
+| Service worker | App shell (precached); wasm (runtime, cache-first) | Content-hashed filenames; `index.html` is network-first |
 | IndexedDB | Catalog blob (v1.1) | `GET /sync/manifest` revision change; paint-then-swap |
 | HTTP | Wire responses | `ETag` / `If-None-Match` / `Cache-Control` |
 
@@ -68,7 +68,7 @@ engine commands this way — never call into Bevy synchronously.
 The chart clock has two modes. `load_chart(text)` advances on the wall clock
 (`ChartPlayback::advance`); `load_song(text, bytes)` slaves the clock to the BGM
 (`ChartPlayback::sync_to_audio_position`). v1 uses the silent path only — see
-[ADR-0002](adr/0002-chart-data-only-no-audio-hosting.md).
+[ADR-0002](../adr/0002-chart-data-only-no-audio-hosting.md).
 
 Only sprite textures go through Bevy's `AssetServer`, fetched at runtime from
 `/assets/...`. Chart text is pushed in directly through `wasm_bridge`.
@@ -83,8 +83,8 @@ Only sprite textures go through Bevy's `AssetServer`, fetched at runtime from
 | Migrations | Fly `release_command`, before traffic cutover |
 | Source of truth | Postgres for chart text; a private repo holds seed input and backups |
 
-See [ADR-0001](adr/0001-postgres-source-of-truth-for-charts.md) and
-[ADR-0004](adr/0004-fly-compute-neon-postgres.md).
+See [ADR-0001](../adr/0001-postgres-source-of-truth-for-charts.md) and
+[ADR-0004](../adr/0004-fly-compute-neon-postgres.md).
 
 ## Known deviations from this document
 

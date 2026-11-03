@@ -268,7 +268,9 @@ If `since` is too old to diff, respond `409` with
 >
 > A row that vanishes upstream is **not** deleted — deleting a sheet would
 > cascade to its chart text. It is left in place, still served by `/catalog`,
-> and recorded in `tombstones` (see `docs/work/catalog-sync/spec.md`).
+> and logged once to the `deleted_songs` / `deleted_sheets` tables, which is what
+> this response's `tombstones` field reads from (see
+> `docs/work/catalog-sync/spec.md`).
 >
 > A `song` is included whenever it or any of its sheets changed since
 > `since`, so a sheet-only edit still surfaces its parent song (the response

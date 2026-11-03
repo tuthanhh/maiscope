@@ -14,7 +14,7 @@ engine/        Bevy ECS chart renderer, compiled to wasm and imported by apps/ho
 shared/        Rust crate for cross-workspace types (scaffolded, not yet wired in)
 ```
 
-For how these fit together, see [docs/architecture.md](docs/architecture.md).
+For how these fit together, see [docs/reference/architecture.md](docs/reference/architecture.md).
 
 ## Getting started
 
@@ -32,7 +32,7 @@ See [docs/guides/local-setup.md](docs/guides/local-setup.md).
 | | |
 |---|---|
 | [Roadmap](docs/ROADMAP.md) | What is done, what is next |
-| [Architecture](docs/architecture.md) | How the tiers fit together |
+| [Architecture](docs/reference/architecture.md) | How the tiers fit together |
 | [Decisions](docs/adr/) | Why it is built this way |
 | [API contract](docs/reference/api-contract.md) | The HTTP surface |
 | [Database schema](docs/reference/schema.md) | Postgres tables |

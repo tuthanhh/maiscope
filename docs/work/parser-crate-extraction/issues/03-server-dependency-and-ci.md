@@ -17,7 +17,7 @@ parser tests off the `engine` CI job.
       gains a line about feature unification — a future `--workspace` step would
       pull Bevy back in through `simai/bevy`
 - [ ] CLAUDE.md's Testing section points at `cargo test -p simai`
-- [ ] `docs/architecture.md` gains the crate
+- [ ] `docs/reference/architecture.md` gains the crate
 
 > No server code calls the parser yet — that is
 > [`community-charts` 02](../../community-charts/issues/02-upload-maidata.md).

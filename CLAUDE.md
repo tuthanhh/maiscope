@@ -5,7 +5,7 @@ Guidance for Claude Code when working in this repository.
 ## Always read first
 
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — what is being built now and what is deferred
-- [`docs/architecture.md`](docs/architecture.md) — how the tiers fit together
+- [`docs/reference/architecture.md`](docs/reference/architecture.md) — how the tiers fit together
 - [`docs/adr/`](docs/adr/) — why decisions were made; check before proposing a change that contradicts one
 
 Conditionally relevant:
@@ -114,7 +114,8 @@ production action is a workflow dispatch, never a local command.
 
 | Workflow | Trigger | Effect |
 |---|---|---|
-| `ci.yml` | push / PR | checks named `rust`, `wasm-web`, `links` |
+| `ci.yml` | push / PR | checks named `rust`, `engine`, `wasm-web` |
+| `docs.yml` | push / PR touching any `.md` | the `links` check — every relative link resolves |
 | `deploy.yml` | manual | Fly deploy; migrations run as the `release_command` |
 | `deploy-web.yml` | manual | Cloudflare Pages build of `apps/host` |
 | `sync-catalog.yml` | cron + manual | differential upstream sync; never deletes |
