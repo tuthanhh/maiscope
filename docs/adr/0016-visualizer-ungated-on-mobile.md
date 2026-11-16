@@ -67,3 +67,9 @@ does not show — but the spike that would confirm it has not been run either.
 **This decision reopens if** the problems in issue 02 turn out to break the
 visualizer for most phone users. The fallback is the notice above, not the full
 gate.
+
+**2026-11-17: measured, not reopened.** Issue 02's problems were two — a
+GPU fill-rate cost (MSAA, fixed) and guide-sound latency, clipping and
+coalescing (fixed, [ADR-0020](0020-guide-sounds-from-the-clock-with-a-derived-lead.md)).
+After the fixes the phone holds its panel refresh rate with 30MiB of wasm
+memory and sounds on the hit. No notice is shown.

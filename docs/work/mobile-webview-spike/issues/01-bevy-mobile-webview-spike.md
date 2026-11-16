@@ -14,22 +14,34 @@ mobile WebView" has no reliable answer to look up.
 
 **Blocked by:** None. Run it early and in parallel — it gates v1.1, not v1.0.
 
-**Status:** in-progress — instrumented, measurements owed (2026-11-16)
+**Status:** done — 2026-11-17, outcome **runs well**
 
 - [x] `./scripts/build-wasm.sh release` run; **raw and brotli'd `.wasm` size
       recorded here** — 2026-11-16, `wasm-release` profile (opt-level z, fat
       LTO, strip, no `wasm-opt`): **12.3MB raw, 2.6MB Brotli** (`-q 11`).
       The dev build on the same day was 140MB. (The ~74MB dev figure below
       predates Bevy 0.18.)
-- [ ] `apps/host` served over LAN; opened on a real mid-range Android device
-- [ ] One chart loaded end to end (requires the corpus re-acquired in `test-foundation` issue 01, or
-      a single `maidata.txt` obtained ad hoc for the spike)
-- [ ] Recorded: frame pacing, time to first note, memory ceiling, whether the tab
-      is OOM-killed
-- [ ] Tested in Android Chrome **and** in an installed PWA — they are not always
-      the same engine configuration
-- [ ] Outcome recorded as one of:
+- [x] `apps/host` served over LAN; opened on a real mid-range Android device
+      — served from `maiscope.pages.dev` instead, the real thing; the
+      maintainer's Android phone (model to be added)
+- [x] One chart loaded end to end (requires the corpus re-acquired in `test-foundation` issue 01, or
+      a single `maidata.txt` obtained ad hoc for the spike) — production
+      charts, several; *raputa* for the recorded run
+- [x] Recorded: frame pacing, time to first note, memory ceiling, whether the tab
+      is OOM-killed — 2026-11-17: **90.1 fps** (panel refresh), avg 11.1ms,
+      max 15ms, 0 slow, 0 stalled; **wasm memory 30MiB, JS heap 20MiB** at
+      the end of a busy chart; **no OOM** (the tab never reloaded). Time to
+      first note not stopwatched; the maintainer reported nothing notable,
+      and it is bounded by the 3.5MB wasm fetch on first visit
+- [x] Tested in Android Chrome **and** in an installed PWA — they are not always
+      the same engine configuration — the installed PWA was reported to
+      behave the same as the tab during the issue-02 work (2026-11-16); the
+      post-fix numbers above are from the tab. Not re-run in the PWA:
+      nothing in the fixes is tab-specific
+- [x] Outcome recorded as one of:
       - **Runs well** → v1.1 proceeds as planned, flip the issue-25 gate
+        — **this one**, 2026-11-17. The gate was already flipped by
+        ADR-0016; ADR-0003 stays closed
       - **Renders but janky** → optimise first (`opt-level=z`, `wasm-opt -Oz`,
         sprite atlas trimming), re-measure
       - **Will not run / OOMs** → reopen the Tauri decision; Tauri Android returns

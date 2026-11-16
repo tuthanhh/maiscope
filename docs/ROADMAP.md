@@ -15,14 +15,14 @@ Out of scope, deliberately: audio hosting, authentication, contributions, a
 desktop app, and a local SQLite cache. See [ADR-0002](adr/0002-chart-data-only-no-audio-hosting.md)
 and [ADR-0003](adr/0003-web-pwa-drop-tauri.md).
 
-### v1.1 — mobile visualizer polish
+### v1.1 — mobile visualizer polish — shipped 2026-11-17
 
-The visualizer already runs on mobile ([ADR-0016](adr/0016-visualizer-ungated-on-mobile.md)).
-v1.1 fixes its known problems
-([`mobile-webview-spike` issue 02](work/mobile-webview-spike/issues/02-mobile-visualizer-known-problems.md))
-and measures it in a mobile browser and installed PWA
-([issue 01](work/mobile-webview-spike/issues/01-bevy-mobile-webview-spike.md)),
-whose outcome can still reopen [ADR-0003](adr/0003-web-pwa-drop-tauri.md).
+The visualizer runs on mobile ([ADR-0016](adr/0016-visualizer-ungated-on-mobile.md))
+at the panel's refresh rate with guide sounds on the hit
+([ADR-0020](adr/0020-guide-sounds-from-the-clock-with-a-derived-lead.md)).
+The spike that could have reopened [ADR-0003](adr/0003-web-pwa-drop-tauri.md)
+measured "runs well"; the catalog paints from IndexedDB on launch
+([`web-delivery` 02](work/web-delivery/issues/02-client-catalog-freshness.md)).
 
 ### v2.0 — community platform
 
@@ -68,7 +68,7 @@ Unscheduled.
 | └ [community-charts](work/community-charts/spec.md) | planned | v2.0 |
 | [server-contributions](work/server-contributions/spec.md) | superseded | — |
 | [parser-defects](work/parser-defects/spec.md) | shipped | v1.0 |
-| [mobile-webview-spike](work/mobile-webview-spike/) | planned | v1.1 |
+| [mobile-webview-spike](work/mobile-webview-spike/) | shipped | v1.1 |
 | [docs-restructure](work/docs-restructure/spec.md) | shipped | — |
 | [server-sync-tier](work/server-sync-tier/) | shipped | — |
 | [server-catalog-typed-queries](work/server-catalog-typed-queries/) | shipped | — |

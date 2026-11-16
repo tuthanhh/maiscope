@@ -8,8 +8,8 @@ that order.
 **Blocked by:** None. Issue 01's measurements would help rank the list, but do
 not block writing it.
 
-**Status:** in-progress — P1 fixed, P2 faults (a)(b)(c) fixed in code;
-phone re-measurement and the notice decision owed (2026-11-17)
+**Status:** done — 2026-11-17, re-measured on the phone after the fixes;
+no notice needed
 
 ## Problems
 
@@ -24,9 +24,11 @@ phone re-measurement and the notice decision owed (2026-11-17)
 - **Symptom:** notes, slides and touches all render and arrive **on time**,
   but motion is jerky and the guide sounds stutter — "especially the sound".
 - **Severity:** degrades. A chart can be followed; it cannot be enjoyed.
-- **Status:** **fixed** — `Msaa::Off` on the main camera (commit `be0d8a3`),
-  after the measurements below isolated multisampling as the entire cost.
-  Awaiting a redeploy to confirm on the phone without the `?msaa=1` toggle.
+- **Status:** **fixed and confirmed** — `Msaa::Off` on the main camera
+  (commit `be0d8a3`), after the measurements below isolated multisampling as
+  the entire cost. Confirmed on the phone 2026-11-17 with no toggles:
+  90.1 fps (the panel's refresh rate), avg 11.1ms, max 15ms, 0 slow, 0
+  stalled, same 1138×909 @ 2.81× canvas.
 
 **What is known from the code, before measuring.** "On time" rules out the
 chart clock: it advances on Bevy's virtual delta
@@ -125,7 +127,10 @@ investigation — see P2.
 - **Symptom:** reported as "the sound still bad". Not yet characterised —
   late, crackling, missing, or stuttering are four different faults.
 - **Severity:** degrades.
-- **Status:** investigating; see below.
+- **Status:** **fixed and confirmed** — see the three faults below;
+  re-measured 2026-11-17 (*raputa*, note speed 8, Chrome tab): "no note
+  missed during the session, the timing is quite good", on the automatic
+  lead of 341ms.
 
 **What the code says.** kira on wasm plays through cpal's `webaudio` backend
 (`cpal/src/host/webaudio/mod.rs`): two `AudioBuffer`s are alternated, each
@@ -220,8 +225,41 @@ rewind drops the pending releases. Nine scheduler tests.
 
 ## Done when
 
-- [ ] Every problem above is listed with a device, a symptom and a severity
-- [ ] Problems that block playing a chart are fixed or have a written reason to
-      wait
-- [ ] Decided whether an "experimental on mobile" notice is still needed (the
-      reopen condition in ADR-0016)
+- [x] Every problem above is listed with a device, a symptom and a severity
+      (device model still "the maintainer's Android phone"; see the last
+      comment)
+- [x] Problems that block playing a chart are fixed or have a written reason to
+      wait — none blocked; P1 and P2 are fixed and confirmed
+- [x] Decided whether an "experimental on mobile" notice is still needed (the
+      reopen condition in ADR-0016) — not needed
+
+**Re-measured 2026-11-17, Chrome tab on the phone, release build with every
+fix above, no URL toggles** (*raputa* — sasakure.UK × TJ.hangneil — note
+speed 8, play speed 1.0):
+
+```
+90.1 fps  avg 11.1ms  max 15ms
+slow >33ms: 0/91  stalled >100ms: 0
+canvas 1138x909 @ 2.81x  dpr 2.8125  msaa 1
+lead 341ms (auto)  buf 70 + base 87 + out 184 = 341
+wasm mem 30MiB  js heap 20MiB
+```
+
+Maintainer: "it seems that no note have missed during the session. the
+timing is quite good." That answers all three P2 faults and validates the
+derived lead on this phone: a manual sweep was not needed, since the
+automatic value landed on the hit. The breakdown is itself informative —
+`out 184` is Android's output latency and the largest term, `base 87` is
+large for a context buffer (a 4096-frame quantum at 44.1kHz, which Chrome
+picks on some Android devices), and `buf 70` is cpal's two buffers at
+44.1kHz. Output path not stated; the number will move on Bluetooth, and the
+2s re-read is what tracks that.
+
+**Notice decision (the last box): not needed.** A chart can be followed end
+to end on the phone at the panel's refresh rate with guide sounds on the
+hit. ADR-0016's reopen condition — problems that break the visualizer for
+most phone users — is not met; the ADR carries a note.
+
+Still unrecorded: the device model and Chrome version (Samsung One UI by
+the screenshot). Worth adding to the entry when known, not worth holding
+the ticket open for.

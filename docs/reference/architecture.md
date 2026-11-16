@@ -82,6 +82,17 @@ The chart clock has two modes. `load_chart(text)` advances on the wall clock
 Only sprite textures go through Bevy's `AssetServer`, fetched at runtime from
 `/assets/...`. Chart text is pushed in directly through `wasm_bridge`.
 
+Guide sounds and the metronome fire from the chart clock
+(`systems/audio.rs`: `GuideScheduler`, `tick_metronome`), not from sprite
+timers, and run ahead by `AudioLead` — a wall-clock lead the host derives
+from `AudioContext.baseLatency + outputLatency` plus cpal's buffers and
+pushes through `set_audio_lead_ms`
+([ADR-0020](../adr/0020-guide-sounds-from-the-clock-with-a-derived-lead.md)).
+The main camera renders without MSAA (`plugins/camera.rs`); multisampling was
+the whole of the phone's frame cost. The engine also publishes a one-second
+frame-pacing snapshot (`systems/frame_stats.rs`, read by `frame_stats()`),
+which the visualizer's `?debug` overlay shows together with wasm memory.
+
 ## Deployment
 
 | Concern | Choice |
