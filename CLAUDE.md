@@ -17,8 +17,8 @@ Conditionally relevant:
 ## What this is
 
 maiscope: a web app for browsing maimai songs and visualizing charts. Rust/TypeScript
-monorepo — one Cargo workspace (`apps/server`, `engine`, `shared`) plus a
-pnpm-managed frontend under `apps/host`.
+monorepo — one Cargo workspace (`apps/server`, `engine`) plus a pnpm-managed
+frontend under `apps/host`.
 
 The frontend is a port of [zetaraku/arcade-songs](https://github.com/zetaraku/arcade-songs)
 (originally Nuxt 2 + Vuetify 2), rebuilt on native Vue 3 for maimai only.

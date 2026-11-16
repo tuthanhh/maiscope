@@ -9,11 +9,12 @@ this document describes the result.
 apps/host/     Vue 3 + Vite web app — song browser and visualizer page
 apps/server/   Rust/Axum + Postgres — chart catalog and per-sheet chart API
 engine/        Bevy ECS chart renderer, compiled to wasm32-unknown-unknown
-shared/        Scaffolded Rust crate for cross-workspace types — not yet wired in
 ```
 
-One Cargo workspace (`apps/server`, `engine`, `shared`) plus a pnpm-managed
-frontend under `apps/host`.
+One Cargo workspace (`apps/server`, `engine`) plus a pnpm-managed frontend
+under `apps/host`. There is no shared-types crate: the server emits raw fields
+the client reshapes, and a snapshot test guards the wire contract instead
+([ADR-0018](../adr/0018-no-shared-types-crate.md)).
 
 ## Data flow
 

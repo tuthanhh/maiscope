@@ -85,6 +85,11 @@ non-app crates live at the root or under `crates/` — is decided by this ADR fo
 the first time. `crates/simai` is the choice; `shared` stays where it is rather
 than being moved for symmetry.
 
+> **Update 2026-11-16:** `shared/` was deleted
+> ([ADR-0018](0018-no-shared-types-crate.md)). The `crates/simai` layout
+> decision above stands on its own; `simai` will be the first crate under
+> `crates/`.
+
 The public surface of `simai` becomes an interface with two consumers, so the
 `pub mod chart` façade added to `engine/src/lib.rs` for the corpus test is
 replaced by the crate's own root. That façade was a workaround for `systems`
