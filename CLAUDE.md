@@ -37,7 +37,9 @@ cargo run --bin seed_songs         # load chart text, keyed by sheet_expr
 
 `seed_songs` reads `songs/` at the repo root — a gitignored local sample, one
 flat directory per song holding `maidata.txt`. It is absent on a fresh clone.
-Matching is by the maidata `&title=`, so an unmatched title warns and skips.
+Matching resolves each folder to one catalog song *and chart type*: `&title=`
+then the folder name, exact then loosely folded; a ` [DX]`/` [ST]` suffix or
+the `&lv_N=` levels pick the type. Unmatched or ambiguous folders warn and skip.
 
 #### Where infrastructure files live
 
