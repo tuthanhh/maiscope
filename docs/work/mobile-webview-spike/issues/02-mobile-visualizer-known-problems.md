@@ -8,8 +8,8 @@ that order.
 **Blocked by:** None. Issue 01's measurements would help rank the list, but do
 not block writing it.
 
-**Status:** in-progress — one problem reported and instrumented, not yet
-measured (2026-11-16)
+**Status:** in-progress — P1 fixed, P2 faults (a)(b)(c) fixed in code;
+phone re-measurement and the notice decision owed (2026-11-17)
 
 ## Problems
 

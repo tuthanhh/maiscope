@@ -112,3 +112,19 @@ Raised by the review of the `feat/server-restructure` branch, alongside the
 issue-08 defects (`Retry-After: 0`, the missing reaper, the `AppError`
 bypass) and issue-09's counter bug — those were fixed in that pass; these
 two were explicitly deferred here instead.
+
+**A second reason to pick option 2, from `web-delivery` 06 (2026-11-17).**
+Putting the app and the API on one origin proxies `/api/*` through
+Cloudflare to Fly. Behind that, Fly's edge sees Cloudflare as the client and
+sets `Fly-Client-IP` to a Cloudflare address, so every user through the
+same edge shares one bucket and the limiter trips on aggregate traffic. The
+real client is in `CF-Connecting-IP`, which only Cloudflare should be
+allowed to set. So the trust chain is not a constant — it is a deployment
+fact: *behind Fly only* trust `Fly-Client-IP`; *behind Cloudflare then Fly*
+trust `CF-Connecting-IP` first; *bare* trust nothing but the socket. Option
+1 cannot express that; option 3 trusts everything everywhere. Option 2 can,
+if the flag is a list of headers in trust order (`TRUSTED_IP_HEADERS=cf-connecting-ip,fly-client-ip`
+on Fly after 06, `fly-client-ip` before it, empty locally) rather than a
+boolean. Recommendation: option 2 in that form, as its own ticket, scheduled
+with 06 so the custom domain never ships with a shared bucket. Part 2 of
+this ticket (the `governor` pin) is independent and can go with it.
