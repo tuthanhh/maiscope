@@ -126,15 +126,14 @@ impl GuideScheduler {
     }
 }
 
-/// Which notes make a guide sound when they reach the ring. Slides are
-/// silent — their head star arrives like a tap, but the engine has never
-/// sounded it, and keeping that here keeps the clock-driven path identical
-/// to the timer-driven one it replaced.
+/// Which notes make a guide sound when they reach the ring: everything with
+/// a head to tap. A slide's star head is tapped and judged like a tap, so it
+/// sounds (the timer-driven path it replaced never did — an omission the
+/// hexagon pop had been covering for). A `HeadlessSlide` is the second and
+/// later track of a star chain, sharing the head of the first, so it stays
+/// silent: one tap, one sound, however many tracks leave it.
 fn is_audible(kind: &NoteKind) -> bool {
-    !matches!(
-        kind,
-        NoteKind::Slide { .. } | NoteKind::HeadlessSlide { .. }
-    )
+    !matches!(kind, NoteKind::HeadlessSlide { .. })
 }
 /// Shortest comfortable gap between metronome clicks, in **wall** seconds. The
 /// beat interval is doubled (1, 2, 4, 8… beats per click) until it clears this,
@@ -432,11 +431,12 @@ mod tests {
         assert_eq!(hits(&s.advance(&events, 1.0)), 1);
     }
 
-    /// Chords count every audible note; slides contribute nothing, matching
-    /// what the timer-driven path sounded (taps, holds, touches — never a
-    /// slide head or a headless track).
+    /// Chords count every note with a head to tap: taps, holds, touches,
+    /// star taps and slide heads. A headless track (the second and later
+    /// paths of a star chain) shares the first path's head and adds nothing,
+    /// so a chain with three tracks is one tap and one sound.
     #[test]
-    fn chords_count_audible_notes_and_slides_are_silent() {
+    fn chords_count_every_head_and_headless_tracks_are_silent() {
         let slide = NoteKind::Slide {
             head_button: 1,
             segments: Vec::<SlideSegment>::new(),
@@ -474,8 +474,37 @@ mod tests {
         let mut s = GuideScheduler::default();
         assert_eq!(
             s.advance(&events, 0.0),
-            vec![PlayGuideSoundMessage { time: 0.0, hits: 4 }],
-            "one chord, one sound, four hits"
+            vec![PlayGuideSoundMessage { time: 0.0, hits: 5 }],
+            "one chord, one sound: tap, touch, hold, star tap, slide head"
+        );
+
+        // A star chain parses to one Slide plus N HeadlessSlides, all at one
+        // time: exactly one hit, whatever N is.
+        let chain = vec![group(
+            1.0,
+            vec![
+                NoteKind::Slide {
+                    head_button: 1,
+                    segments: Vec::new(),
+                    shared_duration: false,
+                    plain_head: false,
+                },
+                NoteKind::HeadlessSlide {
+                    start_button: 1,
+                    segments: Vec::new(),
+                    shared_duration: false,
+                },
+                NoteKind::HeadlessSlide {
+                    start_button: 1,
+                    segments: Vec::new(),
+                    shared_duration: false,
+                },
+            ],
+        )];
+        let mut s = GuideScheduler::default();
+        assert_eq!(
+            s.advance(&chain, 1.0),
+            vec![PlayGuideSoundMessage { time: 1.0, hits: 1 }]
         );
     }
 
