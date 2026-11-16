@@ -203,8 +203,20 @@ and on which output path.
 **Why the trigger moved to the clock.** With a lead the sound must be asked
 for before the sprite reaches the ring, which the sprite's own timer cannot
 do. A cursor over `timed_events()` is the metronome's existing pattern, fires
-once per hit regardless of frame rate, replays on rewind, and keeps slides
-silent exactly as before (`is_audible`). Five tests cover it.
+once per hit regardless of frame rate, replays on rewind, and keeps the
+headless tracks of a star chain silent (`is_audible`).
+
+**Two sounds the move lost, both restored.** The sprite-timer path fired on
+three transitions — entering `Holding` (hold and touch-hold start, touch),
+and entering `Dying` for everything but touches and slides — and the first
+clock version replayed only the first of them. So (1) a slide's star head,
+which reaches the ring as a tap, went silent, and (2) a hold's **release**,
+which is a `Dying` transition and not an event in the list, went silent too.
+The scheduler now queues each hold's start + duration (`Duration::hold_secs`,
+at the BPM in force where the hold starts) when the hold becomes due and
+fires it when the clock reaches it, in release order rather than start
+order; a release landing on another hit merges into one louder sound; a
+rewind drops the pending releases. Nine scheduler tests.
 
 ## Done when
 

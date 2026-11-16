@@ -82,7 +82,15 @@ impl AudioLead {
 pub struct GuideScheduler {
     next: usize,
     last_horizon: f64,
+    /// Release times (chart seconds) of holds that have started but not yet
+    /// ended. Not in the event list, because a hold's end is not an event:
+    /// it is its start plus its duration, and it can fall after any number
+    /// of later groups.
+    releases: Vec<f64>,
 }
+
+/// Two sounds closer than this are one hit time.
+const SAME_TIME_SECS: f64 = 1e-3;
 
 impl GuideScheduler {
     /// Advance the cursor to `horizon` (chart seconds, already including any
@@ -95,9 +103,15 @@ impl GuideScheduler {
     /// apart can become due in the same frame, and collapsing them into one
     /// sound is what "missing hits" sounds like in a dense stream
     /// (mobile-webview-spike 02, P2 fault c).
+    ///
+    /// A hold sounds twice, at its start and at its release — the behaviour
+    /// of the sprite-timer path this replaced, which fired on entering
+    /// `Holding` and again on entering `Dying`. A release due at the same
+    /// time as another hit joins it as one louder sound.
     pub fn advance(&mut self, events: &[TimedEvent], horizon: f64) -> Vec<PlayGuideSoundMessage> {
-        if horizon < self.last_horizon - 1e-3 {
+        if horizon < self.last_horizon - SAME_TIME_SECS {
             self.next = 0;
+            self.releases.clear();
         }
         self.last_horizon = horizon;
 
@@ -114,16 +128,53 @@ impl GuideScheduler {
                         hits,
                     });
                 }
+                for note in notes {
+                    if let NoteKind::TapHold { duration, .. }
+                    | NoteKind::TouchHold { duration, .. } = &note.kind
+                    {
+                        self.releases
+                            .push(event.time + duration.hold_secs(event.bpm) as f64);
+                    }
+                }
             }
             self.next += 1;
         }
-        due
+
+        // Releases are pushed in start order, which is not release order, so
+        // take every one that has come due rather than stopping at the first.
+        let mut i = 0;
+        while i < self.releases.len() {
+            if self.releases[i] <= horizon {
+                due.push(PlayGuideSoundMessage {
+                    time: self.releases.swap_remove(i),
+                    hits: 1,
+                });
+            } else {
+                i += 1;
+            }
+        }
+
+        coalesce(due)
     }
 
     /// Forget the chart: the next `advance` starts from the first event.
     pub fn reset(&mut self) {
         *self = Self::default();
     }
+}
+
+/// Sort by time and merge entries closer than `SAME_TIME_SECS` into one
+/// sound carrying the summed hit count.
+fn coalesce(mut due: Vec<PlayGuideSoundMessage>) -> Vec<PlayGuideSoundMessage> {
+    due.sort_by(|a, b| a.time.total_cmp(&b.time));
+    let mut merged: Vec<PlayGuideSoundMessage> = Vec::with_capacity(due.len());
+    for sound in due {
+        match merged.last_mut() {
+            Some(last) if sound.time - last.time < SAME_TIME_SECS => last.hits += sound.hits,
+            _ => merged.push(sound),
+        }
+    }
+    merged
 }
 
 /// Which notes make a guide sound when they reach the ring: everything with
@@ -311,7 +362,13 @@ pub fn handle_guide_sounds(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::systems::component::{Note, SlideSegment};
+    use crate::systems::component::{Duration, Note, SlideSegment};
+
+    /// A quarter note at the fixture's 120 BPM: half a second.
+    const QUARTER: Duration = Duration::Simple {
+        divider: 4,
+        count: 1,
+    };
 
     fn group(time: f64, kinds: Vec<NoteKind>) -> TimedEvent {
         TimedEvent {
@@ -510,6 +567,118 @@ mod tests {
 
     /// Loading a new chart resets the cursor even if the clock happens to
     /// read the same value as before.
+    #[test]
+    fn a_hold_sounds_at_its_start_and_at_its_release() {
+        let events = vec![
+            group(
+                1.0,
+                vec![NoteKind::TapHold {
+                    button: 1,
+                    duration: QUARTER,
+                }],
+            ),
+            group(1.25, vec![NoteKind::Tap(2)]),
+            rest(3.0),
+        ];
+        let mut s = GuideScheduler::default();
+        assert_eq!(
+            s.advance(&events, 1.0),
+            vec![PlayGuideSoundMessage { time: 1.0, hits: 1 }]
+        );
+        assert_eq!(
+            s.advance(&events, 1.3),
+            vec![PlayGuideSoundMessage {
+                time: 1.25,
+                hits: 1
+            }],
+            "a tap during the hold is its own sound"
+        );
+        assert_eq!(
+            s.advance(&events, 1.5),
+            vec![PlayGuideSoundMessage { time: 1.5, hits: 1 }],
+            "the release lands start + duration, after a later group"
+        );
+        assert_eq!(hits(&s.advance(&events, 5.0)), 0, "and only once");
+    }
+
+    #[test]
+    fn a_touch_hold_releases_too_and_bpm_overrides_count() {
+        let events = vec![
+            group(
+                0.0,
+                vec![NoteKind::TouchHold {
+                    value: 1,
+                    group: 'C',
+                    duration: Duration::BpmOverride {
+                        bpm: 60.0,
+                        divider: 4,
+                        count: 1,
+                    },
+                }],
+            ),
+            rest(4.0),
+        ];
+        let mut s = GuideScheduler::default();
+        assert_eq!(hits(&s.advance(&events, 0.0)), 1);
+        assert_eq!(
+            hits(&s.advance(&events, 0.9)),
+            0,
+            "at 60 BPM a quarter is a full second"
+        );
+        assert_eq!(
+            s.advance(&events, 1.0),
+            vec![PlayGuideSoundMessage { time: 1.0, hits: 1 }]
+        );
+    }
+
+    #[test]
+    fn a_release_on_another_hit_is_one_louder_sound() {
+        let events = vec![
+            group(
+                0.5,
+                vec![NoteKind::TapHold {
+                    button: 1,
+                    duration: QUARTER,
+                }],
+            ),
+            group(1.0, vec![NoteKind::Tap(5), NoteKind::Tap(6)]),
+            rest(2.0),
+        ];
+        let mut s = GuideScheduler::default();
+        assert_eq!(hits(&s.advance(&events, 0.5)), 1);
+        assert_eq!(
+            s.advance(&events, 1.0),
+            vec![PlayGuideSoundMessage { time: 1.0, hits: 3 }]
+        );
+    }
+
+    #[test]
+    fn rewind_drops_pending_releases() {
+        let events = vec![
+            group(
+                0.5,
+                vec![NoteKind::TapHold {
+                    button: 1,
+                    duration: QUARTER,
+                }],
+            ),
+            rest(2.0),
+        ];
+        let mut s = GuideScheduler::default();
+        assert_eq!(hits(&s.advance(&events, 0.6)), 1);
+        assert_eq!(
+            hits(&s.advance(&events, 0.0)),
+            0,
+            "restart: nothing is due at 0"
+        );
+        assert_eq!(hits(&s.advance(&events, 0.6)), 1, "the start sounds again");
+        assert_eq!(
+            s.advance(&events, 1.0),
+            vec![PlayGuideSoundMessage { time: 1.0, hits: 1 }],
+            "one release, not the stale one from before the rewind as well"
+        );
+    }
+
     #[test]
     fn reset_forgets_the_cursor() {
         let events = vec![group(0.0, vec![NoteKind::Tap(1)])];

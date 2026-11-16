@@ -23,27 +23,13 @@ use super::{
 
 // ── Small shared helpers ─────────────────────────────────────────────────────
 
-pub(super) fn duration_to_secs(duration: Duration, bpm: f32) -> f32 {
-    match duration {
-        Duration::Simple { divider, count } => count as f32 / divider as f32 * (240.0 / bpm),
-        Duration::BpmOverride {
-            bpm,
-            divider,
-            count,
-        } => count as f32 / divider as f32 * (240.0 / bpm),
-        Duration::BpmOverrideSeconds { seconds, .. } => seconds,
-        Duration::Seconds(seconds) => seconds,
-        _ => 0.0,
-    }
-}
-
 /// True hold-bar length: how far the note travels during the hold,
 /// `velocity_wall · hold_wall`. With `move_duration = MOVING/(chart·note)` the
 /// wall velocity is `travel_dist·chart·note/MOVING` and the wall hold time is
 /// `dur_secs/chart` — the `chart_speed` cancels, leaving a function of
 /// `note_speed` only.
 fn hold_max_tail(travel_dist: f32, note_speed: f32, duration: Duration, bpm: f32) -> f32 {
-    travel_dist * note_speed / MOVING as f32 * duration_to_secs(duration, bpm)
+    travel_dist * note_speed / MOVING as f32 * duration.hold_secs(bpm)
 }
 
 pub(super) fn set_alpha(sprite: &mut Sprite, a: f32) {

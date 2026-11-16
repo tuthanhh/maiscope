@@ -132,6 +132,25 @@ pub enum Duration {
     },
 }
 
+impl Duration {
+    /// How long a hold lasts, in chart seconds, at the BPM in force where it
+    /// starts. Variants that restate a BPM use their own; the slide-only
+    /// wait-and-trace variants are not holds and read as zero.
+    pub fn hold_secs(self, bpm: f32) -> f32 {
+        match self {
+            Duration::Simple { divider, count } => count as f32 / divider as f32 * (240.0 / bpm),
+            Duration::BpmOverride {
+                bpm,
+                divider,
+                count,
+            } => count as f32 / divider as f32 * (240.0 / bpm),
+            Duration::BpmOverrideSeconds { seconds, .. } => seconds,
+            Duration::Seconds(seconds) => seconds,
+            _ => 0.0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SlideShape {
     Straight {

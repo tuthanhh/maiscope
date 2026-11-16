@@ -277,7 +277,7 @@ pub fn update_movement(
                         | NoteKind::TouchHold { duration, .. } => {
                             if let Some(NoteBpm(bpm)) = note_bpm {
                                 *timing = NoteTiming::Holding(Timer::from_seconds(
-                                    duration_to_secs(*duration, *bpm) / chart_speed,
+                                    duration.hold_secs(*bpm) / chart_speed,
                                     TimerMode::Once,
                                 ));
                             }
