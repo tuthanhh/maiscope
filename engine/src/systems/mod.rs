@@ -6,6 +6,7 @@ use crate::systems::chart_playback::ChartPlayback;
 mod audio;
 mod chart_playback;
 pub(crate) mod component;
+mod frame_stats;
 pub mod parser;
 mod visual;
 
@@ -113,6 +114,9 @@ pub fn register_systems(app: &mut App) {
     app.init_resource::<visual::resources::ButtonLayout>()
         .init_resource::<visual::resources::NoteAssets>()
         .init_resource::<chart_playback::ChartPlayback>()
+        .init_resource::<frame_stats::FrameStats>()
+        // Every state, every frame: a stall while loading is still a stall.
+        .add_systems(Update, frame_stats::sample_frame)
         .insert_resource(audio::Metronome {
             enabled: true,
             ..Default::default()

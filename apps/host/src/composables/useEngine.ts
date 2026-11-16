@@ -150,6 +150,31 @@ export async function setSpeed(rate: number): Promise<void> {
   (await ensureEngine()).set_song_speed(rate);
 }
 
+// ── Diagnostics ──────────────────────────────────────────────────────────────
+
+/** One second of engine frame pacing. See engine/src/systems/frame_stats.rs. */
+export type FrameStats = {
+  fps: number;
+  avg_ms: number;
+  max_ms: number;
+  frames: number;
+  /** Frames over 33ms — visibly late at 30 FPS. */
+  slow_frames: number;
+  /** Frames over 100ms — long enough to starve the web-audio buffer. */
+  stalled_frames: number;
+  /** Physical canvas size, i.e. CSS size × devicePixelRatio. */
+  canvas: string;
+  scale_factor: number;
+};
+
+// Read the engine's latest snapshot. `null` until the first second has
+// elapsed. Polling, not an event: the engine publishes into a mailbox that JS
+// reads, so the boundary stays one-directional per call (never JS←Bevy calls).
+export async function frameStats(): Promise<FrameStats | null> {
+  const raw = (await ensureEngine()).frame_stats();
+  return raw ? (JSON.parse(raw) as FrameStats) : null;
+}
+
 // Note (scroll) speed — how fast notes travel, independent of playback rate.
 // `7.0` is the engine's default (engine/src/wasm_bridge.rs:set_note_speed).
 export async function setNoteSpeed(speed: number): Promise<void> {

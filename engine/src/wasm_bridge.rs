@@ -92,3 +92,25 @@ pub fn set_note_speed(rate: f32) {
 pub fn take_commands() -> Vec<EngineCommand> {
     std::mem::take(&mut *COMMANDS.lock().unwrap())
 }
+
+// ── Diagnostics outbox ───────────────────────────────────────────────────────
+//
+// The one message that flows the other way. `systems::frame_stats` writes a
+// JSON snapshot here once a second; JS polls it. Still a lock-guarded mailbox —
+// Bevy is never called into — just read instead of drained.
+
+static FRAME_STATS: Lazy<Mutex<String>> = Lazy::new(|| Mutex::new(String::new()));
+
+pub fn publish_frame_stats(json: String) {
+    *FRAME_STATS.lock().unwrap() = json;
+}
+
+/// The latest frame-pacing snapshot as JSON, or `""` before the first second
+/// has elapsed. Fields: `fps`, `avg_ms`, `max_ms`, `frames`, `slow_frames`
+/// (>33ms), `stalled_frames` (>100ms), `canvas` (physical pixels),
+/// `scale_factor`.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn frame_stats() -> String {
+    FRAME_STATS.lock().unwrap().clone()
+}

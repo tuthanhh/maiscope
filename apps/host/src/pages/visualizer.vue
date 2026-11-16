@@ -12,11 +12,13 @@ import {
     loadChart,
     fetchChart,
     fetchSheetInfo,
+    frameStats,
     pause,
     resume,
     restart,
     setSpeed,
     setNoteSpeed,
+    type FrameStats,
 } from "~/composables/useEngine";
 import { resumeAudio } from "~/utils/audioUnlock";
 import { GAME } from "~/app/game";
@@ -144,6 +146,7 @@ onMounted(async () => {
         if (stage.value) mountEngineCanvas(stage.value);
         await ensureEngine();
         status.value = "ready";
+        startDebugPolling();
         // Replay any already-loaded chart from the start on each open. A deep-link
         // (maybeAutoLoad) reloads its own chart and supersedes this.
         if (hasChart() && !hasDeepLink()) {
@@ -163,6 +166,40 @@ onMounted(async () => {
 onUnmounted(() => {
     if (loaded.value) pause();
     detachEngineCanvas();
+    stopDebugPolling();
+});
+
+// ── Frame-pacing readout ─────────────────────────────────────────────────────
+// Opened with `?debug` (any value), the page overlays the engine's one-second
+// frame snapshot on the canvas. This is how a phone reports numbers: no
+// devtools, no console, just read the corner. See mobile-webview-spike 02.
+const debug = computed(() => route.query.debug !== undefined);
+const stats = ref<FrameStats | null>(null);
+let debugTimer: ReturnType<typeof setInterval> | null = null;
+
+function startDebugPolling(): void {
+    if (!debug.value || debugTimer !== null) return;
+    debugTimer = setInterval(async () => {
+        try {
+            stats.value = await frameStats();
+        } catch {
+            stats.value = null;
+        }
+    }, 1000);
+}
+function stopDebugPolling(): void {
+    if (debugTimer !== null) clearInterval(debugTimer);
+    debugTimer = null;
+}
+
+const statsLines = computed(() => {
+    const s = stats.value;
+    if (!s) return ["waiting for first second…"];
+    return [
+        `${s.fps.toFixed(1)} fps  avg ${s.avg_ms.toFixed(1)}ms  max ${s.max_ms.toFixed(0)}ms`,
+        `slow >33ms: ${s.slow_frames}/${s.frames}  stalled >100ms: ${s.stalled_frames}`,
+        `canvas ${s.canvas} @ ${s.scale_factor.toFixed(2)}x  dpr ${window.devicePixelRatio}`,
+    ];
 });
 
 // Last deep-linked sheet, so re-activating with the same query doesn't reload.
@@ -279,6 +316,8 @@ usePageTitle(() => ({ title: t("page-title.visualizer") as string }));
                     }}</span>
                     <span v-else class="mv-canvas-err">{{ errorMsg }}</span>
                 </div>
+                <!-- ?debug — engine frame pacing, one line per second -->
+                <pre v-if="debug" class="mv-canvas-stats">{{ statsLines.join("\n") }}</pre>
             </div>
 
             <!-- transport: drives the engine clock (disabled until a song is loaded) -->
@@ -592,6 +631,20 @@ usePageTitle(() => ({ title: t("page-title.visualizer") as string }));
 .mv-canvas-err {
     color: #e66;
     font-family: var(--mv-mono);
+}
+/* ?debug readout: top-left of the canvas, readable on a phone at arm's length. */
+.mv-canvas-stats {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    margin: 0;
+    padding: 6px 8px;
+    font: 12px/1.4 var(--mv-mono);
+    color: #fff;
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 4px;
+    pointer-events: none;
+    white-space: pre;
 }
 
 .mv-transport {
