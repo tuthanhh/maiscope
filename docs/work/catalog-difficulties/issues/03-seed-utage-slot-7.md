@@ -36,3 +36,18 @@ representation means re-keying real chart text. 01 settles it first.
 
 > Do not make matching looser to raise the hit rate. A missed chart is a chart
 > nobody can view; a mismatched chart is the wrong chart rendered as if correct.
+
+## Comments
+
+**The seeder now names these folders instead of failing on them
+(2026-11-17, `prod-data-and-infra` 04).** A folder with `&lv_7=` or
+`&inote_7=` is counted in the run summary as `N UTAGE folders not seedable
+yet` and skipped before title matching, so the 164 local ones no longer sit
+inside "unmatched titles". The resolver's catalog index deliberately loads no
+`type = 'utage'` sheet; this ticket extends it. Facts gathered for that:
+catalog UTAGE sheets carry `difficulty = '【X】'` (the kanji tag in full-width
+brackets, 50 distinct tags) and the song title is the tag plus the title with
+no space (`[X]人マニア`), while the sample folder is `[X] 人マニア` and its
+`&title=` is `[宴] 人マニア [14?]`. So the mapping is: folder name with the
+space after the first `]` removed → title; `&lv_7=X` → `【X】`; slot 7 →
+that sheet. Buddy charts (`[宴/バディ/1P]`) have their own folders per side.

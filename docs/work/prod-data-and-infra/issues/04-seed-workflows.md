@@ -52,11 +52,13 @@ chart-text repo is therefore an ordinary git repo: no LFS, no object storage.
       workflow already runs as the intended role without a fourth secret.
       Superseded; see `runbook.md`.
 
-**It will fail until the title matching is fixed.** The acceptance criterion below
-— fail on anything unmatched, i.e. do not pass `--allow-unmatched` — is currently
-unmeetable: 266 titles and 9 difficulties do not match. See ticket 03's assessment.
-The workflow exposes `allow_unmatched` as an explicit, warned-about dispatch input
-so the failure is a deliberate override rather than a silent default.
+**It failed until the title matching was fixed (2026-11-17, below).** The
+acceptance criterion — fail on anything unmatched, i.e. do not pass
+`--allow-unmatched` — was unmeetable while 266 titles and 9 difficulties did
+not match. The workflow exposes `allow_unmatched` as an explicit, warned-about
+dispatch input so the failure is a deliberate override rather than a silent
+default. After the fix, 11 titles remain, every one a song the catalog does
+not hold; see the comment for the choice that leaves.
 
 **Still true (verified 2026-09-16 against the last real run, `34815437919`,
 2026-09-14):** `seeded 0 sheets (6559 already up to date), 9 unmatched
@@ -101,3 +103,50 @@ mismatched titles is unscoped work, not part of this ticket.
       everything under already-up-to-date, so a `0` here is normal, not a
       failure signal.
 - [x] Neither workflow can be triggered by a push or a merge
+
+**Matching fixed, and a worse bug found under it (2026-11-17).** The 266
+unmatched titles were classified against the dev catalog
+(`seed_songs --allow-unmatched` over the local 1927-folder sample):
+
+| Class | Folders | Now |
+|---|---|---|
+| ` [DX]` / ` [ST]` suffix on the title, base title in the catalog | 81 | matched; suffix names the chart type |
+| `[宴…]` UTAGE folders (`&lv_7=`, charts in slot 7) | 164 | counted and skipped, not failed — `catalog-difficulties` 03 |
+| `&title=` cut at `&` in the sample (`LOVE` for *LOVE & JOY*), folder name intact | 5 | matched via the folder name |
+| full-width `～（！＃＆` or case or whitespace differs from upstream | 9 | matched via a loose fold (NFKC, case, whitespace) |
+| song not in the catalog (removed, or another region: 回马枪, 飞行志…) | 11 | unmatched, correctly |
+
+The 9 "unmatched difficulties" were the same 3 songs seen through the wrong
+chart type (Ievan Polkka's folder is its DX set; the catalog's standard set
+has fewer difficulties), and are 0 now.
+
+**The worse bug.** `seed_songs` keyed catalog sheets by *(song, difficulty)*
+with no chart type. 81 catalog songs have a standard and a DX set with the
+same difficulty names, so for those the map kept whichever sheet Postgres
+returned last, and the folder's charts — the standard ones, since the
+` [DX]` folders were the unmatched ones — were written to it. In dev, the DX
+master of *39* held the standard master chart. Production ran the same code
+once, so the same is true there for some subset of those 81 songs: a reader
+opening a DX sheet sees the standard chart. Fixed: a folder now resolves to
+one *(song, type)* — the suffix decides when present, otherwise the
+maidata's `&lv_N=` levels are scored against each type's sheet levels and
+only a unique best match seeds; a tie is reported as ambiguous and seeds
+nothing (ADR-0012's reject-don't-guess, applied to data). Thirteen unit
+tests on the resolver. On dev the re-run rewrote **384 sheets** — the 81
+songs' DX sets getting their real charts, plus everything the suffix and
+fold matching recovered. Expect the same order of magnitude on the next
+production dispatch; the pre-mutation `pg_dump` the workflow takes covers
+the rollback.
+
+**Decision left for the maintainer — the last 11.** They are not matching
+failures, so no code change recovers them. Two ways to make the criterion
+hold without the override:
+
+- **A. Drop the 11 folders from the chart-data repo** (recommended: the
+  catalog is upstream's, and a chart for a song it does not list has no
+  sheet to attach to). The workflow then exits 0 without `--allow-unmatched`.
+- **B. Keep the override**, and treat the summary's `unmatched titles` count
+  as the thing to watch: 11 is the known floor, anything above it is a
+  regression.
+
+Until A is done, dispatch with `allow_unmatched` as before.

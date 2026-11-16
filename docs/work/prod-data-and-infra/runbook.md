@@ -28,7 +28,7 @@ Postgres 17 on 2026-09-13 — timings from that run.
 ```sh
 cargo run --release --bin migrate        # 5 migrations      ~3s
 cargo run --release --bin sync_catalog   # 1845 songs        ~7s
-cargo run --release --bin seed_songs     # 6571 charts      ~16s
+cargo run --release --bin seed_songs     # ~6.9k charts     ~16s
 ```
 
 Result: 1845 songs, 7348 sheets, 6571 charts, `catalog_meta.revision` advanced.
