@@ -42,3 +42,38 @@ export function resumeAudio(): void {
     if (c.state === "suspended") c.resume().catch(() => {});
   });
 }
+
+/** What the browser reports about the path from the engine's mixer to the ear. */
+export type AudioLatency = {
+  /** `AudioContext.baseLatency`: the context's own processing buffer, ms. */
+  baseMs: number;
+  /**
+   * `AudioContext.outputLatency`: from the context's output to the device,
+   * ms. Chrome reports it (and it jumps when Bluetooth connects); Safari and
+   * Firefox leave it undefined, read here as 0.
+   */
+  outputMs: number;
+  /** The context's sample rate, which sets how long cpal's buffers last. */
+  sampleRate: number;
+  /** Whether the context is actually running — latencies read 0 until it is. */
+  running: boolean;
+};
+
+// The engine's context is the one kira made through the wrapper above. Pick
+// the running one if any; the engine creates exactly one, so this is it.
+export function audioLatency(): AudioLatency | null {
+  let picked: AudioContext | null = null;
+  contexts.forEach((c) => {
+    if (!picked || (picked.state !== "running" && c.state === "running")) {
+      picked = c;
+    }
+  });
+  if (!picked) return null;
+  const ctx = picked as AudioContext & { outputLatency?: number };
+  return {
+    baseMs: (ctx.baseLatency ?? 0) * 1000,
+    outputMs: (ctx.outputLatency ?? 0) * 1000,
+    sampleRate: ctx.sampleRate,
+    running: ctx.state === "running",
+  };
+}

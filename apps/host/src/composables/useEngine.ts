@@ -191,9 +191,63 @@ export async function setRenderScale(scale: number): Promise<void> {
   (await ensureEngine()).set_render_scale(scale);
 }
 // ms: guide sounds and metronome clicks are requested this far ahead of the
-// visual hit, to cancel audio output latency. 0 = desktop behaviour.
+// visual hit, to cancel audio output latency.
 export async function setAudioLeadMs(ms: number): Promise<void> {
   (await ensureEngine()).set_audio_lead_ms(ms);
+}
+
+// ── Automatic audio lead ─────────────────────────────────────────────────────
+//
+// The delay between "engine asks for a sound" and "ear hears it" on the web is
+// three parts, and the browser can report two of them:
+//
+//   cpal's webaudio backend  — two AudioBuffers of 2048 frames, refilled from
+//                              the main thread; a sound requested now starts
+//                              at the earliest after the buffer in flight and
+//                              at the latest after both. Not observable from
+//                              JS, so the midpoint is assumed.
+//   AudioContext.baseLatency — the context's own processing buffer.
+//   AudioContext.outputLatency — context output to the hardware. The big one on
+//                              Android, and it changes when Bluetooth connects.
+//
+// The sum is what the engine should run ahead by (mobile-webview-spike 02,
+// P2 fault a). Desktop reports a few ms for the context parts, so the lead
+// there is mostly the buffer term — which was always being paid, just unseen.
+
+/** Frames per cpal webaudio buffer. cpal 0.15 `DEFAULT_BUFFER_SIZE`. */
+const CPAL_WEB_BUFFER_FRAMES = 2048;
+/** How many of the two buffers a request waits through, on average. */
+const CPAL_WEB_BUFFERS_IN_FLIGHT = 1.5;
+
+export type AutoLead = {
+  leadMs: number;
+  bufferMs: number;
+  baseMs: number;
+  outputMs: number;
+  running: boolean;
+};
+
+/** The lead the browser's own numbers imply, or null before any context exists. */
+export function computeAutoLead(
+  latency: {
+    baseMs: number;
+    outputMs: number;
+    sampleRate: number;
+    running: boolean;
+  } | null,
+): AutoLead | null {
+  if (!latency) return null;
+  const bufferMs =
+    (CPAL_WEB_BUFFER_FRAMES / latency.sampleRate) *
+    1000 *
+    CPAL_WEB_BUFFERS_IN_FLIGHT;
+  return {
+    leadMs: Math.round(bufferMs + latency.baseMs + latency.outputMs),
+    bufferMs: Math.round(bufferMs),
+    baseMs: Math.round(latency.baseMs),
+    outputMs: Math.round(latency.outputMs),
+    running: latency.running,
+  };
 }
 
 // Note (scroll) speed — how fast notes travel, independent of playback rate.

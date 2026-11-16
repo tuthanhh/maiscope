@@ -21,9 +21,11 @@ import {
     setMsaa,
     setRenderScale,
     setAudioLeadMs,
+    computeAutoLead,
     type FrameStats,
+    type AutoLead,
 } from "~/composables/useEngine";
-import { resumeAudio } from "~/utils/audioUnlock";
+import { resumeAudio, audioLatency } from "~/utils/audioUnlock";
 import { GAME } from "~/app/game";
 import type { Sheet } from "~/types";
 import MvIcon from "~/components/ui/MvIcon.vue";
@@ -151,6 +153,7 @@ onMounted(async () => {
         status.value = "ready";
         startDebugPolling();
         applyRenderToggles();
+        startAutoLead();
         // Replay any already-loaded chart from the start on each open. A deep-link
         // (maybeAutoLoad) reloads its own chart and supersedes this.
         if (hasChart() && !hasDeepLink()) {
@@ -171,7 +174,40 @@ onUnmounted(() => {
     if (loaded.value) pause();
     detachEngineCanvas();
     stopDebugPolling();
+    stopAutoLead();
 });
+
+// ── Automatic audio lead ─────────────────────────────────────────────────────
+// Re-derived every two seconds while the page is open, not once: the context
+// reports 0 until a gesture starts it, and `outputLatency` changes when a
+// Bluetooth device connects. Only pushed to the engine when the number moves.
+// `?lead=<ms>` in the URL overrides it for A/B against the ear.
+const autoLead = ref<AutoLead | null>(null);
+const manualLead = computed(() => {
+    const v = Number(route.query.lead);
+    return route.query.lead !== undefined && Number.isFinite(v) && v >= 0 ? v : null;
+});
+let autoLeadTimer: ReturnType<typeof setInterval> | null = null;
+let appliedLeadMs = -1;
+
+function refreshAutoLead(): void {
+    autoLead.value = computeAutoLead(audioLatency());
+    if (manualLead.value !== null) return;
+    const next = autoLead.value?.leadMs ?? 0;
+    if (next !== appliedLeadMs) {
+        appliedLeadMs = next;
+        setAudioLeadMs(next);
+    }
+}
+function startAutoLead(): void {
+    if (autoLeadTimer !== null) return;
+    refreshAutoLead();
+    autoLeadTimer = setInterval(refreshAutoLead, 2000);
+}
+function stopAutoLead(): void {
+    if (autoLeadTimer !== null) clearInterval(autoLeadTimer);
+    autoLeadTimer = null;
+}
 
 // ── Frame-pacing readout ─────────────────────────────────────────────────────
 // With the debug flag on, the page overlays the engine's one-second frame
@@ -229,14 +265,22 @@ const statsLines = computed(() => {
         `${s.fps.toFixed(1)} fps  avg ${s.avg_ms.toFixed(1)}ms  max ${s.max_ms.toFixed(0)}ms`,
         `slow >33ms: ${s.slow_frames}/${s.frames}  stalled >100ms: ${s.stalled_frames}`,
         `canvas ${s.canvas} @ ${s.scale_factor.toFixed(2)}x  dpr ${window.devicePixelRatio}  msaa ${s.msaa}`,
-        `audio lead ${s.audio_lead_ms}ms`,
+        leadLine(s.audio_lead_ms),
     ];
 });
+function leadLine(appliedMs: number): string {
+    const a = autoLead.value;
+    const parts = a
+        ? `buf ${a.bufferMs} + base ${a.baseMs} + out ${a.outputMs} = ${a.leadMs}${a.running ? "" : " (ctx not running)"}`
+        : "no AudioContext yet";
+    const mode = manualLead.value !== null ? `manual ${manualLead.value}` : "auto";
+    return `lead ${appliedMs}ms (${mode})  ${parts}`;
+}
 
 // A/B toggles, query-only and applied once the engine is up:
 //   ?msaa=4   MSAA back on (the engine now defaults to off)
 //   ?scale=1  render at CSS pixels, ignoring dpr   ?scale=0 back to dpr
-//   ?lead=120 request guide sounds 120ms before the visual hit
+//   ?lead=120 fixed audio lead, overriding the automatic one
 // Not sticky on purpose: an experiment should not outlive its URL. The overlay
 // shows the values the engine actually applied.
 function applyRenderToggles(): void {
@@ -246,10 +290,7 @@ function applyRenderToggles(): void {
     if (Number.isFinite(scale) && scale >= 0 && route.query.scale !== undefined) {
         setRenderScale(scale);
     }
-    const lead = Number(route.query.lead);
-    if (Number.isFinite(lead) && lead >= 0 && route.query.lead !== undefined) {
-        setAudioLeadMs(lead);
-    }
+    if (manualLead.value !== null) setAudioLeadMs(manualLead.value);
 }
 
 // Last deep-linked sheet, so re-activating with the same query doesn't reload.
