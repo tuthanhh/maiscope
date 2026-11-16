@@ -67,9 +67,13 @@ pub enum NoteKind {
         duration: Duration,
     },
 
-    /// A star head with NO path. Acts like a Tap, but is visually a star.
-    #[allow(dead_code)]
-    SlideStar(ButtonId),
+    /// A star head with NO path. Acts like a Tap, but is visually a star:
+    /// the UTAGE `1$,` notation. `rotates` is `$$` — the parser records it,
+    /// but `systems/visual/` draws both the same (no spin yet).
+    SlideStar {
+        button: ButtonId,
+        rotates: bool,
+    },
 
     /// A slide path with NO star head. (e.g., a path you just trace without an initial tap).
     HeadlessSlide {
@@ -84,6 +88,10 @@ pub enum NoteKind {
         head_button: ButtonId,
         segments: Vec<SlideSegment>,
         shared_duration: bool,
+        /// The UTAGE `@` modifier — `1@-5[8:1],` — reverts the head from the
+        /// automatic star shape to a normal-looking TAP. The track still plays
+        /// out as a slide; only the head sprite differs.
+        plain_head: bool,
     },
 }
 

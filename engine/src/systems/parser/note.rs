@@ -19,13 +19,18 @@ static SLIDE_PATTERN_RE: LazyLock<Regex> =
 // allows `4h[#5.678]` and `4h[150#2:1]` as well as `5h[2:1]`. Matching the
 // bracket loosely here and validating it there keeps one parser for durations
 // instead of two that can drift apart.
+//
+// `$` and `@` are the UTAGE star-shape modifiers (`1$,` forces a star-shaped
+// TAP, `1$$,` a rotating one, `@` reverts a star to a normal TAP). The class
+// admits them anywhere a modifier may sit; `parse_tap_or_touch_note` decides
+// which combinations mean something.
 static TAP_TOUCH_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r"(?x)
             ^([A-Ea-e][1-8]|[1-8]|[1-8][1-8]|[CEce])  # Button or touch location (zones case-insensitive)
-            ([xhfb]*)                            # Modifiers
+            ([xhfb$@]*)                          # Modifiers
             (\[[^\[\]]*\])?                      # Optional hold duration, validated separately
-            ([xhfb]*)                            # Optional modifiers after duration
+            ([xhfb$@]*)                          # Optional modifiers after duration
             $
         ",
     )
@@ -71,11 +76,41 @@ fn parse_tap_or_touch_note(note_str: &str) -> Result<Vec<Note>, String> {
         None => None,
     };
 
-    let (is_break, is_ex, is_firework, is_hold) =
-        parse_note_modifiers(&modifiers, &modifiers_after);
+    let Modifiers {
+        is_break,
+        is_ex,
+        is_firework,
+        is_hold,
+        stars,
+        plain,
+    } = parse_note_modifiers(&modifiers, &modifiers_after);
+
+    // `$` forces the star shape; `@` reverts it. Saying both on one note is a
+    // contradiction, and three stars names nothing — rejected rather than
+    // guessed at, on the same grounds as ADR-0012's duplicate markers.
+    if stars > 2 {
+        return Err(format!(
+            "'$' may appear once (star TAP) or twice (rotating star TAP), not {} times, in '{}'",
+            stars, note_str
+        ));
+    }
+    if stars > 0 && plain {
+        return Err(format!(
+            "'$' (star-shaped TAP) and '@' (normal TAP) contradict each other in '{}'",
+            note_str
+        ));
+    }
 
     // Two-digit shorthand EACH notation (e.g. "12" = buttons 1 and 2 simultaneously)
     if raw_loc.len() == 2 && raw_loc.chars().all(|c| c.is_ascii_digit()) {
+        if stars > 0 {
+            return Err(format!(
+                "'$' is not defined on the two-digit EACH shorthand '{}'; write '{}$/{}$'",
+                note_str,
+                &raw_loc[0..1],
+                &raw_loc[1..2]
+            ));
+        }
         let chars: Vec<char> = raw_loc.chars().collect();
         let btn1 = chars[0].to_digit(10).unwrap_or(0) as usize;
         let btn2 = chars[1].to_digit(10).unwrap_or(0) as usize;
@@ -89,6 +124,27 @@ fn parse_tap_or_touch_note(note_str: &str) -> Result<Vec<Note>, String> {
     }
 
     if let Ok(btn_num) = raw_loc.parse::<usize>() {
+        if stars > 0 {
+            // The notation defines `$` on a TAP only: "turns it into the
+            // star-shaped TAP that normally only appears when a SLIDE is
+            // placed". A star-shaped HOLD is not a thing.
+            if is_hold {
+                return Err(format!(
+                    "'$' applies to a TAP, not a HOLD, in '{}'",
+                    note_str
+                ));
+            }
+            return Ok(vec![Note {
+                is_break,
+                is_firework,
+                is_ex,
+                offset_ms: 0,
+                kind: NoteKind::SlideStar {
+                    button: btn_num,
+                    rotates: stars == 2,
+                },
+            }]);
+        }
         return Ok(build_button_note(
             btn_num,
             is_hold,
@@ -96,6 +152,14 @@ fn parse_tap_or_touch_note(note_str: &str) -> Result<Vec<Note>, String> {
             is_break,
             is_firework,
             is_ex,
+        ));
+    }
+
+    // A TOUCH has no star shape to force.
+    if stars > 0 {
+        return Err(format!(
+            "'$' applies to a TAP, not a TOUCH, in '{}'",
+            note_str
         ));
     }
 
@@ -113,13 +177,31 @@ fn parse_tap_or_touch_note(note_str: &str) -> Result<Vec<Note>, String> {
     ))
 }
 
-// Returns (is_break, is_ex, is_firework, is_hold) from the two modifier strings.
-fn parse_note_modifiers(modifiers: &str, modifiers_after: &str) -> (bool, bool, bool, bool) {
-    let is_break = modifiers.contains('b') || modifiers_after.contains('b');
-    let is_ex = modifiers.contains('x') || modifiers_after.contains('x');
-    let is_firework = modifiers.contains('f') || modifiers_after.contains('f');
-    let is_hold = modifiers.contains('h') || modifiers_after.contains('h');
-    (is_break, is_ex, is_firework, is_hold)
+/// Everything the two modifier slots said, before any of it is validated.
+struct Modifiers {
+    is_break: bool,
+    is_ex: bool,
+    is_firework: bool,
+    is_hold: bool,
+    /// How many `$` were written: 1 is a star-shaped TAP, 2 a rotating one.
+    /// Counted rather than flagged so `$$$` can be rejected instead of
+    /// collapsing into `$$`.
+    stars: usize,
+    /// `@` was written. On a slide head it reverts the star to a normal TAP;
+    /// on a note that was never a star it is a no-op, and accepted as one.
+    plain: bool,
+}
+
+fn parse_note_modifiers(modifiers: &str, modifiers_after: &str) -> Modifiers {
+    let all = format!("{modifiers}{modifiers_after}");
+    Modifiers {
+        is_break: all.contains('b'),
+        is_ex: all.contains('x'),
+        is_firework: all.contains('f'),
+        is_hold: all.contains('h'),
+        stars: all.matches('$').count(),
+        plain: all.contains('@'),
+    }
 }
 
 fn build_two_digit_tap_notes(
@@ -532,18 +614,71 @@ mod tests {
         parse_err("1`2");
     }
 
-    /// BUG: the UTAGE star/normal-TAP modifiers are unsupported.
+    // --- UTAGE star modifiers -----------------------------------------------
+
+    /// `1$,` is the star-shaped TAP that normally only appears as a slide head,
+    /// and `1$$,` is the same star rotating. Per the notation doc's "Change
+    /// Normal TAP to Star-shaped TAP".
     ///
-    /// `1$,` forces a star-shaped TAP and `1$$,` makes it rotate. Neither `$`
-    /// nor `@` appears in `TAP_TOUCH_RE`'s modifier class, so both fail.
-    ///
-    /// `@`, `?` and `!` *do* parse on a slide — `SLIDE_RE` admits them and then
-    /// ignores them — so the gap is inconsistent rather than uniform. Lowest
-    /// priority of the three: UTAGE charts are out of scope for v1.
+    /// The count is what distinguishes them, so it is asserted on both: a
+    /// `contains('$')` check would silently flatten `$$` into `$`.
     #[test]
-    fn utage_star_tap_modifiers_are_unsupported() {
-        parse_err("1$");
-        parse_err("1$$");
-        parse_err("1@");
+    fn dollar_makes_a_star_tap_and_two_make_it_rotate() {
+        assert_eq!(
+            parse_one("1$"),
+            plain(NoteKind::SlideStar {
+                button: 1,
+                rotates: false,
+            })
+        );
+        assert_eq!(
+            parse_one("1$$"),
+            plain(NoteKind::SlideStar {
+                button: 1,
+                rotates: true,
+            })
+        );
+    }
+
+    /// "This can be combined with BREAK or EX-TAP; when `$`, `b`, and `x` all
+    /// appear together, order doesn't matter."
+    #[test]
+    fn star_tap_combines_with_break_and_ex_in_any_order() {
+        let star = parse_one("1$bx");
+        assert!(star.is_break && star.is_ex);
+        assert_eq!(
+            star.kind,
+            NoteKind::SlideStar {
+                button: 1,
+                rotates: false,
+            }
+        );
+        assert_eq!(parse_one("1b$x"), star);
+        assert_eq!(parse_one("1xb$"), star);
+        assert_eq!(parse_one("1$$b"), parse_one("1b$$"));
+    }
+
+    /// `@` reverts a star-shaped TAP to a normal one. On a bare TAP there is
+    /// no star to revert, so it is a no-op: `1@,` is exactly `1,`. The slide
+    /// case, where it does something, is `slide::tests::at_sign_makes_the_head_a_plain_tap`.
+    #[test]
+    fn at_sign_on_a_bare_tap_is_a_no_op() {
+        assert_eq!(parse_one("1@"), plain(NoteKind::Tap(1)));
+        assert_eq!(parse_one("1@b"), parse_one("1b"));
+    }
+
+    /// Combinations the notation does not define are rejected, not guessed at:
+    /// three stars, a star that is also `@`, a star on a HOLD, a star on a
+    /// TOUCH, and a star on the two-digit EACH shorthand (write `1$/2$`).
+    #[test]
+    fn undefined_star_combinations_are_errors() {
+        assert!(parse_err("1$$$").contains("not 3 times"));
+        assert!(parse_err("1$@").contains("contradict"));
+        assert!(parse_err("1@$").contains("contradict"));
+        assert!(parse_err("1h$[4:1]").contains("not a HOLD"));
+        assert!(parse_err("1$h").contains("not a HOLD"));
+        assert!(parse_err("C$").contains("not a TOUCH"));
+        assert!(parse_err("B5$").contains("not a TOUCH"));
+        assert!(parse_err("12$").contains("EACH shorthand"));
     }
 }

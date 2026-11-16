@@ -209,7 +209,8 @@ fn spawn_note(
         }
 
         // Standalone star (no path): behaves like a tap, parent carries the star.
-        NoteKind::SlideStar(button) => {
+        // `rotates` (`$$`) is not drawn yet — both spellings get the same sprite.
+        NoteKind::SlideStar { button, .. } => {
             let pos = tap_pos(*button, layout) * super::RADIUS;
             let dir = layout.tap[*button - 1];
             let angle = dir.y.atan2(dir.x) - FRAC_PI_2;
@@ -236,6 +237,7 @@ fn spawn_note(
             head_button,
             segments,
             shared_duration,
+            ..
         }
         | NoteKind::HeadlessSlide {
             start_button: head_button,
@@ -249,7 +251,15 @@ fn spawn_note(
                 *shared_duration,
                 layout,
             );
-            let has_head = matches!(note.kind, NoteKind::Slide { .. });
+            // `None`: headless. `Some(sprite)`: the head, drawn as the automatic
+            // star or — under the `@` modifier — as a normal tap.
+            let head_sprite = match note.kind {
+                NoteKind::Slide {
+                    plain_head: true, ..
+                } => Some(tap_sprite(assets)),
+                NoteKind::Slide { .. } => Some(star_sprite(assets)),
+                _ => None,
+            };
             let head = *head_button;
 
             // Fan (`w`): a single FanShape segment fans into 3 diverging lanes,
@@ -273,12 +283,12 @@ fn spawn_note(
                     lanes.push(pts);
                 }
                 e.with_children(|p| {
-                    spawn_fan_children(p, &lanes, &lengths, has_head, head, layout, assets);
+                    spawn_fan_children(p, &lanes, &lengths, head_sprite, head, layout, assets);
                 });
                 e.insert((path, FanLanes { lanes, lengths }));
             } else {
                 e.with_children(|p| {
-                    spawn_slide_children(p, &path, has_head, head, layout, assets);
+                    spawn_slide_children(p, &path, head_sprite, head, layout, assets);
                 });
                 e.insert(path);
             }
@@ -500,22 +510,23 @@ fn spawn_approach_triangles(
 fn spawn_slide_children(
     parent: &mut RelatedSpawnerCommands<ChildOf>,
     path: &super::component::SlidePath,
-    has_head: bool,
+    head_sprite: Option<Sprite>,
     head_button: usize,
     layout: &ButtonLayout,
     assets: &NoteAssets,
 ) {
-    // Head star (Slide only): spawns at the head button, scale ZERO so it grows
-    // during the Growing phase, then approaches the ring during Moving. Its
-    // concentric halo rides along as a child (the head star carries no rotation,
-    // so the halo supplies the radial rotation itself, like a tap).
-    if has_head {
+    // Head (Slide only; `None` for a HeadlessSlide): spawns at the head button,
+    // scale ZERO so it grows during the Growing phase, then approaches the ring
+    // during Moving. Its concentric halo rides along as a child (the head
+    // carries no rotation, so the halo supplies the radial rotation itself,
+    // like a tap). The sprite is the star, or a plain tap under `@`.
+    if let Some(sprite) = head_sprite {
         let pos = layout.tap_spawn[head_button - 1] * super::RADIUS;
         let dir = layout.tap[head_button - 1];
         let angle = dir.y.atan2(dir.x) - FRAC_PI_2;
         parent
             .spawn((
-                star_sprite(assets),
+                sprite,
                 Transform::from_translation(pos.extend(2.0)).with_scale(Vec3::ZERO),
                 SlideElement::Head,
             ))
@@ -602,18 +613,18 @@ fn spawn_fan_children(
     parent: &mut RelatedSpawnerCommands<ChildOf>,
     lanes: &[Vec<Vec2>],
     lengths: &[f32],
-    has_head: bool,
+    head_sprite: Option<Sprite>,
     head_button: usize,
     layout: &ButtonLayout,
     assets: &NoteAssets,
 ) {
-    if has_head {
+    if let Some(sprite) = head_sprite {
         let pos = layout.tap_spawn[head_button - 1] * super::RADIUS;
         let dir = layout.tap[head_button - 1];
         let angle = dir.y.atan2(dir.x) - FRAC_PI_2;
         parent
             .spawn((
-                star_sprite(assets),
+                sprite,
                 Transform::from_translation(pos.extend(2.0)).with_scale(Vec3::ZERO),
                 SlideElement::Head,
             ))

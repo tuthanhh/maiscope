@@ -38,6 +38,10 @@ pub(super) fn parse_slide_note(note_str: &str) -> Result<Vec<Note>, String> {
     let is_break = all_modifiers.contains('b');
     let is_ex = modifiers_before.contains('x');
     let is_firework = modifiers_before.contains('f');
+    // '@' reverts the head's automatic star to a normal TAP. `$` is admitted
+    // but means nothing here — a slide head is already a star — and `?` / `!`
+    // (star suppression) are admitted and not yet represented.
+    let plain_head = modifiers_before.contains('@');
 
     // Star-chained slide: multiple independent paths radiating from the same star.
     if slide_pattern_str.contains('*') {
@@ -47,6 +51,7 @@ pub(super) fn parse_slide_note(note_str: &str) -> Result<Vec<Note>, String> {
             is_break,
             is_firework,
             is_ex,
+            plain_head,
         );
     }
 
@@ -65,6 +70,7 @@ pub(super) fn parse_slide_note(note_str: &str) -> Result<Vec<Note>, String> {
             head_button: start_btn,
             segments,
             shared_duration,
+            plain_head,
         },
     }])
 }
@@ -332,6 +338,7 @@ fn parse_star_chained_slides(
     is_break: bool,
     is_firework: bool,
     is_ex: bool,
+    plain_head: bool,
 ) -> Result<Vec<Note>, String> {
     let paths: Vec<&str> = pattern_str.split('*').collect();
     let mut notes = Vec::with_capacity(paths.len());
@@ -345,6 +352,7 @@ fn parse_star_chained_slides(
                 head_button: start_btn,
                 segments,
                 shared_duration,
+                plain_head,
             }
         } else {
             NoteKind::HeadlessSlide {
@@ -381,6 +389,7 @@ mod tests {
             head_button: head,
             segments: vec![seg(shape, simple(divider, count), false)],
             shared_duration: false,
+            plain_head: false,
         }
     }
 
@@ -546,6 +555,7 @@ mod tests {
                     seg(SlideShape::VShape { end: 8 }, simple(4, 1), false),
                 ],
                 shared_duration: true,
+                plain_head: false,
             })
         );
 
@@ -560,6 +570,7 @@ mod tests {
                     seg(SlideShape::Straight { end: 2 }, simple(1, 2), false),
                 ],
                 shared_duration: true,
+                plain_head: false,
             })
         );
     }
@@ -660,6 +671,7 @@ mod tests {
                     head_button: 1,
                     segments: vec![seg(SlideShape::Straight { end: 4 }, simple(4, 3), false)],
                     shared_duration: false,
+                    plain_head: false,
                 }),
                 plain(NoteKind::HeadlessSlide {
                     start_button: 1,
@@ -747,21 +759,55 @@ mod tests {
         );
     }
 
-    /// The star-suppression and normal-TAP modifiers parse and are then ignored.
+    /// The star-suppression modifiers parse and are then ignored.
     ///
-    /// `1?-5[2:1]` fades the tracing star in, `1!-5[2:1]` pops it in, `1@-5[2:1]`
-    /// reverts the head to a normal TAP. `SLIDE_RE` admits all three and nothing
-    /// downstream reads them, so all four spellings produce an identical note.
-    ///
-    /// Contrast `note.rs`, where `$` and `@` on a *tap* fail outright — the gap
-    /// is inconsistent rather than uniform. See
-    /// `note::tests::utage_star_tap_modifiers_are_unsupported`.
+    /// `1?-5[2:1]` fades the tracing star in, `1!-5[2:1]` pops it in. `SLIDE_RE`
+    /// admits both and nothing downstream reads them, so all three spellings
+    /// produce an identical note. `$` is admitted too and means nothing on a
+    /// slide — the head is already a star.
     #[test]
     fn star_suppression_modifiers_parse_but_are_ignored() {
         let plain_slide = parse_one("1-5[2:1]");
-        for input in ["1?-5[2:1]", "1!-5[2:1]", "1@-5[2:1]"] {
+        for input in ["1?-5[2:1]", "1!-5[2:1]", "1$-5[2:1]"] {
             assert_eq!(parse_one(input), plain_slide, "{input:?}");
         }
+    }
+
+    /// `1@-5[8:1],` reverts the head from the automatic star to a normal TAP:
+    /// "The SLIDE itself still plays out normally; its arrow track just visually
+    /// starts from a normal-looking TAP." The track is unchanged; only
+    /// `plain_head` flips. Order with `b` / `x` does not matter.
+    #[test]
+    fn at_sign_makes_the_head_a_plain_tap() {
+        let star_head = parse_one("1-5[8:1]");
+        let plain_head = parse_one("1@-5[8:1]");
+        assert_ne!(plain_head, star_head);
+        assert_eq!(
+            plain_head.kind,
+            NoteKind::Slide {
+                head_button: 1,
+                segments: vec![seg(SlideShape::Straight { end: 5 }, simple(8, 1), false)],
+                shared_duration: false,
+                plain_head: true,
+            }
+        );
+
+        let with_mods = parse_one("1b@x-5[8:1]");
+        assert!(with_mods.is_break && with_mods.is_ex);
+        assert_eq!(with_mods, parse_one("1@bx-5[8:1]"));
+        assert_eq!(with_mods, parse_one("1xb@-5[8:1]"));
+
+        // In a star chain the flag belongs to the head path only; headless
+        // tracks have no head to revert.
+        let chain = parse("1@-4[8:1]*-6[8:1]");
+        assert!(matches!(
+            chain[0].kind,
+            NoteKind::Slide {
+                plain_head: true,
+                ..
+            }
+        ));
+        assert!(matches!(chain[1].kind, NoteKind::HeadlessSlide { .. }));
     }
 
     // --- Rejection ----------------------------------------------------------

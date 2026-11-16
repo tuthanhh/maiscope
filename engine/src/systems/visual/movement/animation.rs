@@ -142,7 +142,7 @@ pub(super) fn scale_note_halo(
 // ── Moving phase ─────────────────────────────────────────────────────────────
 
 pub(super) fn move_tap(transform: &mut Transform, kind: &NoteKind, t: f32, layout: &ButtonLayout) {
-    if let NoteKind::Tap(id) | NoteKind::SlideStar(id) = kind {
+    if let NoteKind::Tap(id) | NoteKind::SlideStar { button: id, .. } = kind {
         let (spawn, hit) = travel_endpoints(layout, *id);
         transform.translation = spawn.lerp(hit, t).extend(2.0);
     }
