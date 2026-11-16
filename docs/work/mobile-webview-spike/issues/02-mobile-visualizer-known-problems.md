@@ -104,6 +104,41 @@ If the last row is still ~23 fps, the GPU is not the bottleneck and candidates
 2 and 3 (CPU) are next. If `msaa=1` alone recovers most of it, the fix is one
 line on the camera.
 
+**Second measurement, 2026-11-16 — `?debug&msaa=1&scale=1`:** avg 16.7ms, max
+21ms, slow 0, stalled 0 — a locked 60 FPS. **The GPU owned the frame.**
+Candidates 2 and 3 are off the table for the frame rate. Still needed before
+choosing the fix: `msaa=1` *alone* and `scale=1` *alone*, because the two
+remedies cost different things — MSAA off costs nothing visible on textured
+sprites (only lyon shapes alias), while rendering at CSS pixels on a 2.8×
+screen is visibly soft.
+
+**And the sound is still bad at 60 FPS**, so the audio stutter is *not* the
+frame-pacing symptom it was assumed to be above. Separate problem, separate
+investigation — see P2.
+
+### P2 — Guide sounds still wrong at a steady 60 FPS
+
+- **Seen on:** same phone, Chrome tab, after the GPU toggles (P1); frame
+  readout clean.
+- **Symptom:** reported as "the sound still bad". Not yet characterised —
+  late, crackling, missing, or stuttering are four different faults.
+- **Severity:** degrades.
+- **Status:** investigating; see below.
+
+**What the code says.** kira on wasm plays through cpal's `webaudio` backend
+(`cpal/src/host/webaudio/mod.rs`): two `AudioBuffer`s are alternated, each
+refilled on the main thread by the previous one's `onended` callback (the
+first pair kicked off by `setTimeout`). Every refill runs kira's mixer
+synchronously inside that callback. The timing margin is one buffer; a
+refill that lands late is a gap. That mechanism is also inherently high-latency
+— a sound starts at the earliest one buffer and a scheduling hop after it is
+requested, on top of Android's own output latency, which is large. On desktop
+both are small enough to go unnoticed.
+
+Also on the table: `GUIDE_SFX_VOLUME` is 2.0, capped at 1.5 — a gain above
+unity on a short transient, through a phone speaker, is a plausible crackle on
+its own; and Bluetooth output adds 100–300ms that no engine change can remove.
+
 ## Done when
 
 - [ ] Every problem above is listed with a device, a symptom and a severity
