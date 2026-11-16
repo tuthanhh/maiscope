@@ -13,6 +13,7 @@ import {
     fetchChart,
     fetchSheetInfo,
     frameStats,
+    wasmMemoryBytes,
     pause,
     resume,
     restart,
@@ -266,8 +267,24 @@ const statsLines = computed(() => {
         `slow >33ms: ${s.slow_frames}/${s.frames}  stalled >100ms: ${s.stalled_frames}`,
         `canvas ${s.canvas} @ ${s.scale_factor.toFixed(2)}x  dpr ${window.devicePixelRatio}  msaa ${s.msaa}`,
         leadLine(s.audio_lead_ms),
+        memoryLine(),
     ];
 });
+// Wasm linear memory is a high-water mark (it never shrinks), which is the
+// ceiling mobile-webview-spike 01 asks for. JS heap is Chrome-only and shown
+// when the browser offers it; both numbers are MiB.
+function memoryLine(): string {
+    const wasm = wasmMemoryBytes();
+    const perf = performance as Performance & {
+        memory?: { usedJSHeapSize: number };
+    };
+    const heap = perf.memory?.usedJSHeapSize;
+    const mib = (b: number) => (b / 1048576).toFixed(0);
+    return (
+        `wasm mem ${wasm === null ? "?" : mib(wasm)}MiB` +
+        (heap === undefined ? "" : `  js heap ${mib(heap)}MiB`)
+    );
+}
 function leadLine(appliedMs: number): string {
     const a = autoLead.value;
     const parts = a

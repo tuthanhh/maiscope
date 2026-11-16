@@ -14,7 +14,7 @@ mobile WebView" has no reliable answer to look up.
 
 **Blocked by:** None. Run it early and in parallel — it gates v1.1, not v1.0.
 
-**Status:** todo
+**Status:** in-progress — instrumented, measurements owed (2026-11-16)
 
 - [ ] `./scripts/build-wasm.sh release` run; **raw and brotli'd `.wasm` size
       recorded here** (the dev build is ~74MB; the release number is unknown and
@@ -32,3 +32,24 @@ mobile WebView" has no reliable answer to look up.
         sprite atlas trimming), re-measure
       - **Will not run / OOMs** → reopen the Tauri decision; Tauri Android returns
         as the only way to bundle the wasm and get a native surface
+
+## Comments
+
+**Most of this spike has already been run, by accident, while fixing the
+visualizer on the maintainer's phone** ([issue 02](02-mobile-visualizer-known-problems.md),
+2026-11-16): a chart loaded end to end over `maiscope.pages.dev`, frame
+pacing was measured in a Chrome tab (23 fps, then 60 fps after `Msaa::Off`),
+and the installed PWA was reported to behave the same. What that session did
+not record is what this ticket is for: device model and Chrome version, the
+release wasm size, memory, time to first note, and whether the tab is ever
+killed. The outcome box can only be "runs well" or "renders but janky" now —
+the "will not run" branch is already closed.
+
+**How to read memory on the phone.** The `?debug` overlay (issue 02) gained a
+last line: `wasm mem NMiB` is the wasm instance's linear memory, kept from
+`init()` in `useEngine.ts`. `WebAssembly.Memory` only grows, so this is a
+high-water mark — exactly the "memory ceiling" asked for — not a live figure.
+`js heap NMiB` follows on Chrome (`performance.memory`, non-standard; absent
+elsewhere). Read both at the end of the busiest chart available, in the tab
+and in the installed app. An OOM shows up as the tab silently reloading, not
+as an error.

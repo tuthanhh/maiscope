@@ -13,6 +13,10 @@ import type { Sheet } from "~/types";
 type EngineModule = typeof import("~/wasm/engine.js");
 
 let enginePromise: Promise<EngineModule> | null = null;
+// The wasm instance's linear memory, kept from init so the mobile overlay can
+// report it. `WebAssembly.Memory` only grows, so this is a high-water mark,
+// not a live figure — which is the number the memory-ceiling question wants.
+let wasmMemory: WebAssembly.Memory | null = null;
 
 // ── Persistent engine canvas ────────────────────────────────────────────────
 // Bevy/wasm grabs <canvas id="bevy"> exactly once on init and can't re-attach to
@@ -67,7 +71,7 @@ export function ensureEngine(): Promise<EngineModule> {
       const mod = await import("~/wasm/engine.js");
       // Default export is wasm-bindgen's init(); fetches + instantiates the .wasm
       // and runs the #[wasm_bindgen(start)] entry, which launches the Bevy App.
-      await mod.default();
+      wasmMemory = (await mod.default()).memory;
       return mod;
     })();
   }
@@ -177,6 +181,11 @@ export type FrameStats = {
 export async function frameStats(): Promise<FrameStats | null> {
   const raw = (await ensureEngine()).frame_stats();
   return raw ? (JSON.parse(raw) as FrameStats) : null;
+}
+
+/** Bytes the wasm instance has claimed so far, or null before init. */
+export function wasmMemoryBytes(): number | null {
+  return wasmMemory ? wasmMemory.buffer.byteLength : null;
 }
 
 // Render toggles for the mobile investigation (mobile-webview-spike 02). Each
