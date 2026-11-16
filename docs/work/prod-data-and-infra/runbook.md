@@ -11,7 +11,7 @@ Operational procedures for the production database. Owned by
 | `DATABASE_URL` | secret | `sync-catalog`, `deploy` (via Fly, the app), `seed-charts`, `backup-database` | Role `maiscope_app` (2026-09-16), **pooled** endpoint. DML only (`SELECT`/`INSERT`/`UPDATE`/`DELETE`) — no DDL. |
 | `MIGRATE_DATABASE_URL` | secret (Fly app only) | `deploy`'s `release_command` (`bin/migrate`) | Role `neondb_owner`, **direct** (non-pooled) endpoint. Migrations need DDL, and `MIGRATOR.run()`'s advisory lock needs a pinned backend connection that pooled mode does not guarantee. Falls back to `DATABASE_URL` if unset (`bin/migrate.rs`). |
 | `FLY_API_TOKEN` | secret | `deploy` | |
-| `CHART_DATA_TOKEN` | secret | `seed-charts`, `backup-database` | PAT or deploy key with read (seed) and write (backup) on the chart-data repo. |
+| `CHART_DATA_TOKEN` | secret | `seed-charts`, `backup-database` | PAT or deploy key on the chart-data repo. Must have **write** — the backup pushes. **As of 2026-11-16 it is read-only** and the first backup push was refused with a 403; see [ticket 05](issues/05-backups.md). |
 | `CHART_DATA_REPO` | variable | `seed-charts`, `backup-database` | `owner/name` of the private chart-text repo. |
 | `CHART_DATA_SUBDIR` | variable | `seed-charts` | Path to the song tree inside that repo. Defaults to `songs`. |
 
@@ -96,11 +96,12 @@ the three-attempt debugging trail.
 
 Still open:
 
-- **No backup existed before 2026-11-16.** `backup-database.yml` skipped every
-  scheduled run for two months because its job-level `if` read an
-  environment-scoped variable before the environment was bound. Fixed in the
-  workflow; the first real dump needs a manual dispatch and is not confirmed
-  until a `backups/maiscope-YYYYMMDD.dump` is in the chart-data repo. See
+- **No backup is in the chart-data repo yet.** `backup-database.yml` skipped
+  every scheduled run for two months (job-level `if` on an environment-scoped
+  variable); fixed 2026-11-16. The first dispatch then dumped successfully
+  (8.4MB, 26s) but the push was refused — `CHART_DATA_TOKEN` is read-only.
+  That dump lives only as run artifact `maiscope-dump-20261116`, expiring
+  2026-12-16. Needs a token with write access and one more dispatch. See
   [ticket 05](issues/05-backups.md).
 - **The current credential was pasted into a chat transcript** (predates
   2026-09-16's work) and should be rotated.

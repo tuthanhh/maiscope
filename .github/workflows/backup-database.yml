@@ -183,7 +183,13 @@ jobs:
             exit 0
           fi
           git commit -m "backup: maiscope ${STAMP} (${BYTES} bytes)"
-          git push
+          # The first real run (2026-11-16) got here and died on a 403: the
+          # token could read the repo but not write it. Name the fix instead of
+          # leaving a bare git error, and say where the dump still went.
+          git push || {
+            echo "::error::Push to ${{ vars.CHART_DATA_REPO }} rejected. CHART_DATA_TOKEN needs write access to that repo (fine-grained PAT: Contents -> Read and write). The dump is still uploaded as this run's artifact; download it from the run page if the token cannot be fixed today."
+            exit 1
+          }
 
       # Belt and braces: the run also keeps its own copy, so a backup exists even
       # if the push fails (revoked token, protected branch).

@@ -61,11 +61,11 @@ captures the state *before* the nightly sync rather than after it.
       procedure written into `runbook.md` — an untested backup is not a backup
       (rehearsed locally 2026-09-13, per the Assessment above; the box says
       Neon, and that has not happened yet)
-- [ ] Dump size and duration recorded; revisit when charts reach ~1500 songs
-      (size is recorded — 8.13MB against a fully seeded database, see the
-      Assessment above — but no duration can be recorded yet: the workflow has
-      never completed a run, see Comments. Record it from the first green run's
-      "Dump the database" step)
+- [x] Dump size and duration recorded; revisit when charts reach ~1500 songs.
+      First real run, 2026-11-16 (`43833756112`): **8,388,287 bytes, 26s** for
+      the "Dump the database" step (`pg_dump -Fc -Z9` from a GitHub runner to
+      Neon, including the version probe). Whole job 43s. Against 8.13MB
+      measured locally on 2026-09-13, so the catalog has barely moved
 - [x] Backup contents contain no secrets beyond the data itself — `pg_dump`
       (not `pg_dumpall`) writes schema and rows only; roles and their passwords
       are cluster-level and never enter a per-database dump. The connection
@@ -92,7 +92,37 @@ Fix: the job-level `if` is gone and a first step checks the variable instead,
 failing with `::error` rather than skipping. Deliberate change of behaviour: a
 nightly failure gets read, and this nightly skip was not read for two months.
 
-**To close the loop (needs a dispatch, not a local command):** run
-`backup-database.yml` by hand once, confirm a `maiscope-YYYYMMDD.dump` lands in
-the chart-data repo under `backups/`, and record the step duration here. Then
-ticket 01's recovery-window claim becomes true.
+**2026-11-16, later — first dispatch, half a success.** Run `43833756112`:
+every step up to and including the commit passed; the push to the chart-data
+repo was refused:
+
+```
+remote: Write access to repository not granted.
+fatal: unable to access 'https://github.com/tuthanhh/maiscope-chart-data/': The requested URL returned error: 403
+```
+
+`CHART_DATA_TOKEN` can read the repo (checkout succeeded, and `seed-charts`
+has always worked) but cannot write it. The runbook's secret table said "read
+(seed) and write (backup)"; the write half was never true, and nothing
+exercised it until now because the job had never reached the push.
+
+**The dump is not lost.** "Upload the dump as an artifact" runs `if: always()`
+and succeeded: `maiscope-dump-20261116`, 8,310,047 bytes compressed, on the
+run page, **expires 2026-12-16**. That is the first production backup that has
+ever existed. It is in artifact storage, not the repo, so the retention policy
+does not apply to it and it disappears in 30 days.
+
+**To close the loop (both need the maintainer):**
+
+1. Give `CHART_DATA_TOKEN` write access to `tuthanhh/maiscope-chart-data` —
+   a fine-grained PAT with *Contents: Read and write* on that one repo, or a
+   deploy key with write enabled — and update the `production` environment
+   secret. Read-only is enough for `seed-charts`; the backup is the only
+   writer.
+2. Dispatch `backup-database.yml` again. Success is a
+   `backups/maiscope-YYYYMMDD.dump` commit in the chart-data repo, not a green
+   run. Until then, download the artifact and keep it somewhere that is not
+   this laptop's `songs/` folder.
+
+The push step now names this failure and the artifact fallback in its error,
+so the next 403 reads as "fix the token", not as a git mystery.
