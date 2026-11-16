@@ -165,6 +165,8 @@ export type FrameStats = {
   /** Physical canvas size, i.e. CSS size × devicePixelRatio. */
   canvas: string;
   scale_factor: number;
+  /** MSAA samples on the main camera; 1 means off. */
+  msaa: number;
 };
 
 // Read the engine's latest snapshot. `null` until the first second has
@@ -173,6 +175,18 @@ export type FrameStats = {
 export async function frameStats(): Promise<FrameStats | null> {
   const raw = (await ensureEngine()).frame_stats();
   return raw ? (JSON.parse(raw) as FrameStats) : null;
+}
+
+// Render toggles for the mobile investigation (mobile-webview-spike 02). Each
+// enqueues a command the engine applies next frame, like transport.
+// samples: 1 = MSAA off, 2, 4 (Bevy default), 8.
+export async function setMsaa(samples: number): Promise<void> {
+  (await ensureEngine()).set_msaa(samples);
+}
+// scale: 1 renders at CSS pixels regardless of devicePixelRatio; 0 restores
+// the browser's own ratio.
+export async function setRenderScale(scale: number): Promise<void> {
+  (await ensureEngine()).set_render_scale(scale);
 }
 
 // Note (scroll) speed — how fast notes travel, independent of playback rate.

@@ -78,9 +78,11 @@ impl FrameStats {
 impl Snapshot {
     /// Hand-rolled JSON: the engine has no serde, and five numbers do not
     /// justify adding it.
-    pub fn to_json(&self, canvas: (u32, u32), scale_factor: f32) -> String {
+    /// `msaa` is the sample count on the main camera (1 = off), so the
+    /// `?msaa=` toggle can be seen to have applied.
+    pub fn to_json(&self, canvas: (u32, u32), scale_factor: f32, msaa: u32) -> String {
         format!(
-            r#"{{"fps":{:.1},"avg_ms":{:.1},"max_ms":{:.1},"frames":{},"slow_frames":{},"stalled_frames":{},"canvas":"{}x{}","scale_factor":{:.2}}}"#,
+            r#"{{"fps":{:.1},"avg_ms":{:.1},"max_ms":{:.1},"frames":{},"slow_frames":{},"stalled_frames":{},"canvas":"{}x{}","scale_factor":{:.2},"msaa":{}}}"#,
             self.fps,
             self.avg_ms,
             self.max_ms,
@@ -90,6 +92,7 @@ impl Snapshot {
             canvas.0,
             canvas.1,
             scale_factor,
+            msaa,
         )
     }
 }
@@ -100,6 +103,7 @@ pub fn sample_frame(
     time: Res<Time<Real>>,
     mut stats: ResMut<FrameStats>,
     window: Query<&Window, With<PrimaryWindow>>,
+    camera: Query<Option<&Msaa>, With<crate::plugins::camera::MainCamera>>,
 ) {
     let Some(snapshot) = stats.record(time.delta_secs_f64() * 1000.0) else {
         return;
@@ -108,7 +112,15 @@ pub fn sample_frame(
         .single()
         .map(|w| ((w.physical_width(), w.physical_height()), w.scale_factor()))
         .unwrap_or(((0, 0), 0.0));
-    crate::wasm_bridge::publish_frame_stats(snapshot.to_json(canvas, scale));
+    // A camera without an explicit Msaa component renders at Bevy's default.
+    let msaa = camera
+        .single()
+        .ok()
+        .flatten()
+        .copied()
+        .unwrap_or_default()
+        .samples();
+    crate::wasm_bridge::publish_frame_stats(snapshot.to_json(canvas, scale, msaa));
 }
 
 #[cfg(test)]
@@ -181,8 +193,8 @@ mod tests {
             stalled_frames: 0,
         };
         assert_eq!(
-            snap.to_json((1170, 2532), 3.0),
-            r#"{"fps":59.9,"avg_ms":16.7,"max_ms":21.0,"frames":60,"slow_frames":0,"stalled_frames":0,"canvas":"1170x2532","scale_factor":3.00}"#
+            snap.to_json((1170, 2532), 3.0, 4),
+            r#"{"fps":59.9,"avg_ms":16.7,"max_ms":21.0,"frames":60,"slow_frames":0,"stalled_frames":0,"canvas":"1170x2532","scale_factor":3.00,"msaa":4}"#
         );
     }
 }

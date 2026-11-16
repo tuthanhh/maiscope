@@ -66,8 +66,43 @@ phone, for a busy chart, written into this entry — noting whether it was read
 in the Chrome tab or the installed app, since ticket 01 expects those to
 differ.
 
-Then one hypothesis at a time, smallest change first: `Msaa::Off` on the
-camera is a one-line test of candidate 1 and the most likely win.
+**First measurement, 2026-11-16 — Chrome tab on the phone** (the maintainer
+reports the installed PWA behaves the same; model and Chrome version still to
+be recorded), release wasm from `maiscope.pages.dev`, during a busy chart:
+
+```
+23.3 fps  avg ~45ms  max 55–70ms
+slow >33ms: 19/25  stalled >100ms: 0
+canvas 1138x909 @ 2.81x  dpr 2.8125
+```
+
+What it says: **uniformly slow, not hitchy.** Three of every four frames are
+late and none stalls, so this is steady per-frame cost, not garbage-collection
+pauses or asset loads. The chart stays on time because 70ms never reaches the
+250ms clamp. The audio stutter follows directly: at 45ms per frame the
+main-thread `setTimeout` that feeds the next audio buffer is routinely late.
+The canvas is ~1.0 Mpx physical (a ~405×323 CSS box at 2.8×), multisampled 4×
+by default — the fill-rate suspect is live but not yet proven; 45ms could as
+easily be CPU-bound ECS in single-threaded wasm.
+
+**Next: one variable at a time, without a deploy per guess.** The engine
+gained two runtime knobs on the same command queue as transport —
+`set_msaa(samples)` and `set_render_scale(scale)` — and the visualizer reads
+them from the URL: `?msaa=1` (off; `4` is the default) and `?scale=1` (render
+at CSS pixels, ignoring devicePixelRatio; `0` restores). The overlay's third
+line shows the applied values. Measure, in this order, same chart, same
+section, ~10s each:
+
+| URL | Tests |
+|---|---|
+| `?debug` | baseline (already: 23 fps) |
+| `?debug&msaa=1` | MSAA cost alone |
+| `?debug&scale=1` | fill rate alone (canvas drops to ~405×323) |
+| `?debug&msaa=1&scale=1` | both — the GPU floor |
+
+If the last row is still ~23 fps, the GPU is not the bottleneck and candidates
+2 and 3 (CPU) are next. If `msaa=1` alone recovers most of it, the fix is one
+line on the camera.
 
 ## Done when
 

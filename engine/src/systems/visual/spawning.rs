@@ -84,6 +84,7 @@ pub fn next_event(
 /// BGM channel + chart clock. The BGM is the clock's source of truth (see
 /// `next_event`), so pausing the channel freezes the chart, and seeking the BGM
 /// to 0 rewinds it — we just clear the spawned notes and reset the spawn index.
+#[allow(clippy::too_many_arguments)]
 pub fn apply_commands(
     mut commands: Commands,
     mut chart: ResMut<ChartPlayback>,
@@ -91,9 +92,23 @@ pub fn apply_commands(
     bgm_instance: Option<Res<crate::systems::audio::BgmInstance>>,
     mut audio_instances: ResMut<Assets<AudioInstance>>,
     notes: Query<Entity, With<NoteTiming>>,
+    camera: Query<Entity, With<crate::plugins::camera::MainCamera>>,
+    mut window: Query<&mut Window, With<bevy::window::PrimaryWindow>>,
 ) {
     for cmd in crate::wasm_bridge::take_commands() {
         match cmd {
+            // Diagnostics (mobile-webview-spike 02). Msaa is a camera
+            // component; inserting replaces the default Sample4.
+            crate::wasm_bridge::EngineCommand::SetMsaa(samples) => {
+                if let Ok(cam) = camera.single() {
+                    commands.entity(cam).insert(Msaa::from_samples(samples));
+                }
+            }
+            crate::wasm_bridge::EngineCommand::SetRenderScale(scale) => {
+                if let Ok(mut win) = window.single_mut() {
+                    win.resolution.set_scale_factor_override(scale);
+                }
+            }
             crate::wasm_bridge::EngineCommand::Pause => {
                 bgm_channel.pause();
                 chart.pause();

@@ -18,6 +18,8 @@ import {
     restart,
     setSpeed,
     setNoteSpeed,
+    setMsaa,
+    setRenderScale,
     type FrameStats,
 } from "~/composables/useEngine";
 import { resumeAudio } from "~/utils/audioUnlock";
@@ -147,6 +149,7 @@ onMounted(async () => {
         await ensureEngine();
         status.value = "ready";
         startDebugPolling();
+        applyRenderToggles();
         // Replay any already-loaded chart from the start on each open. A deep-link
         // (maybeAutoLoad) reloads its own chart and supersedes this.
         if (hasChart() && !hasDeepLink()) {
@@ -224,9 +227,23 @@ const statsLines = computed(() => {
     return [
         `${s.fps.toFixed(1)} fps  avg ${s.avg_ms.toFixed(1)}ms  max ${s.max_ms.toFixed(0)}ms`,
         `slow >33ms: ${s.slow_frames}/${s.frames}  stalled >100ms: ${s.stalled_frames}`,
-        `canvas ${s.canvas} @ ${s.scale_factor.toFixed(2)}x  dpr ${window.devicePixelRatio}`,
+        `canvas ${s.canvas} @ ${s.scale_factor.toFixed(2)}x  dpr ${window.devicePixelRatio}  msaa ${s.msaa}`,
     ];
 });
+
+// Render A/B toggles, query-only and applied once the engine is up:
+//   ?msaa=1   MSAA off (Bevy defaults to 4)       ?msaa=4  back to default
+//   ?scale=1  render at CSS pixels, ignoring dpr   ?scale=0 back to dpr
+// Not sticky on purpose: an experiment should not outlive its URL. The overlay's
+// third line shows the values the engine actually applied.
+function applyRenderToggles(): void {
+    const msaa = Number(route.query.msaa);
+    if (Number.isInteger(msaa) && msaa >= 1) setMsaa(msaa);
+    const scale = Number(route.query.scale);
+    if (Number.isFinite(scale) && scale >= 0 && route.query.scale !== undefined) {
+        setRenderScale(scale);
+    }
+}
 
 // Last deep-linked sheet, so re-activating with the same query doesn't reload.
 let lastKey = "";

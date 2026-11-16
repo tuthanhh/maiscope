@@ -1,5 +1,5 @@
 mod audio;
-mod camera;
+pub(crate) mod camera;
 mod lyon_shape;
 use bevy::{
     asset::{AssetMetaCheck, AssetPlugin},

@@ -47,6 +47,11 @@ pub enum EngineCommand {
     Restart,
     SetSongSpeed(f32),
     SetNoteSpeed(f32),
+    /// Diagnostics: MSAA sample count on the main camera (1 = off, 2, 4, 8).
+    SetMsaa(u32),
+    /// Diagnostics: override the window scale factor (`None` = back to the
+    /// browser's devicePixelRatio). `Some(1.0)` renders at CSS pixels.
+    SetRenderScale(Option<f32>),
 }
 
 static COMMANDS: Lazy<Mutex<Vec<EngineCommand>>> = Lazy::new(|| Mutex::new(Vec::new()));
@@ -87,6 +92,28 @@ pub fn set_song_speed(rate: f32) {
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn set_note_speed(rate: f32) {
     push_command(EngineCommand::SetNoteSpeed(rate));
+}
+
+// ── Render diagnostics ───────────────────────────────────────────────────────
+//
+// Runtime knobs for the mobile frame-pacing investigation
+// (mobile-webview-spike 02). They exist so one visit on a phone can A/B the
+// GPU-side suspects without a deploy per guess. Same queue as transport.
+
+/// MSAA samples on the main camera: 1 (off), 2, 4 (Bevy's default) or 8.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn set_msaa(samples: u32) {
+    push_command(EngineCommand::SetMsaa(samples));
+}
+
+/// Render scale override. `1.0` draws at CSS pixels regardless of
+/// devicePixelRatio; `0` restores the browser's own ratio.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn set_render_scale(scale: f32) {
+    let override_ = if scale > 0.0 { Some(scale) } else { None };
+    push_command(EngineCommand::SetRenderScale(override_));
 }
 
 pub fn take_commands() -> Vec<EngineCommand> {
