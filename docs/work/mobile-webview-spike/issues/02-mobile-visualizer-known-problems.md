@@ -54,11 +54,17 @@ Candidates, none confirmed:
 **Instrumentation added so a phone can report numbers.** The engine now
 publishes a one-second frame-pacing snapshot
 (`engine/src/systems/frame_stats.rs`) through `wasm_bridge::frame_stats()`,
-and the visualizer page overlays it on the canvas when opened with `?debug`:
+and the visualizer page overlays it on the canvas when the debug flag is on:
 fps, average and max frame time, how many frames exceeded 33ms (visibly late)
 and 100ms (long enough to starve audio), the physical canvas size and scale
-factor. The first measurement to take is that overlay on the phone, for a
-busy chart, written into this entry.
+factor. The flag is `?debug` on the visualizer route
+(`#/visualizer?songId=…&debug`) and it **sticks in `localStorage`**, because
+an installed PWA has no address bar: open `?debug` once in a Chrome tab on
+the phone, then launch the installed app, and the overlay is there.
+`?debug=0` clears it. The first measurement to take is that overlay on the
+phone, for a busy chart, written into this entry — noting whether it was read
+in the Chrome tab or the installed app, since ticket 01 expects those to
+differ.
 
 Then one hypothesis at a time, smallest change first: `Msaa::Off` on the
 camera is a one-line test of candidate 1 and the most likely win.

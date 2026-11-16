@@ -170,10 +170,36 @@ onUnmounted(() => {
 });
 
 // ── Frame-pacing readout ─────────────────────────────────────────────────────
-// Opened with `?debug` (any value), the page overlays the engine's one-second
-// frame snapshot on the canvas. This is how a phone reports numbers: no
-// devtools, no console, just read the corner. See mobile-webview-spike 02.
-const debug = computed(() => route.query.debug !== undefined);
+// With the debug flag on, the page overlays the engine's one-second frame
+// snapshot on the canvas. This is how a phone reports numbers: no devtools, no
+// console, just read the corner. See mobile-webview-spike 02.
+//
+// The flag is sticky. An installed PWA has no address bar, so `?debug` in a
+// URL cannot reach it — but it shares origin storage with the browser it was
+// installed from. Visit `?debug` once in a Chrome tab and the installed app
+// shows the overlay from then on; `?debug=0` turns it off again. Wrapped in
+// try/catch because storage can be blocked or evicted, and a readout must
+// never be the thing that breaks the page.
+const DEBUG_KEY = "mv:debug";
+function readDebugFlag(): boolean {
+    const q = route.query.debug;
+    if (q !== undefined) {
+        const on = q !== "0" && q !== "false";
+        try {
+            if (on) localStorage.setItem(DEBUG_KEY, "1");
+            else localStorage.removeItem(DEBUG_KEY);
+        } catch {
+            /* storage unavailable: the query still works for this visit */
+        }
+        return on;
+    }
+    try {
+        return localStorage.getItem(DEBUG_KEY) === "1";
+    } catch {
+        return false;
+    }
+}
+const debug = ref(readDebugFlag());
 const stats = ref<FrameStats | null>(null);
 let debugTimer: ReturnType<typeof setInterval> | null = null;
 
