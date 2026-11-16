@@ -16,9 +16,11 @@ mobile WebView" has no reliable answer to look up.
 
 **Status:** in-progress — instrumented, measurements owed (2026-11-16)
 
-- [ ] `./scripts/build-wasm.sh release` run; **raw and brotli'd `.wasm` size
-      recorded here** (the dev build is ~74MB; the release number is unknown and
-      feeds `web-delivery` issues 04 and 05)
+- [x] `./scripts/build-wasm.sh release` run; **raw and brotli'd `.wasm` size
+      recorded here** — 2026-11-16, `wasm-release` profile (opt-level z, fat
+      LTO, strip, no `wasm-opt`): **12.3MB raw, 2.6MB Brotli** (`-q 11`).
+      The dev build on the same day was 140MB. (The ~74MB dev figure below
+      predates Bevy 0.18.)
 - [ ] `apps/host` served over LAN; opened on a real mid-range Android device
 - [ ] One chart loaded end to end (requires the corpus re-acquired in `test-foundation` issue 01, or
       a single `maidata.txt` obtained ad hoc for the spike)
