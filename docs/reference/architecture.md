@@ -45,14 +45,20 @@ upstream arcade-songs data model. Keep new endpoints on this split.
 
 ## Client caching
 
-Three layers with three lifetimes. Knowing which is which is the difference
+Two layers today, a third planned. Knowing which is which is the difference
 between debugging staleness in one minute and three.
 
 | Layer | Holds | Invalidated by |
 |---|---|---|
-| Service worker | App shell (precached); wasm (runtime, cache-first) | Content-hashed filenames; `index.html` is network-first |
-| IndexedDB | Catalog blob (v1.1) | `GET /sync/manifest` revision change; paint-then-swap |
-| HTTP | Wire responses | `ETag` / `If-None-Match` / `Cache-Control` |
+| Service worker | App shell (precached); wasm (runtime, cache-first); sprites (stale-while-revalidate) | Content-hashed filenames; `index.html` is network-first; `/api/*` is never cached here |
+| HTTP | `/catalog` and other wire responses | `ETag` / `If-None-Match`; `Cache-Control: max-age=3600` on `/catalog` |
+| IndexedDB — **not built** | Catalog blob, for first paint before the network | `GET /sync/manifest` revision change; paint-then-swap |
+
+The IndexedDB layer is
+[`web-delivery` 02 stage 2](../work/web-delivery/issues/02-client-catalog-freshness.md),
+deferred to v1.1. Nothing in `apps/host/` reads IndexedDB or calls
+`/sync/manifest` yet; the catalog comes straight from `GET /catalog` through the
+browser's HTTP cache (`stores/data.ts:loadData`).
 
 ## Engine boundary
 
@@ -88,4 +94,5 @@ See [ADR-0001](../adr/0001-postgres-source-of-truth-for-charts.md) and
 
 ## Known deviations from this document
 
-None currently.
+None currently. The IndexedDB cache layer is listed above as not built rather
+than as a deviation: the design is decided, the code is scheduled for v1.1.

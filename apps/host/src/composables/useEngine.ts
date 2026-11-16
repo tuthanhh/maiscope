@@ -151,11 +151,7 @@ export async function setSpeed(rate: number): Promise<void> {
 }
 
 // Note (scroll) speed — how fast notes travel, independent of playback rate.
-// The engine doesn't export this yet; guarded so it no-ops until it does.
-// TODO(engine): add #[wasm_bindgen] set_note_speed(speed: f32) in engine/src/lib.rs.
+// `7.0` is the engine's default (engine/src/wasm_bridge.rs:set_note_speed).
 export async function setNoteSpeed(speed: number): Promise<void> {
-  const mod = (await ensureEngine()) as {
-    set_note_speed?: (s: number) => void;
-  };
-  mod.set_note_speed?.(speed);
+  (await ensureEngine()).set_note_speed(speed);
 }
