@@ -33,6 +33,7 @@ product and is useful by itself.
 | 03 | [Frontend hosting on Cloudflare Pages](issues/03-cloudflare-pages.md) | |
 | 04 | [PWA: manifest + service worker](issues/04-pwa-service-worker.md) | |
 | 05 | [Gate the visualizer off mobile](issues/05-gate-visualizer-off-mobile.md) | Single flag, easy to flip for v1.1 |
+| 06 | [Custom domain, with `/api/*` proxied to Fly](issues/06-custom-domain.md) | Unscheduled; blocks promoting PWA installs (ticket 03's trap) |
 
 ## Decisions that constrain this work
 

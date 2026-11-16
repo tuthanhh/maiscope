@@ -21,9 +21,9 @@ domain is in place.**
 **Blocked by:** 01
 
 **Status:** in-progress — the Pages deploy itself ships (`.github/workflows/deploy-web.yml`
-is committed and green), but three boxes are still open: preview deployments on
-PRs, Brotli confirmed on `.js`/`.wasm`, and a ticket opened for the custom-domain
-migration
+is committed and green), but two boxes are still open: preview deployments on
+PRs, and Brotli confirmed on `.js`/`.wasm` (the custom-domain ticket is opened,
+issue 06)
 
 - [x] **Deployed by wrangler from GitHub Actions, not by Pages' git integration** —
       `.github/workflows/deploy-web.yml`. See Comments; the git-connected build was
@@ -42,8 +42,8 @@ migration
 - [x] Recorded: the production origin is **`https://maiscope.pages.dev`**. This
       becomes the PWA install identity — do not promote installs before the custom
       domain move (see the trap above)
-- [ ] Ticket opened for the custom-domain migration, with the install-orphaning
-      consequence written down
+- [x] Ticket opened for the custom-domain migration, with the install-orphaning
+      consequence written down — [issue 06](06-custom-domain.md), 2026-11-16
 - [x] **The wasm artifact fits what Pages will accept** — 17MB after the profile
       fix below, under the 25 MiB cap. Was 43MB; see Comments
 - [x] `pnpm build` wired to the release wasm — the workflow runs
