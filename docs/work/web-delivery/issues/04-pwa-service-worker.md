@@ -36,8 +36,10 @@ still open
       maintainer-tested on both)
 - [x] Offline test: reload with network off, app shell still loads
       (2026-09-16, maintainer-tested)
-- [ ] Recovery rehearsed: deploy a broken build, confirm the next deploy actually
-      reaches installed clients
+- [x] Recovery rehearsed: deploy a broken build, confirm the next deploy actually
+      reaches installed clients — 2026-11-17, see the last comment: broken
+      build reached the installed PWA on the first launch and stayed; the
+      next deploy recovered it in **one relaunch, without a full close**
 
 ## Comments
 
@@ -104,3 +106,26 @@ four handlers registered; `manifest.webmanifest` carries all three icons with
 `purpose: "maskable"` on the padded one. `public/maskable-512x512.png` is the 512
 icon scaled to 410px on an opaque white field — the source has transparent corners
 that Android's mask crop would otherwise expose.
+
+**Recovery rehearsed 2026-11-17 (UTC 2026-11-16 evening), installed PWA on the
+maintainer's Android phone.** The broken build was `main.ts` throwing before
+`createApp` — a white screen, the worst case, on a branch (`rehearsal/broken-build`,
+PR #3, closed unmerged) deployed with `deploy-web.yml`:
+
+| Step | Result |
+|---|---|
+| broken build deployed, PWA relaunched | white screen on the first launch; stayed white on every relaunch, as it should — each launch fetched the broken `index.html` from the network |
+| master deployed again, PWA relaunched | working app after **one** relaunch, no swipe-close needed |
+
+So the three rules at the top hold in practice: `index.html` network-first
+is the escape hatch, `autoUpdate` activates the new worker on the next
+navigation, and nothing cached-first (wasm, sprites) was in the way.
+
+Two things learned about the procedure itself, for the next rehearsal:
+
+- CI runs on `pull_request` and on pushes to `master` only, so a bare branch
+  has no check runs and both deploy gates refuse it. Open a draft PR first.
+- The CI gate is shared with `deploy.yml`: a dispatch of the **API** deploy
+  on the rehearsal branch was refused with "No 'rust' check run found" and
+  never reached Fly. Good — but only `deploy-web.yml` belongs in this
+  rehearsal; leave `deploy.yml` alone.
