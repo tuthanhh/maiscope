@@ -150,3 +150,15 @@ hold without the override:
   regression.
 
 Until A is done, dispatch with `allow_unmatched` as before.
+
+**Dispatch on 2026-11-16 (UTC) failed before seeding: the data repo has no
+`main`.** The `data_ref` input defaulted to `main` since the workflow was
+written; the chart-data repo's branch is `master` (the September run must
+have been dispatched with it typed in). `actions/checkout` reports a missing
+branch as `The process '/usr/bin/git' failed with exit code 1`, three times,
+with nothing on stderr — git's wildcard fetch of a non-existent branch exits
+1 silently (reproduced locally). The backup workflow never hit this because
+it passes no `ref` and gets the default branch. Fixed the same way: the
+input now defaults to empty, meaning the data repo's default branch, and a
+step before checkout resolves a non-empty ref through the API so the error
+names the ref. Redispatch with `data_ref` left empty.

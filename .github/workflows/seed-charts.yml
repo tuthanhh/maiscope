@@ -21,9 +21,12 @@ on:
         required: false
         default: master
       data_ref:
-        description: "Branch/SHA of the chart-text data repo to seed from"
+        description: >-
+          Branch/SHA of the chart-text data repo to seed from. Empty means
+          that repo's default branch, which is what you want unless you are
+          testing a branch of the data.
         required: false
-        default: main
+        default: ""
       allow_unmatched:
         description: >-
           Pass --allow-unmatched. Leave FALSE unless you know why: an unmatched
@@ -92,6 +95,25 @@ jobs:
       # pv.mp4 or bg.jpg, so the data repo carries ~17.5MB of chart text rather
       # than the ~16GB full song collection. That is what makes a plain git repo
       # viable here — no LFS, no object storage.
+      # A ref that does not exist fails inside actions/checkout as a bare
+      # "git failed with exit code 1", three times, with nothing on stderr —
+      # git's glob fetch of a missing branch is silent (run 2026-11-16, when
+      # this input defaulted to `main` and the data repo's branch is `master`).
+      # Name the branch in the error instead.
+      - name: Check the data ref exists
+        if: inputs.data_ref != ''
+        env:
+          GH_TOKEN: ${{ secrets.CHART_DATA_TOKEN }}
+          DATA_REPO: ${{ vars.CHART_DATA_REPO }}
+          DATA_REF: ${{ inputs.data_ref }}
+        run: |
+          set -euo pipefail
+          if ! gh api "repos/${DATA_REPO}/commits/${DATA_REF}" --jq .sha >/dev/null 2>&1; then
+            echo "::error::'${DATA_REF}' is not a branch, tag or commit of ${DATA_REPO} (or the token cannot read it). Leave data_ref empty for the default branch."
+            exit 1
+          fi
+          echo "data ref '${DATA_REF}' resolves"
+
       - name: Check out the chart text
         uses: actions/checkout@v4
         with:
@@ -250,7 +272,7 @@ jobs:
             echo "### seed-charts ${{ job.status }}"
             echo ""
             echo "- server ref: \`${{ inputs.ref }}\`"
-            echo "- data ref: \`${{ inputs.data_ref }}\`"
+            echo "- data ref: \`${{ inputs.data_ref || '(default branch)' }}\`"
             echo "- song directories found: \`${FLAT}\`"
             echo "- \`--allow-unmatched\`: \`${{ inputs.allow_unmatched }}\`"
             echo ""
