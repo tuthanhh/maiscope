@@ -1,6 +1,6 @@
 # Spec — Test foundation
 
-**Status:** active
+**Status:** shipped — 2026-11-17
 **Milestone:** v1.0
 **Parent:** [`production-v1`](../production-v1/spec.md)
 

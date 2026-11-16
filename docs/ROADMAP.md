@@ -5,11 +5,14 @@ document links here rather than restating it.
 
 ## Milestones
 
-### v1.0 — public web app, browse-only
+### v1.0 — public web app, browse-only — shipped 2026-11-17
 
-Catalog browsing, search and sheet details, deployed publicly. The visualizer is
-reachable on desktop and mobile browsers; mobile has known problems
-([ADR-0016](adr/0016-visualizer-ungated-on-mobile.md)).
+Catalog browsing, search and sheet details, deployed publicly at
+`maiscope.pages.dev` with the API on Fly and Neon. The visualizer is
+reachable on desktop and mobile browsers
+([ADR-0016](adr/0016-visualizer-ungated-on-mobile.md)). Two deferrals carry
+into v2, listed in [`production-v2`](work/production-v2/spec.md) under
+*Accepted, not solved*.
 
 Out of scope, deliberately: audio hosting, authentication, contributions, a
 desktop app, and a local SQLite cache. See [ADR-0002](adr/0002-chart-data-only-no-audio-hosting.md)
@@ -48,14 +51,14 @@ Unscheduled.
 
 | Feature | Status | Milestone |
 |---|---|---|
-| [production-v1](work/production-v1/spec.md) — umbrella | active | v1.0 |
+| [production-v1](work/production-v1/spec.md) — umbrella | shipped | v1.0 |
 | ├ [repo-hygiene](work/repo-hygiene/spec.md) | shipped | v1.0 |
 | ├ [server-restructure](work/server-restructure/spec.md) | shipped | v1.0 |
 | ├ [build-and-deploy](work/build-and-deploy/spec.md) | shipped | v1.0 |
-| ├ [prod-data-and-infra](work/prod-data-and-infra/spec.md) | active | v1.0 |
+| ├ [prod-data-and-infra](work/prod-data-and-infra/spec.md) | shipped | v1.0 |
 | ├ [catalog-sync](work/catalog-sync/spec.md) | shipped | v1.0 |
-| ├ [web-delivery](work/web-delivery/spec.md) | active | v1.0 |
-| ├ [test-foundation](work/test-foundation/spec.md) | active | v1.0 |
+| ├ [web-delivery](work/web-delivery/spec.md) | shipped | v1.0 |
+| ├ [test-foundation](work/test-foundation/spec.md) | shipped | v1.0 |
 | └ [api-pagination-header](work/api-pagination-header/spec.md) | shipped | v1.0 |
 | [production-v2](work/production-v2/spec.md) — umbrella | planned | v2.0 |
 | ├ [frontend-redesign](work/frontend-redesign/spec.md) | planned | v2.0 |

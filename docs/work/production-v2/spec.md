@@ -205,6 +205,13 @@ What does not:
 Each of these was put as a decision and deferred on purpose. They are listed so
 a later reader does not mistake a choice for an oversight.
 
+- **Inherited from v1.0** (shipped 2026-11-17): twelve chart folders name
+  songs the catalog does not hold, so `seed-charts.yml` still runs with
+  `allow_unmatched` and 12 is its known floor — `community-charts` decides
+  what a chart without a catalog song is. And two server tests
+  (`test-foundation` 02: the `/sync/delta` 409 path, the search pagination
+  boundary) were deferred to the API rewrite that replaces both endpoints.
+
 - **No ban or suspension in v2.** `users.role` stays `user | moderator | admin`.
   The only tools against a repeat abuser are per-song takedown and the reports
   queue. Deferred to a later release because `ALTER TABLE users ADD COLUMN

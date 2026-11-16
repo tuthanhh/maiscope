@@ -1,6 +1,6 @@
 # Spec — Production v1.0
 
-**Status:** active
+**Status:** shipped — 2026-11-17
 **Milestone:** v1.0
 
 Decision record from the 2026-09-09 grilling session. Every choice below was
@@ -110,3 +110,17 @@ original 29 is in no directory: `29 — docs sync` was dropped because the
 The "verify before relying on" list above is owned by
 [`prod-data-and-infra`](../prod-data-and-infra/spec.md) ticket 01 — treat those
 facts as its acceptance criteria rather than as background reading.
+
+## Shipped 2026-11-17
+
+Every child feature's tickets are done, dropped, or deferred with a written
+reason. Two deferrals carry into v2 and are listed there under *Accepted, not
+solved* so they are not mistaken for oversights:
+
+- `prod-data-and-infra` 04's acceptance criterion — seeding without
+  `--allow-unmatched` — holds only once the last 12 folders (songs the
+  catalog does not list) are either dropped from the chart-data repo or
+  given a home; `community-charts` decides what such a chart is.
+- `test-foundation` 02's two remaining tests (`/sync/delta` 409 path, search
+  pagination boundary) wait for the v2 API rewrite that replaces both
+  endpoints.
