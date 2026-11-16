@@ -16,8 +16,8 @@ directly to production — and the loss would be silent during a restore.
 **Blocked by:** 01
 
 **Status:** in-progress — `.github/workflows/backup-database.yml` written
-2026-09-13; **it never ran until 2026-11-16, see Comments**; restore rehearsed
-locally, not yet on Neon
+2026-09-13; **first backup committed 2026-11-16, see Comments**; restore
+rehearsed locally, not yet on Neon
 
 ## Assessment (2026-09-13)
 
@@ -126,3 +126,15 @@ does not apply to it and it disappears in 30 days.
 
 The push step now names this failure and the artifact fallback in its error,
 so the next 403 reads as "fix the token", not as a git mystery.
+
+**2026-11-16, 09:17Z — loop closed.** Run `43837972537`: success end to end.
+`backups/maiscope-20261116.dump` (8,388,287 bytes) is committed in
+`tuthanhh/maiscope-chart-data`. Dump step 25s, whole job just over 3 minutes
+including runner pickup. `CHART_DATA_TOKEN` was replaced at 09:16:50Z with a
+token that can write; the run in between (`43835668238`) failed at checkout
+with `Bad credentials` because the old token had already been invalidated
+before the new value was saved. Harmless, and a useful reminder: regenerate
+the token *after* noting where it is used, then save, then dispatch.
+
+**A production backup now exists**, and the nightly schedule will run from
+here. Ticket 01's "last night's dump" recovery window is true from tonight.

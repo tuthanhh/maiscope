@@ -11,7 +11,7 @@ Operational procedures for the production database. Owned by
 | `DATABASE_URL` | secret | `sync-catalog`, `deploy` (via Fly, the app), `seed-charts`, `backup-database` | Role `maiscope_app` (2026-09-16), **pooled** endpoint. DML only (`SELECT`/`INSERT`/`UPDATE`/`DELETE`) — no DDL. |
 | `MIGRATE_DATABASE_URL` | secret (Fly app only) | `deploy`'s `release_command` (`bin/migrate`) | Role `neondb_owner`, **direct** (non-pooled) endpoint. Migrations need DDL, and `MIGRATOR.run()`'s advisory lock needs a pinned backend connection that pooled mode does not guarantee. Falls back to `DATABASE_URL` if unset (`bin/migrate.rs`). |
 | `FLY_API_TOKEN` | secret | `deploy` | |
-| `CHART_DATA_TOKEN` | secret | `seed-charts`, `backup-database` | PAT or deploy key on the chart-data repo. Must have **write** — the backup pushes. **As of 2026-11-16 it is read-only** and the first backup push was refused with a 403; see [ticket 05](issues/05-backups.md). |
+| `CHART_DATA_TOKEN` | secret | `seed-charts`, `backup-database` | Fine-grained PAT, `Contents: Read and write` on the chart-data repo only. The backup pushes; seeding only reads. Replaced 2026-11-16 after the original turned out read-only ([ticket 05](issues/05-backups.md)). **Fine-grained tokens expire** — when this one does, both workflows fail at checkout with `Bad credentials`; regenerate, save here, redispatch. |
 | `CHART_DATA_REPO` | variable | `seed-charts`, `backup-database` | `owner/name` of the private chart-text repo. |
 | `CHART_DATA_SUBDIR` | variable | `seed-charts` | Path to the song tree inside that repo. Defaults to `songs`. |
 
@@ -52,6 +52,11 @@ holding production credentials.
 Rehearsed for real on 2026-09-13 against the 8.1MB dump of a fully seeded
 database. `pg_restore` reported no errors and the restored copy matched the
 source exactly: 1845 songs / 7348 sheets / 6571 charts.
+
+Backups have existed since 2026-11-16 (`backups/maiscope-20261116.dump` was the
+first). Before that date `backup-database.yml` skipped every run — see
+[ticket 05](issues/05-backups.md) — so there is nothing to restore from for
+any earlier point.
 
 ```sh
 # 1. Get the dump. Backups live in the chart-data repo under backups/,
@@ -96,13 +101,6 @@ the three-attempt debugging trail.
 
 Still open:
 
-- **No backup is in the chart-data repo yet.** `backup-database.yml` skipped
-  every scheduled run for two months (job-level `if` on an environment-scoped
-  variable); fixed 2026-11-16. The first dispatch then dumped successfully
-  (8.4MB, 26s) but the push was refused — `CHART_DATA_TOKEN` is read-only.
-  That dump lives only as run artifact `maiscope-dump-20261116`, expiring
-  2026-12-16. Needs a token with write access and one more dispatch. See
-  [ticket 05](issues/05-backups.md).
 - **The current credential was pasted into a chat transcript** (predates
   2026-09-16's work) and should be rotated.
 - **Restore has not been rehearsed into a real Neon branch**, only locally —
