@@ -170,10 +170,35 @@ applied. **Measure:** same chart, `?debug&lead=0`, `80`, `120`, `160`, `200`;
 report the smallest value at which the tick lands *on* the ring hit. That
 number, with the output path it was measured on, decides the mobile default.
 
-**Fault (c) — not yet attributed.** Two of its plausible causes just changed:
-a clipped transient reads as "missing" when it is really a smear, and the
-timer-driven trigger could skip a hit whose sprite timer finished on a frame
-that was never rendered. Re-measure after (a) and (b) before chasing it.
+**Fault (c) — still present after (a) and (b)** (maintainer, 2026-11-16:
+"now it missing hit, but better offset"). One cause found in the code:
+`handle_guide_sounds` counted every hit that arrived in a frame and played
+**one** sound at chord volume. At 60 FPS two notes 16ms apart — 16th notes
+past 230 BPM, or any pseudo-EACH — land in the same frame and became one
+sound; at the earlier 23 FPS anything inside 45ms did. In a dense stream that
+is exactly "hits go missing". Fixed: the scheduler emits one message per
+**hit time** carrying its note count, and the handler plays one sound per
+message. A chord is still one louder sound; two distinct times are two
+sounds, same frame or not. Regression test
+`distinct_hit_times_in_one_frame_are_distinct_sounds`.
+
+What this does *not* fix: two sounds due in the same frame now start on the
+same audio buffer, so they are distinct but up to one frame closer together
+than written. bevy_kira_audio exposes no delayed start (kira has
+`StartTime::Delayed`; the wrapper does not surface it), so sub-frame
+placement would mean driving kira directly. Not worth it until (c) is
+re-measured with this fix and a specific pattern is named — e.g. "every
+second note of a 16th run", versus "random".
+
+**Lead, chosen: option B — derived from the browser.** `AudioContext.baseLatency`
+and `outputLatency` are read from the context kira created (captured by the
+audio-unlock wrapper), cpal's two 2048-frame buffers are added as 1.5 buffers
+at the context's sample rate, and the sum is pushed to the engine whenever it
+changes (re-read every 2s: the context reports 0 until a gesture starts it,
+and `outputLatency` jumps when Bluetooth connects). The overlay's last line
+shows the breakdown; `?lead=<ms>` overrides it. **Validation still owed:** the
+number the ear picked in the manual sweep versus what the formula produces,
+and on which output path.
 
 **Why the trigger moved to the clock.** With a lead the sound must be asked
 for before the sprite reaches the ring, which the sprite's own timer cannot

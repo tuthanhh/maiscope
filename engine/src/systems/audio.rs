@@ -3,9 +3,16 @@ use crate::systems::component::{ChartEvent, NoteKind, TimedEvent};
 use bevy::prelude::*;
 use bevy_kira_audio::prelude::*;
 
-// 1. Derive Message instead of Event
-#[derive(Message)]
-pub struct PlayGuideSoundMessage;
+/// One guide sound to play: every audible note that shares a hit time is one
+/// message with `hits` counting them, so a chord is one louder sound and two
+/// notes 16ms apart are two sounds — even when both fall in the same frame.
+#[derive(Message, Debug, Clone, Copy, PartialEq)]
+pub struct PlayGuideSoundMessage {
+    /// Chart time of the hit, seconds.
+    pub time: f64,
+    /// Audible notes at that time.
+    pub hits: usize,
+}
 
 #[derive(Resource)]
 pub struct Bgm;
@@ -79,26 +86,38 @@ pub struct GuideScheduler {
 
 impl GuideScheduler {
     /// Advance the cursor to `horizon` (chart seconds, already including any
-    /// lead) and return how many audible hits became due. A horizon that
+    /// lead) and return the sounds that became due: one per hit time that
+    /// has at least one audible note, carrying the count. A horizon that
     /// moved backwards is a rewind: the cursor restarts from the top so the
     /// same notes sound again on a restart.
-    pub fn advance(&mut self, events: &[TimedEvent], horizon: f64) -> usize {
+    ///
+    /// One entry per *time*, not one per frame: at 60 FPS two notes 16ms
+    /// apart can become due in the same frame, and collapsing them into one
+    /// sound is what "missing hits" sounds like in a dense stream
+    /// (mobile-webview-spike 02, P2 fault c).
+    pub fn advance(&mut self, events: &[TimedEvent], horizon: f64) -> Vec<PlayGuideSoundMessage> {
         if horizon < self.last_horizon - 1e-3 {
             self.next = 0;
         }
         self.last_horizon = horizon;
 
-        let mut hits = 0;
+        let mut due = Vec::new();
         while let Some(event) = events.get(self.next) {
             if event.time > horizon {
                 break;
             }
             if let ChartEvent::NoteGroup(notes) = &event.event {
-                hits += notes.iter().filter(|n| is_audible(&n.kind)).count();
+                let hits = notes.iter().filter(|n| is_audible(&n.kind)).count();
+                if hits > 0 {
+                    due.push(PlayGuideSoundMessage {
+                        time: event.time,
+                        hits,
+                    });
+                }
             }
             self.next += 1;
         }
-        hits
+        due
     }
 
     /// Forget the chart: the next `advance` starts from the first event.
@@ -227,10 +246,10 @@ pub fn tick_metronome(
     }
 }
 
-/// Fire guide sounds for every audible note whose hit time has come, judged
-/// against the chart clock plus [`AudioLead`]. Runs after `tick_clock` in the
-/// same chain as the metronome. Each hit is one message so
-/// `handle_guide_sounds` can still count a chord.
+/// Fire guide sounds for every hit time that has come, judged against the
+/// chart clock plus [`AudioLead`]. Runs after `tick_clock` in the same chain
+/// as the metronome. One message per hit time; `handle_guide_sounds` plays
+/// one sound per message.
 pub fn schedule_guide_sounds(
     chart: Res<crate::systems::chart_playback::ChartPlayback>,
     lead: Res<AudioLead>,
@@ -241,9 +260,8 @@ pub fn schedule_guide_sounds(
         return;
     }
     let horizon = chart.elapsed_time() + lead.chart_secs(chart.chart_speed());
-    let hits = scheduler.advance(chart.timed_events(), horizon);
-    for _ in 0..hits {
-        messages.write(PlayGuideSoundMessage);
+    for sound in scheduler.advance(chart.timed_events(), horizon) {
+        messages.write(sound);
     }
 }
 
@@ -272,25 +290,23 @@ pub fn start_bgm(
 }
 
 pub fn handle_guide_sounds(
-    // 2. Use MessageReader
     mut messages: MessageReader<PlayGuideSoundMessage>,
     sfx_channel: Res<AudioChannel<Sfx>>,
     // Optional: absent if the guide SFX failed to decode at startup.
     guide_sfx: Option<Res<GuideSfx>>,
 ) {
-    let hit_count = messages.read().count();
-    if hit_count == 0 {
-        return;
-    }
     let Some(guide_sfx) = guide_sfx else {
+        messages.clear();
         return;
     };
 
-    // Louder for chords (more simultaneous hits), capped below 0 dB so a
-    // full-scale sample never clips.
-    sfx_channel
-        .play(guide_sfx.0.clone())
-        .with_volume(guide_sfx_db(hit_count));
+    // One sound per hit time. Louder for chords (more simultaneous hits),
+    // capped below 0 dB so a full-scale sample never clips.
+    for sound in messages.read() {
+        sfx_channel
+            .play(guide_sfx.0.clone())
+            .with_volume(guide_sfx_db(sound.hits));
+    }
 }
 
 #[cfg(test)]
@@ -325,6 +341,11 @@ mod tests {
         }
     }
 
+    /// Total audible hits across the sounds an `advance` returned.
+    fn hits(due: &[PlayGuideSoundMessage]) -> usize {
+        due.iter().map(|s| s.hits).sum()
+    }
+
     /// Both SFX files peak at 0 dBFS and kira hard-clamps the mix, so the
     /// only non-clipping guide level is a negative one — for one hit and for
     /// the loudest chord alike. This is the P2 fault (b) regression test.
@@ -348,10 +369,39 @@ mod tests {
     fn each_hit_fires_once() {
         let events = vec![group(0.5, vec![NoteKind::Tap(1)]), rest(1.0)];
         let mut s = GuideScheduler::default();
-        assert_eq!(s.advance(&events, 0.4), 0);
-        assert_eq!(s.advance(&events, 0.5), 1);
-        assert_eq!(s.advance(&events, 0.6), 0);
-        assert_eq!(s.advance(&events, 5.0), 0, "rests are silent");
+        assert_eq!(hits(&s.advance(&events, 0.4)), 0);
+        assert_eq!(
+            s.advance(&events, 0.5),
+            vec![PlayGuideSoundMessage { time: 0.5, hits: 1 }]
+        );
+        assert_eq!(hits(&s.advance(&events, 0.6)), 0);
+        assert_eq!(hits(&s.advance(&events, 5.0)), 0, "rests are silent");
+    }
+
+    /// Two hits 16ms apart that both become due in one frame are two sounds,
+    /// not one louder sound. This is the P2 fault (c) regression test: the
+    /// old per-frame count collapsed them, which in a dense stream reads as
+    /// hits going missing.
+    #[test]
+    fn distinct_hit_times_in_one_frame_are_distinct_sounds() {
+        let events = vec![
+            group(0.500, vec![NoteKind::Tap(1)]),
+            group(0.516, vec![NoteKind::Tap(2), NoteKind::Tap(3)]),
+        ];
+        let mut s = GuideScheduler::default();
+        assert_eq!(
+            s.advance(&events, 0.52),
+            vec![
+                PlayGuideSoundMessage {
+                    time: 0.500,
+                    hits: 1
+                },
+                PlayGuideSoundMessage {
+                    time: 0.516,
+                    hits: 2
+                },
+            ]
+        );
     }
 
     /// The lead is applied by the caller as a larger horizon: a 100ms lead
@@ -361,8 +411,8 @@ mod tests {
         let events = vec![group(0.5, vec![NoteKind::Tap(1)])];
         let lead = AudioLead { wall_ms: 100.0 };
         let mut s = GuideScheduler::default();
-        assert_eq!(s.advance(&events, 0.39 + lead.chart_secs(1.0)), 0);
-        assert_eq!(s.advance(&events, 0.40 + lead.chart_secs(1.0)), 1);
+        assert_eq!(hits(&s.advance(&events, 0.39 + lead.chart_secs(1.0))), 0);
+        assert_eq!(hits(&s.advance(&events, 0.40 + lead.chart_secs(1.0))), 1);
         // At half speed, 100ms of wall is 50ms of chart.
         assert!((lead.chart_secs(0.5) - 0.05).abs() < 1e-9);
     }
@@ -376,10 +426,10 @@ mod tests {
             group(1.0, vec![NoteKind::Tap(2)]),
         ];
         let mut s = GuideScheduler::default();
-        assert_eq!(s.advance(&events, 1.0), 2);
-        assert_eq!(s.advance(&events, 0.0), 0);
-        assert_eq!(s.advance(&events, 0.5), 1, "first hit sounds again");
-        assert_eq!(s.advance(&events, 1.0), 1);
+        assert_eq!(hits(&s.advance(&events, 1.0)), 2);
+        assert_eq!(hits(&s.advance(&events, 0.0)), 0);
+        assert_eq!(hits(&s.advance(&events, 0.5)), 1, "first hit sounds again");
+        assert_eq!(hits(&s.advance(&events, 1.0)), 1);
     }
 
     /// Chords count every audible note; slides contribute nothing, matching
@@ -422,7 +472,11 @@ mod tests {
             ],
         )];
         let mut s = GuideScheduler::default();
-        assert_eq!(s.advance(&events, 0.0), 4);
+        assert_eq!(
+            s.advance(&events, 0.0),
+            vec![PlayGuideSoundMessage { time: 0.0, hits: 4 }],
+            "one chord, one sound, four hits"
+        );
     }
 
     /// Loading a new chart resets the cursor even if the clock happens to
@@ -431,8 +485,8 @@ mod tests {
     fn reset_forgets_the_cursor() {
         let events = vec![group(0.0, vec![NoteKind::Tap(1)])];
         let mut s = GuideScheduler::default();
-        assert_eq!(s.advance(&events, 0.0), 1);
+        assert_eq!(hits(&s.advance(&events, 0.0)), 1);
         s.reset();
-        assert_eq!(s.advance(&events, 0.0), 1);
+        assert_eq!(hits(&s.advance(&events, 0.0)), 1);
     }
 }
