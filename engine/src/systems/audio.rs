@@ -1,4 +1,5 @@
 // systems/audio.rs
+use crate::systems::component::{ChartEvent, NoteKind, TimedEvent};
 use bevy::prelude::*;
 use bevy_kira_audio::prelude::*;
 
@@ -19,14 +20,103 @@ const GUIDE_TAP_SFX: &[u8] = include_bytes!("../../assets/system_sounds/answer.w
 /// Metronome click, baked in like the guide SFX.
 const METRONOME_SFX: &[u8] = include_bytes!("../../assets/system_sounds/clock.wav");
 
-/// BGM is ducked below the hit SFX so the guide taps cut through.
-const BGM_VOLUME: f32 = 0.4;
-/// Base guide-SFX volume, and how much each extra simultaneous hit adds, capped.
-const GUIDE_SFX_VOLUME: f32 = 2.0;
-const GUIDE_SFX_PER_HIT: f32 = 0.1;
-const GUIDE_SFX_VOLUME_MAX: f32 = 1.5;
-/// Metronome click volume.
-const METRONOME_VOLUME: f32 = 0.6;
+// Volumes are **decibels**, not amplitudes. bevy_kira_audio 0.25's
+// `with_volume` takes kira's `Decibels`, and a bare `f32` converts 1:1 — so the
+// old `0.4` "duck" was +0.4 dB and the old `1.5` guide gain was +1.5 dB. Both
+// SFX files peak at exactly 0 dBFS, and kira's renderer hard-clamps the mix at
+// ±1.0, so any positive value here clipped every single hit. That is what the
+// guide taps sounded like through a phone speaker (mobile-webview-spike 02,
+// P2 fault b). 0 dB is unity; everything below stays negative on purpose.
+/// BGM sits well under the hit SFX so the guide taps cut through.
+const BGM_DB: f32 = -8.0;
+/// Base guide-SFX level, how much each extra simultaneous hit adds, and the
+/// ceiling. The ceiling is negative: a chord must not clip either.
+const GUIDE_SFX_DB: f32 = -6.0;
+const GUIDE_SFX_PER_HIT_DB: f32 = 0.5;
+const GUIDE_SFX_MAX_DB: f32 = -3.0;
+/// Metronome click level.
+const METRONOME_DB: f32 = -8.0;
+
+// Compile-time: no fixed level may ever be at or above unity again.
+const _: () = assert!(BGM_DB < 0.0 && METRONOME_DB < 0.0 && GUIDE_SFX_MAX_DB < 0.0);
+
+/// Guide-SFX level for `hit_count` simultaneous hits: louder for chords, never
+/// above [`GUIDE_SFX_MAX_DB`].
+fn guide_sfx_db(hit_count: usize) -> f32 {
+    let extra = hit_count.saturating_sub(1) as f32 * GUIDE_SFX_PER_HIT_DB;
+    (GUIDE_SFX_DB + extra).min(GUIDE_SFX_MAX_DB)
+}
+
+/// How far ahead of the visual hit a guide sound is *requested*, in wall
+/// milliseconds. Zero on desktop. On the web, cpal's `webaudio` backend
+/// double-buffers 2048 frames (43ms each at 48kHz) and refills from the main
+/// thread, and Android adds its own output latency on top, so a sound asked
+/// for at the hit lands audibly late (P2 fault a). Set from JS
+/// (`set_audio_lead_ms`) while the right value is being measured.
+#[derive(Resource, Default)]
+pub struct AudioLead {
+    pub wall_ms: f32,
+}
+
+impl AudioLead {
+    /// The lead in chart-time seconds — the units of `elapsed_time` and
+    /// `TimedEvent::time`. Wall time scales by `chart_speed` to become chart
+    /// time, so a 100ms lead at half speed is 50ms of chart.
+    pub fn chart_secs(&self, chart_speed: f32) -> f64 {
+        self.wall_ms as f64 / 1000.0 * chart_speed as f64
+    }
+}
+
+/// Cursor over the chart's timed events that fires guide sounds from the
+/// **clock**, not from the note sprites' timers. One place decides when a hit
+/// is audible, it can run ahead of the visuals by [`AudioLead`], and it does
+/// not depend on an entity reaching the end of a `Timer` on the right frame.
+#[derive(Resource, Default)]
+pub struct GuideScheduler {
+    next: usize,
+    last_horizon: f64,
+}
+
+impl GuideScheduler {
+    /// Advance the cursor to `horizon` (chart seconds, already including any
+    /// lead) and return how many audible hits became due. A horizon that
+    /// moved backwards is a rewind: the cursor restarts from the top so the
+    /// same notes sound again on a restart.
+    pub fn advance(&mut self, events: &[TimedEvent], horizon: f64) -> usize {
+        if horizon < self.last_horizon - 1e-3 {
+            self.next = 0;
+        }
+        self.last_horizon = horizon;
+
+        let mut hits = 0;
+        while let Some(event) = events.get(self.next) {
+            if event.time > horizon {
+                break;
+            }
+            if let ChartEvent::NoteGroup(notes) = &event.event {
+                hits += notes.iter().filter(|n| is_audible(&n.kind)).count();
+            }
+            self.next += 1;
+        }
+        hits
+    }
+
+    /// Forget the chart: the next `advance` starts from the first event.
+    pub fn reset(&mut self) {
+        *self = Self::default();
+    }
+}
+
+/// Which notes make a guide sound when they reach the ring. Slides are
+/// silent — their head star arrives like a tap, but the engine has never
+/// sounded it, and keeping that here keeps the clock-driven path identical
+/// to the timer-driven one it replaced.
+fn is_audible(kind: &NoteKind) -> bool {
+    !matches!(
+        kind,
+        NoteKind::Slide { .. } | NoteKind::HeadlessSlide { .. }
+    )
+}
 /// Shortest comfortable gap between metronome clicks, in **wall** seconds. The
 /// beat interval is doubled (1, 2, 4, 8… beats per click) until it clears this,
 /// so fast songs click once per bar and slow songs once per beat — always easy
@@ -87,6 +177,7 @@ pub fn load_guide_sfx(mut commands: Commands, mut audio_sources: ResMut<Assets<A
 /// the clock rewinds (restart).
 pub fn tick_metronome(
     chart: Res<crate::systems::chart_playback::ChartPlayback>,
+    lead: Res<AudioLead>,
     mut metro: ResMut<Metronome>,
     sfx_channel: Res<AudioChannel<Sfx>>,
     metronome_sfx: Option<Res<MetronomeSfx>>,
@@ -100,7 +191,8 @@ pub fn tick_metronome(
         return;
     }
 
-    let elapsed = chart.elapsed_time();
+    // Clicks are requested `lead` ahead so they *land* on the beat (P2).
+    let elapsed = chart.elapsed_time() + lead.chart_secs(chart.chart_speed());
     let delta = elapsed - metro.last_elapsed;
     metro.last_elapsed = elapsed;
 
@@ -131,9 +223,27 @@ pub fn tick_metronome(
     let prev = metro.phase;
     metro.phase += delta / beat;
     if metro.phase.floor() > prev.floor() {
-        sfx_channel
-            .play(sfx.0.clone())
-            .with_volume(METRONOME_VOLUME);
+        sfx_channel.play(sfx.0.clone()).with_volume(METRONOME_DB);
+    }
+}
+
+/// Fire guide sounds for every audible note whose hit time has come, judged
+/// against the chart clock plus [`AudioLead`]. Runs after `tick_clock` in the
+/// same chain as the metronome. Each hit is one message so
+/// `handle_guide_sounds` can still count a chord.
+pub fn schedule_guide_sounds(
+    chart: Res<crate::systems::chart_playback::ChartPlayback>,
+    lead: Res<AudioLead>,
+    mut scheduler: ResMut<GuideScheduler>,
+    mut messages: MessageWriter<PlayGuideSoundMessage>,
+) {
+    if !chart.is_playing() {
+        return;
+    }
+    let horizon = chart.elapsed_time() + lead.chart_secs(chart.chart_speed());
+    let hits = scheduler.advance(chart.timed_events(), horizon);
+    for _ in 0..hits {
+        messages.write(PlayGuideSoundMessage);
     }
 }
 
@@ -155,7 +265,7 @@ pub fn start_bgm(
     // rate matches the chart timing from the first frame.
     let handle = bgm_channel
         .play(bgm_source.0.clone())
-        .with_volume(BGM_VOLUME)
+        .with_volume(BGM_DB)
         .with_playback_rate(chart.chart_speed() as f64)
         .handle();
     commands.insert_resource(BgmInstance(handle));
@@ -176,11 +286,153 @@ pub fn handle_guide_sounds(
         return;
     };
 
-    // Louder for chords (more simultaneous hits), capped so it never clips.
-    let volume_multiplier = 1.0 + (hit_count as f32 - 1.0) * GUIDE_SFX_PER_HIT;
-    let final_volume = (GUIDE_SFX_VOLUME * volume_multiplier).min(GUIDE_SFX_VOLUME_MAX);
-
+    // Louder for chords (more simultaneous hits), capped below 0 dB so a
+    // full-scale sample never clips.
     sfx_channel
         .play(guide_sfx.0.clone())
-        .with_volume(final_volume);
+        .with_volume(guide_sfx_db(hit_count));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::systems::component::{Note, SlideSegment};
+
+    fn group(time: f64, kinds: Vec<NoteKind>) -> TimedEvent {
+        TimedEvent {
+            time,
+            event: ChartEvent::NoteGroup(
+                kinds
+                    .into_iter()
+                    .map(|kind| Note {
+                        is_break: false,
+                        is_firework: false,
+                        is_ex: false,
+                        offset_ms: 0,
+                        kind,
+                    })
+                    .collect(),
+            ),
+            bpm: 120.0,
+        }
+    }
+
+    fn rest(time: f64) -> TimedEvent {
+        TimedEvent {
+            time,
+            event: ChartEvent::Rest,
+            bpm: 120.0,
+        }
+    }
+
+    /// Both SFX files peak at 0 dBFS and kira hard-clamps the mix, so the
+    /// only non-clipping guide level is a negative one — for one hit and for
+    /// the loudest chord alike. This is the P2 fault (b) regression test.
+    #[test]
+    fn guide_level_never_reaches_unity() {
+        assert_eq!(guide_sfx_db(1), GUIDE_SFX_DB);
+        assert!(guide_sfx_db(2) > guide_sfx_db(1), "a chord is louder");
+        for hits in 1..=16 {
+            assert!(
+                guide_sfx_db(hits) < 0.0,
+                "{hits} hits: {}",
+                guide_sfx_db(hits)
+            );
+            assert!(guide_sfx_db(hits) <= GUIDE_SFX_MAX_DB);
+        }
+    }
+
+    /// A hit sounds exactly once, on the frame its time is reached, and not
+    /// again on later frames.
+    #[test]
+    fn each_hit_fires_once() {
+        let events = vec![group(0.5, vec![NoteKind::Tap(1)]), rest(1.0)];
+        let mut s = GuideScheduler::default();
+        assert_eq!(s.advance(&events, 0.4), 0);
+        assert_eq!(s.advance(&events, 0.5), 1);
+        assert_eq!(s.advance(&events, 0.6), 0);
+        assert_eq!(s.advance(&events, 5.0), 0, "rests are silent");
+    }
+
+    /// The lead is applied by the caller as a larger horizon: a 100ms lead
+    /// makes the 0.5s hit due at 0.4s. The scheduler itself is lead-agnostic.
+    #[test]
+    fn a_larger_horizon_fires_early() {
+        let events = vec![group(0.5, vec![NoteKind::Tap(1)])];
+        let lead = AudioLead { wall_ms: 100.0 };
+        let mut s = GuideScheduler::default();
+        assert_eq!(s.advance(&events, 0.39 + lead.chart_secs(1.0)), 0);
+        assert_eq!(s.advance(&events, 0.40 + lead.chart_secs(1.0)), 1);
+        // At half speed, 100ms of wall is 50ms of chart.
+        assert!((lead.chart_secs(0.5) - 0.05).abs() < 1e-9);
+    }
+
+    /// Restart rewinds the clock; the scheduler notices the horizon moving
+    /// backwards and replays from the first event.
+    #[test]
+    fn rewind_replays_from_the_top() {
+        let events = vec![
+            group(0.5, vec![NoteKind::Tap(1)]),
+            group(1.0, vec![NoteKind::Tap(2)]),
+        ];
+        let mut s = GuideScheduler::default();
+        assert_eq!(s.advance(&events, 1.0), 2);
+        assert_eq!(s.advance(&events, 0.0), 0);
+        assert_eq!(s.advance(&events, 0.5), 1, "first hit sounds again");
+        assert_eq!(s.advance(&events, 1.0), 1);
+    }
+
+    /// Chords count every audible note; slides contribute nothing, matching
+    /// what the timer-driven path sounded (taps, holds, touches — never a
+    /// slide head or a headless track).
+    #[test]
+    fn chords_count_audible_notes_and_slides_are_silent() {
+        let slide = NoteKind::Slide {
+            head_button: 1,
+            segments: Vec::<SlideSegment>::new(),
+            shared_duration: false,
+            plain_head: false,
+        };
+        let headless = NoteKind::HeadlessSlide {
+            start_button: 1,
+            segments: Vec::new(),
+            shared_duration: false,
+        };
+        let events = vec![group(
+            0.0,
+            vec![
+                NoteKind::Tap(1),
+                NoteKind::Touch {
+                    value: 1,
+                    group: 'C',
+                },
+                NoteKind::TapHold {
+                    button: 2,
+                    duration: crate::systems::component::Duration::Simple {
+                        divider: 4,
+                        count: 1,
+                    },
+                },
+                NoteKind::SlideStar {
+                    button: 3,
+                    rotates: false,
+                },
+                slide,
+                headless,
+            ],
+        )];
+        let mut s = GuideScheduler::default();
+        assert_eq!(s.advance(&events, 0.0), 4);
+    }
+
+    /// Loading a new chart resets the cursor even if the clock happens to
+    /// read the same value as before.
+    #[test]
+    fn reset_forgets_the_cursor() {
+        let events = vec![group(0.0, vec![NoteKind::Tap(1)])];
+        let mut s = GuideScheduler::default();
+        assert_eq!(s.advance(&events, 0.0), 1);
+        s.reset();
+        assert_eq!(s.advance(&events, 0.0), 1);
+    }
 }

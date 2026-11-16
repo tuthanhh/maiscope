@@ -94,9 +94,11 @@ pub fn apply_commands(
     notes: Query<Entity, With<NoteTiming>>,
     camera: Query<Entity, With<crate::plugins::camera::MainCamera>>,
     mut window: Query<&mut Window, With<bevy::window::PrimaryWindow>>,
+    mut audio_lead: ResMut<crate::systems::audio::AudioLead>,
 ) {
     for cmd in crate::wasm_bridge::take_commands() {
         match cmd {
+            crate::wasm_bridge::EngineCommand::SetAudioLeadMs(ms) => audio_lead.wall_ms = ms,
             // Diagnostics (mobile-webview-spike 02). Msaa is a camera
             // component; inserting replaces the default Sample4.
             crate::wasm_bridge::EngineCommand::SetMsaa(samples) => {

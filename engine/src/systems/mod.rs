@@ -71,6 +71,7 @@ fn tick_clock(
 fn ingest_songs(
     mut commands: Commands,
     mut playback: ResMut<ChartPlayback>,
+    mut guide_scheduler: ResMut<audio::GuideScheduler>,
     mut audio_sources: ResMut<Assets<AudioSource>>,
     // Every note currently on screen, so a fresh chart can clear the old one.
     notes: Query<Entity, With<visual::NoteTiming>>,
@@ -93,6 +94,8 @@ fn ingest_songs(
             commands.entity(entity).despawn();
         }
         playback.load_chart(events);
+        // The guide-sound cursor indexes the old event list; start it over.
+        guide_scheduler.reset();
 
         // The song BGM is optional — a chart with no audio plays silently. The
         // guide SFX is loaded separately at startup, so hit sounds still play.
@@ -117,6 +120,8 @@ pub fn register_systems(app: &mut App) {
         .init_resource::<frame_stats::FrameStats>()
         // Every state, every frame: a stall while loading is still a stall.
         .add_systems(Update, frame_stats::sample_frame)
+        .init_resource::<audio::AudioLead>()
+        .init_resource::<audio::GuideScheduler>()
         .insert_resource(audio::Metronome {
             enabled: true,
             ..Default::default()
@@ -135,10 +140,16 @@ pub fn register_systems(app: &mut App) {
         .add_systems(Update, ingest_songs)
         .add_systems(Update, check_if_ready.run_if(in_state(AppState::Loading)))
         .add_systems(OnEnter(AppState::Playing), audio::start_bgm)
-        // tick_clock must advance the clock before next_event / metronome read it.
+        // tick_clock must advance the clock before next_event / metronome /
+        // guide scheduler read it.
         .add_systems(
             Update,
-            (tick_clock, visual::next_event, audio::tick_metronome)
+            (
+                tick_clock,
+                visual::next_event,
+                audio::tick_metronome,
+                audio::schedule_guide_sounds,
+            )
                 .chain()
                 .run_if(in_state(AppState::Playing)),
         )

@@ -24,7 +24,9 @@ measured (2026-11-16)
 - **Symptom:** notes, slides and touches all render and arrive **on time**,
   but motion is jerky and the guide sounds stutter — "especially the sound".
 - **Severity:** degrades. A chart can be followed; it cannot be enjoyed.
-- **Status:** cause not yet established. Instrumented, see below.
+- **Status:** **fixed** — `Msaa::Off` on the main camera (commit `be0d8a3`),
+  after the measurements below isolated multisampling as the entire cost.
+  Awaiting a redeploy to confirm on the phone without the `?msaa=1` toggle.
 
 **What is known from the code, before measuring.** "On time" rules out the
 chart clock: it advances on Bevy's virtual delta
@@ -138,6 +140,46 @@ both are small enough to go unnoticed.
 Also on the table: `GUIDE_SFX_VOLUME` is 2.0, capped at 1.5 — a gain above
 unity on a short transient, through a phone speaker, is a plausible crackle on
 its own; and Bluetooth output adds 100–300ms that no engine change can remove.
+
+**Characterised, 2026-11-16:** all three of (a) late, (b) crackle/distortion,
+(c) missing in dense sections; both the hit sound and the metronome click.
+Output path (speaker / wired / Bluetooth) not yet stated.
+
+**Fault (b) — root cause found and fixed.** Two facts met: both SFX files
+peak at exactly **0 dBFS** (`answer.wav`, `clock.wav`, measured), and
+bevy_kira_audio 0.25's `with_volume` takes kira's `Decibels`, into which a bare
+`f32` converts 1:1. So `with_volume(1.5)` was **+1.5 dB**, not "150%", on a
+full-scale sample; kira's renderer hard-clamps the mix at ±1.0
+(`backend/renderer.rs`), and every hit clipped. The "duck" `BGM_VOLUME: 0.4`
+was likewise +0.4 dB — louder, not quieter. Fixed: every level is now a
+negative decibel constant (`GUIDE_SFX_DB` −6, chord ceiling −3, metronome and
+BGM −8), a compile-time assertion forbids a level at or above unity, and
+`guide_sfx_db` has a test for the chord ceiling. The same clipping existed on
+desktop; desktop speakers were just kinder to it.
+
+**Fault (a) — mechanism understood, magnitude unmeasured.** The latency is
+structural (two 43ms buffers, main-thread refill, Android output latency) and
+cannot be removed from inside the engine; it can be cancelled by asking for
+the sound early. Guide sounds now fire from the **chart clock** through
+`audio::schedule_guide_sounds` — a cursor over the timed events, replacing the
+three `PlayGuideSoundMessage` writes that fired from sprite timers in
+`visual/movement/` — and both that scheduler and the metronome run `AudioLead`
+milliseconds ahead. The lead defaults to 0 (desktop behaviour unchanged) and
+is set from the URL with `?lead=<ms>`; the overlay's last line shows the value
+applied. **Measure:** same chart, `?debug&lead=0`, `80`, `120`, `160`, `200`;
+report the smallest value at which the tick lands *on* the ring hit. That
+number, with the output path it was measured on, decides the mobile default.
+
+**Fault (c) — not yet attributed.** Two of its plausible causes just changed:
+a clipped transient reads as "missing" when it is really a smear, and the
+timer-driven trigger could skip a hit whose sprite timer finished on a frame
+that was never rendered. Re-measure after (a) and (b) before chasing it.
+
+**Why the trigger moved to the clock.** With a lead the sound must be asked
+for before the sprite reaches the ring, which the sprite's own timer cannot
+do. A cursor over `timed_events()` is the metronome's existing pattern, fires
+once per hit regardless of frame rate, replays on rewind, and keeps slides
+silent exactly as before (`is_audible`). Five tests cover it.
 
 ## Done when
 

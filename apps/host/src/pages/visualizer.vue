@@ -20,6 +20,7 @@ import {
     setNoteSpeed,
     setMsaa,
     setRenderScale,
+    setAudioLeadMs,
     type FrameStats,
 } from "~/composables/useEngine";
 import { resumeAudio } from "~/utils/audioUnlock";
@@ -228,20 +229,26 @@ const statsLines = computed(() => {
         `${s.fps.toFixed(1)} fps  avg ${s.avg_ms.toFixed(1)}ms  max ${s.max_ms.toFixed(0)}ms`,
         `slow >33ms: ${s.slow_frames}/${s.frames}  stalled >100ms: ${s.stalled_frames}`,
         `canvas ${s.canvas} @ ${s.scale_factor.toFixed(2)}x  dpr ${window.devicePixelRatio}  msaa ${s.msaa}`,
+        `audio lead ${s.audio_lead_ms}ms`,
     ];
 });
 
-// Render A/B toggles, query-only and applied once the engine is up:
-//   ?msaa=1   MSAA off (Bevy defaults to 4)       ?msaa=4  back to default
+// A/B toggles, query-only and applied once the engine is up:
+//   ?msaa=4   MSAA back on (the engine now defaults to off)
 //   ?scale=1  render at CSS pixels, ignoring dpr   ?scale=0 back to dpr
-// Not sticky on purpose: an experiment should not outlive its URL. The overlay's
-// third line shows the values the engine actually applied.
+//   ?lead=120 request guide sounds 120ms before the visual hit
+// Not sticky on purpose: an experiment should not outlive its URL. The overlay
+// shows the values the engine actually applied.
 function applyRenderToggles(): void {
     const msaa = Number(route.query.msaa);
     if (Number.isInteger(msaa) && msaa >= 1) setMsaa(msaa);
     const scale = Number(route.query.scale);
     if (Number.isFinite(scale) && scale >= 0 && route.query.scale !== undefined) {
         setRenderScale(scale);
+    }
+    const lead = Number(route.query.lead);
+    if (Number.isFinite(lead) && lead >= 0 && route.query.lead !== undefined) {
+        setAudioLeadMs(lead);
     }
 }
 

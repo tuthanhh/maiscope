@@ -52,6 +52,9 @@ pub enum EngineCommand {
     /// Diagnostics: override the window scale factor (`None` = back to the
     /// browser's devicePixelRatio). `Some(1.0)` renders at CSS pixels.
     SetRenderScale(Option<f32>),
+    /// How many wall milliseconds ahead of the visual hit guide sounds and
+    /// metronome clicks are requested (`systems::audio::AudioLead`).
+    SetAudioLeadMs(f32),
 }
 
 static COMMANDS: Lazy<Mutex<Vec<EngineCommand>>> = Lazy::new(|| Mutex::new(Vec::new()));
@@ -114,6 +117,15 @@ pub fn set_msaa(samples: u32) {
 pub fn set_render_scale(scale: f32) {
     let override_ = if scale > 0.0 { Some(scale) } else { None };
     push_command(EngineCommand::SetRenderScale(override_));
+}
+
+/// Audio lead in wall milliseconds: guide sounds and metronome clicks are
+/// requested this far ahead of the visual hit, to cancel output latency.
+/// `0` is desktop behaviour.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn set_audio_lead_ms(ms: f32) {
+    push_command(EngineCommand::SetAudioLeadMs(ms.max(0.0)));
 }
 
 pub fn take_commands() -> Vec<EngineCommand> {

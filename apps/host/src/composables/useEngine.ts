@@ -167,6 +167,8 @@ export type FrameStats = {
   scale_factor: number;
   /** MSAA samples on the main camera; 1 means off. */
   msaa: number;
+  /** How far ahead of the visual hit guide sounds are requested. */
+  audio_lead_ms: number;
 };
 
 // Read the engine's latest snapshot. `null` until the first second has
@@ -187,6 +189,11 @@ export async function setMsaa(samples: number): Promise<void> {
 // the browser's own ratio.
 export async function setRenderScale(scale: number): Promise<void> {
   (await ensureEngine()).set_render_scale(scale);
+}
+// ms: guide sounds and metronome clicks are requested this far ahead of the
+// visual hit, to cancel audio output latency. 0 = desktop behaviour.
+export async function setAudioLeadMs(ms: number): Promise<void> {
+  (await ensureEngine()).set_audio_lead_ms(ms);
 }
 
 // Note (scroll) speed — how fast notes travel, independent of playback rate.

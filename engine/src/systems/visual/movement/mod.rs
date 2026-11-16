@@ -21,7 +21,6 @@ use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 
 mod animation;
-use crate::systems::audio::PlayGuideSoundMessage;
 use animation::*;
 
 type TriangleQuery<'w, 's> = Query<
@@ -190,8 +189,6 @@ pub fn update_movement(
     layout: Res<ButtonLayout>,
     time: Res<Time>,
     assets: Res<NoteAssets>,
-
-    mut guide_sound_messages: MessageWriter<PlayGuideSoundMessage>,
 ) {
     // Travel is faster with both play speed and note speed; hold/slide musical
     // durations follow the play tempo (/ chart_speed), so effective bpm is
@@ -283,8 +280,6 @@ pub fn update_movement(
                                     duration_to_secs(*duration, *bpm) / chart_speed,
                                     TimerMode::Once,
                                 ));
-
-                                guide_sound_messages.write(PlayGuideSoundMessage);
                             }
                         }
                         NoteKind::Slide { .. } | NoteKind::HeadlessSlide { .. } => {
@@ -323,7 +318,6 @@ pub fn update_movement(
                         // Holding phase; the converged approach triangles stay put
                         // (all are cleared together when Dying begins).
                         NoteKind::Touch { .. } => {
-                            guide_sound_messages.write(PlayGuideSoundMessage);
                             commands.entity(entity).with_children(|parent| {
                                 parent.spawn((
                                     touch_just_sprite(&assets),
@@ -410,11 +404,11 @@ pub fn update_movement(
             NoteTiming::Dying(timer) => {
                 let is_touch = matches!(kind, NoteKind::Touch { .. });
 
-                // On the very first frame: morph into the death effect.
+                // On the very first frame: morph into the death effect. Guide
+                // sounds no longer fire from here — `audio::schedule_guide_sounds`
+                // fires them from the chart clock, ahead of the visual by the
+                // configured lead, so the sprite's timer is purely visual now.
                 if timer.elapsed().is_zero() && !is_slide(kind) {
-                    if !matches!(kind, NoteKind::Touch { .. }) {
-                        guide_sound_messages.write(PlayGuideSoundMessage);
-                    }
                     // Despawn all children (slide stars, hold bodies, touch triangles).
                     if let Some(children) = children {
                         for child in children.iter() {

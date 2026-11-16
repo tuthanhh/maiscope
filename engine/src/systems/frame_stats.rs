@@ -80,9 +80,15 @@ impl Snapshot {
     /// justify adding it.
     /// `msaa` is the sample count on the main camera (1 = off), so the
     /// `?msaa=` toggle can be seen to have applied.
-    pub fn to_json(&self, canvas: (u32, u32), scale_factor: f32, msaa: u32) -> String {
+    pub fn to_json(
+        &self,
+        canvas: (u32, u32),
+        scale_factor: f32,
+        msaa: u32,
+        audio_lead_ms: f32,
+    ) -> String {
         format!(
-            r#"{{"fps":{:.1},"avg_ms":{:.1},"max_ms":{:.1},"frames":{},"slow_frames":{},"stalled_frames":{},"canvas":"{}x{}","scale_factor":{:.2},"msaa":{}}}"#,
+            r#"{{"fps":{:.1},"avg_ms":{:.1},"max_ms":{:.1},"frames":{},"slow_frames":{},"stalled_frames":{},"canvas":"{}x{}","scale_factor":{:.2},"msaa":{},"audio_lead_ms":{:.0}}}"#,
             self.fps,
             self.avg_ms,
             self.max_ms,
@@ -93,6 +99,7 @@ impl Snapshot {
             canvas.1,
             scale_factor,
             msaa,
+            audio_lead_ms,
         )
     }
 }
@@ -104,6 +111,7 @@ pub fn sample_frame(
     mut stats: ResMut<FrameStats>,
     window: Query<&Window, With<PrimaryWindow>>,
     camera: Query<Option<&Msaa>, With<crate::plugins::camera::MainCamera>>,
+    audio_lead: Res<crate::systems::audio::AudioLead>,
 ) {
     let Some(snapshot) = stats.record(time.delta_secs_f64() * 1000.0) else {
         return;
@@ -120,7 +128,12 @@ pub fn sample_frame(
         .copied()
         .unwrap_or_default()
         .samples();
-    crate::wasm_bridge::publish_frame_stats(snapshot.to_json(canvas, scale, msaa));
+    crate::wasm_bridge::publish_frame_stats(snapshot.to_json(
+        canvas,
+        scale,
+        msaa,
+        audio_lead.wall_ms,
+    ));
 }
 
 #[cfg(test)]
@@ -193,8 +206,8 @@ mod tests {
             stalled_frames: 0,
         };
         assert_eq!(
-            snap.to_json((1170, 2532), 3.0, 4),
-            r#"{"fps":59.9,"avg_ms":16.7,"max_ms":21.0,"frames":60,"slow_frames":0,"stalled_frames":0,"canvas":"1170x2532","scale_factor":3.00,"msaa":4}"#
+            snap.to_json((1170, 2532), 3.0, 4, 120.0),
+            r#"{"fps":59.9,"avg_ms":16.7,"max_ms":21.0,"frames":60,"slow_frames":0,"stalled_frames":0,"canvas":"1170x2532","scale_factor":3.00,"msaa":4,"audio_lead_ms":120}"#
         );
     }
 }
