@@ -38,7 +38,9 @@ issue 06)
 - [x] Production origin added to `CORS_ALLOWED_ORIGINS` in `fly.toml`
       (`https://maiscope.pages.dev`, alongside the dev server) — needs an API
       deploy to take effect, since `[env]` is baked in at deploy time
-- [ ] Brotli confirmed on `.js`/`.wasm`
+- [x] Brotli confirmed on `.js`/`.wasm` — 2026-11-17, `curl -I -H 'Accept-Encoding: br'`
+      against the live build: `index-*.js` and `engine_bg-*.wasm` both answer
+      `content-encoding: br`; the wasm is 12.3MB raw, 3.5MB over the wire (Cloudflare compresses lighter than `brotli -q 11`, which gives 2.6MB)
 - [x] Recorded: the production origin is **`https://maiscope.pages.dev`**. This
       becomes the PWA install identity — do not promote installs before the custom
       domain move (see the trap above)

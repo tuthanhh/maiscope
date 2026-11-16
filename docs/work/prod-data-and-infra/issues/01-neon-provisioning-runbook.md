@@ -45,7 +45,14 @@ Also resolve the facts the plan currently assumes rather than knows.
       above the concurrent-PR count a solo repo ever has open. Not implemented
       here (would let CI run `#[sqlx::test]` against real ephemeral Postgres) —
       tracked as a future enhancement, not blocking this ticket.
-- [ ] Measured and recorded: cold-start latency of the first query after autosuspend
+- [x] Measured and recorded: cold-start latency of the first query after autosuspend
+      — 2026-11-17, one sample, `GET /sync/manifest` from the dev machine
+      after an idle period long enough for both Fly and Neon to have
+      suspended: **2.8s** to first byte, then 0.20s and 0.18s warm. The
+      sample does not split Fly's VM start from Neon's compute resume; the
+      user-facing number is the sum, and it is what the IndexedDB catalog
+      cache (`web-delivery` 02 stage 2) hides from everyone but a first
+      visitor
 - [x] `runbook.md` in this directory: bootstrap steps, restore steps, role/secret
       inventory (names only, never values) — bootstrap and restore were
       already written (2026-09-13, rehearsed for real); secret inventory and
