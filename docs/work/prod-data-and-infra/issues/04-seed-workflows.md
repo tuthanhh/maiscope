@@ -162,3 +162,22 @@ it passes no `ref` and gets the default branch. Fixed the same way: the
 input now defaults to empty, meaning the data repo's default branch, and a
 step before checkout resolves a non-empty ref through the API so the error
 names the ref. Redispatch with `data_ref` left empty.
+
+**Production reseeded 2026-11-16 (UTC), run `43929322794`, on `1e1e448`:**
+
+```
+seeded 433 sheets (6502 already up to date), 0 unmatched difficulties, 12 unmatched titles, 37 songs skipped entirely, 164 UTAGE folders not seedable yet, 14 matched loosely
+```
+
+The 433 are the DX sets of the dual-type songs receiving their own charts
+plus the suffix- and fold-recovered folders; dev predicted 384 on a slightly
+smaller catalog. Twelve unmatched against production's catalog versus
+eleven against dev's — one title differs between the two catalogs; not
+chased.
+
+**The last-folders decision is deferred to v2.0** (maintainer, 2026-11-17):
+until then `seed-charts.yml` is dispatched with `allow_unmatched` and
+**12** is the known floor for `unmatched titles` — a run reporting more has
+regressed. The acceptance criterion stays unticked on purpose; the
+`community-charts` work decides what a chart for a song outside the catalog
+even is.
