@@ -18,7 +18,8 @@ layer would only be translated back into the same JSON shape.
 
 **Blocked by:** 01, `server-restructure/issues/07-etag-caching.md`
 
-**Status:** in-progress — stage 1 done (v1.0); stage 2 deferred to v1.1
+**Status:** done — stage 1 (v1.0) and stage 2 (v1.1, 2026-11-16); one
+devtools confirmation owed, see Comments
 
 *Stage 1 (v1.0)*
 - [x] `loadData` uses plain `fetch`, no `isTauri()` branch (issue 01) — now via
@@ -29,14 +30,19 @@ layer would only be translated back into the same JSON shape.
 - [x] Loading/error states unchanged for users
 
 *Stage 2 (v1.1)*
-- [ ] IndexedDB wrapper storing the catalog as a **raw string**, not a structured
+- [x] IndexedDB wrapper storing the catalog as a **raw string**, not a structured
       clone of the parsed graph — cloning a 4.7MB object graph is slow
-- [ ] Launch flow: read cache → paint → probe `/sync/manifest` → refetch on
-      revision change → swap
-- [ ] Cache miss / corrupt cache falls back to a normal fetch
-- [ ] Stored alongside the revision it came from
-- [ ] Note: Android WebView can evict IndexedDB under storage pressure. Acceptable
+      (`utils/catalogCache.ts`; `fetchText` in `utils/api.ts` so the body is
+      never parsed and re-serialised)
+- [x] Launch flow: read cache → paint → probe `/sync/manifest` → refetch on
+      revision change → swap (`stores/data.ts:loadData`)
+- [x] Cache miss / corrupt cache falls back to a normal fetch — an entry that
+      fails `JSON.parse` is deleted first
+- [x] Stored alongside the revision it came from
+- [x] Note: Android WebView can evict IndexedDB under storage pressure. Acceptable
       — the cache is rebuildable — but the empty-cache path must be correct.
+      Every wrapper call swallows IndexedDB failure into a miss, including
+      a blocked `open` and a missing `indexedDB` global.
 
 
 ## Comments
@@ -65,3 +71,29 @@ shows `304`.
 swap when new data arrives" still holds, but the `ETag` route already gets most of
 the bytes saving — stage 2's real win is *first paint before the network*, not
 transfer size.
+
+**Stage 2 shipped 2026-11-16, verified by type-check and build only** — no
+browser on the machine that wrote it. Three things to confirm once in
+devtools, which also closes stage 1's remaining box:
+
+1. Application → IndexedDB → `maiscope` → `catalog` holds one `current`
+   entry with `revision`, `raw` (3MB string) and `storedAt`.
+2. Second launch, Network panel: one `GET /sync/manifest` (200 or 304) and
+   **no** `/catalog` request. That is the stage-1 "no request within the
+   hour" expectation, now true for as long as the revision holds.
+3. Airplane mode, reload: the catalog paints (before this change only the
+   app shell did), with a console warning that the refresh failed.
+
+**One decision made in passing.** The catalog is refetched with
+`cache: "no-cache"`, so the browser revalidates instead of answering from
+its own copy. Otherwise a manifest that says "changed" could be answered
+from an HTTP cache up to `max-age=3600` behind it, and the stale body would
+be stored under the new revision and never refetched. With IndexedDB in
+front, `/catalog` is requested only on a miss or a change, so the HTTP
+cache's hour of unconditional reuse no longer buys anything there; the
+`ETag` still does.
+
+**Selections survive the swap.** `preprocessData` freezes the graph and the
+store replaces it wholesale, which would leave `currentSelectedSheets`
+pointing into the old graph. They are re-resolved by `sheetExpr`; a sheet
+that no longer exists drops out of the selection.

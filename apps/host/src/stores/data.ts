@@ -3,8 +3,9 @@ import { defineStore } from "pinia";
 import LoadingStatus from "~/enums/LoadingStatus";
 import { GAME } from "~/app/game";
 import { buildEmptyData, preprocessData } from "~/utils";
-import { fetchJson } from "~/utils/api";
-import type { Data, Sheet } from "~/types";
+import { fetchJson, fetchText } from "~/utils/api";
+import { clearCatalog, readCatalog, writeCatalog } from "~/utils/catalogCache";
+import type { Data, Manifest, Sheet } from "~/types";
 
 // eslint-disable-next-line import/prefer-default-export
 export const useDataStore = defineStore("data", () => {
@@ -38,23 +39,73 @@ export const useDataStore = defineStore("data", () => {
       new Map(currentData.value.difficulties.map((e, i) => [e.difficulty, i])),
   );
 
+  // Parse a `/catalog` body and make it the current catalog. Shape is
+  // byte-identical to the legacy CloudFront data.json, so preprocessData is
+  // unchanged; cover images/icons still live on dataSourceUrl. The graph is
+  // replaced wholesale (preprocessData freezes it), so selections that point
+  // into the old graph are re-resolved by sheetExpr, the cross-tier key.
+  function install(raw: string): void {
+    const data = JSON.parse(raw) as Data;
+    preprocessData(data, GAME.dataSourceUrl, GAME.gameCode);
+
+    const bySheetExpr = new Map(data.sheets.map((s) => [s.sheetExpr, s]));
+    currentSelectedSheets.value = currentSelectedSheets.value.flatMap((old) => {
+      const sheet = bySheetExpr.get(old.sheetExpr);
+      return sheet ? [sheet] : [];
+    });
+
+    currentData.value = data;
+    currentLoadingStatus.value = LoadingStatus.LOADED;
+  }
+
+  // Paint from IndexedDB if it holds a catalog. Returns the revision it was
+  // stored under, or null on a miss. An entry that no longer parses is
+  // dropped so the next launch does not trip on it again.
+  async function paintFromCache(): Promise<number | null> {
+    const cached = await readCatalog();
+    if (!cached) return null;
+    try {
+      install(cached.raw);
+      return cached.revision;
+    } catch {
+      await clearCatalog();
+      return null;
+    }
+  }
+
+  // Launch: read cache → paint → probe `/sync/manifest` → refetch only on a
+  // revision change → swap (web-delivery 02 stage 2). The network is the
+  // source of truth; the cache is the first paint.
   async function loadData() {
     if (currentLoadingStatus.value !== LoadingStatus.PENDING) return;
+    currentLoadingStatus.value = LoadingStatus.LOADING;
+
+    const cachedRevision = await paintFromCache();
 
     try {
-      currentLoadingStatus.value = LoadingStatus.LOADING;
+      const manifest = await fetchJson<Manifest>(
+        `${GAME.apiBaseUrl}/sync/manifest`,
+      );
+      if (cachedRevision !== null && manifest.revision === cachedRevision) {
+        return;
+      }
 
-      // Catalog now comes from the global backend (apps/server), not the
-      // legacy CloudFront data.json. Shape is byte-identical, so preprocessData
-      // is unchanged. Cover images/icons still live on dataSourceUrl.
-      const catalogUrl = `${GAME.apiBaseUrl}/catalog`;
-      const data = await fetchJson<Data>(catalogUrl);
-
-      preprocessData(data, GAME.dataSourceUrl, GAME.gameCode);
-
-      currentData.value = data;
-      currentLoadingStatus.value = LoadingStatus.LOADED;
+      // `no-cache` makes the browser revalidate rather than serve its own
+      // copy: `/catalog` carries `max-age=3600`, and a manifest that says
+      // "changed" must not be answered from an HTTP cache that is up to an
+      // hour behind it. Unchanged is a 304 and costs nothing.
+      const raw = await fetchText(`${GAME.apiBaseUrl}/catalog`, {
+        cache: "no-cache",
+      });
+      install(raw);
+      await writeCatalog(manifest.revision, raw);
     } catch (err: any) {
+      if (cachedRevision !== null) {
+        // Painted from cache already; a dead or slow network is not an
+        // error the user needs to see. The cache is served as-is.
+        console.warn("catalog refresh failed, showing cached catalog", err);
+        return;
+      }
       currentLoadingErrorMessage.value = err.message;
       currentLoadingStatus.value = LoadingStatus.ERROR;
     }

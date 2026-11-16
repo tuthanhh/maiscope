@@ -32,19 +32,14 @@ export class ApiError extends Error {
 }
 
 /**
- * Like `fetchJson`, but also hands back the response headers.
- *
- * Paginated endpoints carry their total in `X-Total-Count` rather than the body
- * (ADR-0015), and a caller cannot read that through `fetchJson`. Error handling
- * stays in one place: `fetchJson` delegates here.
+ * `fetch` that turns a non-2xx response into an `ApiError`. The one place
+ * the error envelope is read; everything else layers on it.
  */
-export async function fetchJsonWithHeaders<T>(
-  url: string,
-): Promise<{ data: T; headers: Headers }> {
-  const response = await fetch(url);
+async function fetchOk(url: string, init?: RequestInit): Promise<Response> {
+  const response = await fetch(url, init);
 
   if (response.ok) {
-    return { data: (await response.json()) as T, headers: response.headers };
+    return response;
   }
 
   // The body is a stream and can only be read once, so read it a single time
@@ -61,6 +56,29 @@ export async function fetchJsonWithHeaders<T>(
   );
 }
 
-export async function fetchJson<T>(url: string): Promise<T> {
-  return (await fetchJsonWithHeaders<T>(url)).data;
+/**
+ * Like `fetchJson`, but also hands back the response headers.
+ *
+ * Paginated endpoints carry their total in `X-Total-Count` rather than the body
+ * (ADR-0015), and a caller cannot read that through `fetchJson`.
+ */
+export async function fetchJsonWithHeaders<T>(
+  url: string,
+  init?: RequestInit,
+): Promise<{ data: T; headers: Headers }> {
+  const response = await fetchOk(url, init);
+  return { data: (await response.json()) as T, headers: response.headers };
+}
+
+export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  return (await fetchJsonWithHeaders<T>(url, init)).data;
+}
+
+/**
+ * The body as text, unparsed. For the catalog, which is stored verbatim in
+ * IndexedDB (`utils/catalogCache.ts`) and parsed once by the caller — parsing
+ * here and re-serialising for the store would cost a second 3MB pass.
+ */
+export async function fetchText(url: string, init?: RequestInit): Promise<string> {
+  return (await fetchOk(url, init)).text();
 }

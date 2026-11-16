@@ -46,20 +46,22 @@ upstream arcade-songs data model. Keep new endpoints on this split.
 
 ## Client caching
 
-Two layers today, a third planned. Knowing which is which is the difference
-between debugging staleness in one minute and three.
+Three layers. Knowing which is which is the difference between debugging
+staleness in one minute and three.
 
 | Layer | Holds | Invalidated by |
 |---|---|---|
 | Service worker | App shell (precached); wasm (runtime, cache-first); sprites (stale-while-revalidate) | Content-hashed filenames; `index.html` is network-first; `/api/*` is never cached here |
-| HTTP | `/catalog` and other wire responses | `ETag` / `If-None-Match`; `Cache-Control: max-age=3600` on `/catalog` |
-| IndexedDB — **not built** | Catalog blob, for first paint before the network | `GET /sync/manifest` revision change; paint-then-swap |
+| HTTP | `/sync/manifest` and other wire responses; `/catalog` only as a validator | `ETag` / `If-None-Match`; the catalog is fetched with `cache: "no-cache"`, so `max-age=3600` never answers it from the browser cache |
+| IndexedDB | The raw `/catalog` body, under the `/sync/manifest` revision it was fetched for | A launch whose manifest `revision` differs from the stored one; paint-then-swap |
 
-The IndexedDB layer is
-[`web-delivery` 02 stage 2](../work/web-delivery/issues/02-client-catalog-freshness.md),
-deferred to v1.1. Nothing in `apps/host/` reads IndexedDB or calls
-`/sync/manifest` yet; the catalog comes straight from `GET /catalog` through the
-browser's HTTP cache (`stores/data.ts:loadData`).
+The launch flow (`stores/data.ts:loadData`): read IndexedDB → paint if hit →
+`GET /sync/manifest` → refetch `/catalog` only when the revision changed →
+swap the graph wholesale, re-resolving selected sheets by `sheetExpr`. A
+probe or refetch that fails after a cache hit is logged and the cached
+catalog stays; on a miss it is the user-visible error it always was. The
+store is `utils/catalogCache.ts`: database `maiscope`, object store
+`catalog`, one key `current`, every failure a cache miss.
 
 ## Engine boundary
 
@@ -95,5 +97,4 @@ See [ADR-0001](../adr/0001-postgres-source-of-truth-for-charts.md) and
 
 ## Known deviations from this document
 
-None currently. The IndexedDB cache layer is listed above as not built rather
-than as a deviation: the design is decided, the code is scheduled for v1.1.
+None currently.
