@@ -33,7 +33,8 @@ keep serving a "reinstall from the new address" page for a while.
 **Blocked by:** 03 (shipped). Nothing technical — this is a purchase and a
 Cloudflare configuration, then one line in `deploy-web.yml`.
 
-**Status:** todo — unscheduled; v1.x, before any install promotion
+**Status:** dropped — 2026-11-17, maintainer's call: `maiscope.pages.dev`
+is the permanent origin. See Comments for what that settles.
 
 - [ ] Domain registered; DNS on Cloudflare
 - [ ] Pages project bound to the domain; `maiscope.pages.dev` kept as an alias
@@ -50,3 +51,20 @@ Cloudflare configuration, then one line in `deploy-web.yml`.
 - [ ] Existing `pages.dev` installs counted and a decision recorded on whether
       the old origin serves a redirect page, and for how long
 - [ ] ROADMAP "do not promote installs" note cleared
+
+## Comments
+
+**Dropped 2026-11-17.** The maintainer chose not to buy a domain. What that
+settles, so nobody re-derives it:
+
+- **The PWA install trap closes by itself.** The origin never moves, so
+  installs from `maiscope.pages.dev` are never orphaned. The "do not promote
+  installs" note in ticket 03 and the spec is cleared.
+- **CORS stays.** `CORS_ALLOWED_ORIGINS` and the `CorsLayer` remain live
+  configuration; the v2 upload endpoint adds its `POST` to the same
+  allowlist.
+- **No edge cache for `/catalog`.** Cold visitors keep paying Fly's
+  scale-to-zero start. The IndexedDB cache (ticket 02 stage 2) makes that a
+  first-visit-only cost, which is why this is acceptable.
+- **The rate limiter needs no second proxy header.** `server-restructure` 10
+  shipped the trust list anyway (ADR-0019); on Fly it holds `fly-client-ip`.

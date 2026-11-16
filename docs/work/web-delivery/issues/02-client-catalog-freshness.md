@@ -18,15 +18,17 @@ layer would only be translated back into the same JSON shape.
 
 **Blocked by:** 01, `server-restructure/issues/07-etag-caching.md`
 
-**Status:** done — stage 1 (v1.0) and stage 2 (v1.1, 2026-11-16); one
-devtools confirmation owed, see Comments
+**Status:** done — stage 1 (v1.0) and stage 2 (v1.1, 2026-11-16);
+devtools confirmation 2026-11-17
 
 *Stage 1 (v1.0)*
 - [x] `loadData` uses plain `fetch`, no `isTauri()` branch (issue 01) — now via
       `utils/api.ts:fetchJson`, which also checks `response.ok`
 - [x] Conditional requests verified server-side (see Comments)
-- [ ] Confirmed once in browser devtools — see Comments for what to expect, since
-      it is *not* simply "second load returns 304"
+- [x] Confirmed once in browser devtools — see Comments for what to expect, since
+      it is *not* simply "second load returns 304" (maintainer, 2026-11-17,
+      after stage 2: manifest probe only, no `/catalog` request, offline
+      paint from IndexedDB)
 - [x] Loading/error states unchanged for users
 
 *Stage 2 (v1.1)*

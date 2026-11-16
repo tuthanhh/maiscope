@@ -33,28 +33,16 @@ product and is useful by itself.
 | 03 | [Frontend hosting on Cloudflare Pages](issues/03-cloudflare-pages.md) | |
 | 04 | [PWA: manifest + service worker](issues/04-pwa-service-worker.md) | |
 | 05 | [Gate the visualizer off mobile](issues/05-gate-visualizer-off-mobile.md) | **Dropped.** It runs on mobile; see [ADR-0016](../../adr/0016-visualizer-ungated-on-mobile.md) |
-| 06 | [Custom domain, with `/api/*` proxied to Fly](issues/06-custom-domain.md) | Unscheduled; blocks promoting PWA installs (ticket 03's trap) |
+| 06 | [Custom domain, with `/api/*` proxied to Fly](issues/06-custom-domain.md) | Dropped 2026-11-17 — `pages.dev` is the permanent origin |
 
 ## Decisions that constrain this work
 
 - **Cloudflare Pages over serving the SPA from Axum.** Cloudflare's egress is
   unmetered and Fly's is billed; with a ~20MB wasm artifact that is the difference
   between free and a surprise invoice.
-- **A custom domain is deferred, and the deferral has a trap.** A PWA's install
-  identity is its origin. Anyone who installs from `*.pages.dev` before the domain
-  move keeps a stale app pointed at the old origin. **Do not promote installs until
-  the custom domain lands.**
-- **`index.html` must be network-first.** A service worker is the one artifact you
-  can ship that cannot be taken back over the network. A cache-first rule on
-  `index.html` pins installed users to a broken build permanently.
-- **Do not precache the wasm.** Precaching makes every visitor to the browse page
-  download ~20MB before asking for the visualizer. Runtime cache-first on the
-  content-hashed `.wasm` URL instead.
-- **Silent auto-update, not prompt-to-update.** Nothing in a read-only app can be
-  lost by reloading, so an update-prompt component is unearned complexity.
-- **Not SQLite on the client.** The frontend already holds the whole catalog in
-  memory and filters locally ([ADR-0007](../../adr/0007-client-side-filtering.md)),
-  so a relational layer would only be translated back into the same JSON shape.
+- **No custom domain.** `maiscope.pages.dev` is the permanent origin
+  (ticket 06, dropped 2026-11-17). A PWA's install identity is its origin, so
+  installs can be promoted; CORS and the Fly cold start stay as they are.
 
 ## Cache layers this feature touches
 

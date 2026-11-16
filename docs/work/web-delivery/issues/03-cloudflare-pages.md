@@ -148,3 +148,7 @@ exports, so there is ~44% headroom under the 25 MiB cap.
 **Noted, not acted on:** the generated `engine.js` uses `eval`, which rollup
 warns about. Harmless today, but it will conflict with a strict `Content-Security-Policy`
 — relevant when `web-delivery` 04 adds the service worker and headers.
+
+**Ticket 06 dropped 2026-11-17**: the deferral above is now permanent and
+the "do not promote installs" condition no longer applies — `pages.dev` is
+the origin for good.
