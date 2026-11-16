@@ -10,7 +10,9 @@ white-screen or an OOM-killed tab as the headline feature.
 
 **Blocked by:** 01
 
-**Status:** todo
+**Status:** dropped — the visualizer already runs on mobile, so it ships ungated
+([ADR-0016](../../../adr/0016-visualizer-ungated-on-mobile.md)). Known mobile
+problems moved to [`mobile-webview-spike` issue 02](../../mobile-webview-spike/issues/02-mobile-visualizer-known-problems.md).
 
 - [ ] Detection chosen and documented: viewport/pointer capability rather than
       user-agent sniffing

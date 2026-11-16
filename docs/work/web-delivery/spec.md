@@ -5,8 +5,8 @@
 **Parent:** [`production-v1`](../production-v1/spec.md)
 
 Ship the frontend as one web build: delete the Tauri shell, host on Cloudflare
-Pages, make it installable as a PWA, and gate the visualizer off mobile until the
-spike says otherwise. Web + PWA with Tauri dropped is
+Pages, and make it installable as a PWA. The visualizer ships ungated on mobile
+([ADR-0016](../../adr/0016-visualizer-ungated-on-mobile.md)). Web + PWA with Tauri dropped is
 [ADR-0003](../../adr/0003-web-pwa-drop-tauri.md).
 
 ## Problem
@@ -32,7 +32,7 @@ product and is useful by itself.
 | 02 | [Client catalog freshness: ETag now, IndexedDB blob after](issues/02-client-catalog-freshness.md) | Stage 1 is v1.0; stage 2 is v1.1 |
 | 03 | [Frontend hosting on Cloudflare Pages](issues/03-cloudflare-pages.md) | |
 | 04 | [PWA: manifest + service worker](issues/04-pwa-service-worker.md) | |
-| 05 | [Gate the visualizer off mobile](issues/05-gate-visualizer-off-mobile.md) | Single flag, easy to flip for v1.1 |
+| 05 | [Gate the visualizer off mobile](issues/05-gate-visualizer-off-mobile.md) | **Dropped.** It runs on mobile; see [ADR-0016](../../adr/0016-visualizer-ungated-on-mobile.md) |
 | 06 | [Custom domain, with `/api/*` proxied to Fly](issues/06-custom-domain.md) | Unscheduled; blocks promoting PWA installs (ticket 03's trap) |
 
 ## Decisions that constrain this work
@@ -55,9 +55,6 @@ product and is useful by itself.
 - **Not SQLite on the client.** The frontend already holds the whole catalog in
   memory and filters locally ([ADR-0007](../../adr/0007-client-side-filtering.md)),
   so a relational layer would only be translated back into the same JSON shape.
-- **Feature detection, not user-agent sniffing**, for the mobile gate — and the
-  gated device must never fire the dynamic import in `composables/useEngine.ts`, or
-  it pays ~20MB for a page it cannot use.
 
 ## Cache layers this feature touches
 
@@ -69,7 +66,7 @@ the catalog blob (v1.1); HTTP holds wire responses via `ETag`. API responses are
 ## Out of scope
 
 Stage 2 of ticket 02 (IndexedDB blob cache) is v1.1, listed there to keep the
-sequencing visible. The mobile visualizer itself is
+sequencing visible. Mobile visualizer polish is
 [`mobile-webview-spike`](../mobile-webview-spike/) and v1.1. Any Tauri target,
 permanently, unless the spike reopens ADR-0003.
 
@@ -77,6 +74,4 @@ permanently, unless the spike reopens ADR-0003.
 
 `src-tauri/` is gone and `cargo build --workspace` is still green without it, a
 second catalog load returns `304` in devtools, the app installs on desktop Chrome
-and Android Chrome, a broken deploy is provably recoverable on installed clients,
-and a mobile visitor sees an honest "desktop only for now" without downloading the
-wasm.
+and Android Chrome, and a broken deploy is provably recoverable on installed clients.

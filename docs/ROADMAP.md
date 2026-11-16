@@ -8,17 +8,21 @@ document links here rather than restating it.
 ### v1.0 — public web app, browse-only
 
 Catalog browsing, search and sheet details, deployed publicly. The visualizer is
-reachable on desktop browsers and gated off mobile.
+reachable on desktop and mobile browsers; mobile has known problems
+([ADR-0016](adr/0016-visualizer-ungated-on-mobile.md)).
 
 Out of scope, deliberately: audio hosting, authentication, contributions, a
 desktop app, and a local SQLite cache. See [ADR-0002](adr/0002-chart-data-only-no-audio-hosting.md)
 and [ADR-0003](adr/0003-web-pwa-drop-tauri.md).
 
-### v1.1 — mobile visualizer
+### v1.1 — mobile visualizer polish
 
-The Bevy visualizer running in a mobile browser and installed PWA. Gated on the
-spike in `work/mobile-webview-spike/issues/01-bevy-mobile-webview-spike.md`, whose
-outcome can reopen [ADR-0003](adr/0003-web-pwa-drop-tauri.md).
+The visualizer already runs on mobile ([ADR-0016](adr/0016-visualizer-ungated-on-mobile.md)).
+v1.1 fixes its known problems
+([`mobile-webview-spike` issue 02](work/mobile-webview-spike/issues/02-mobile-visualizer-known-problems.md))
+and measures it in a mobile browser and installed PWA
+([issue 01](work/mobile-webview-spike/issues/01-bevy-mobile-webview-spike.md)),
+whose outcome can still reopen [ADR-0003](adr/0003-web-pwa-drop-tauri.md).
 
 ### v2.0 — community platform
 

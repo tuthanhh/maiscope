@@ -97,7 +97,7 @@ dependency graph, not a preference.
 | 3 | [`build-and-deploy`](../build-and-deploy/spec.md) | Hermetic build and deploy mechanics: `.sqlx/`, Dockerfile, `fly.toml`, CI, CD. |
 | 4 | [`prod-data-and-infra`](../prod-data-and-infra/spec.md) | Neon provisioning, seed workflows, backups. |
 | 5 | [`catalog-sync`](../catalog-sync/spec.md) | Replaces truncate-and-reload with a differential sync, so a catalog refresh can no longer destroy chart text. |
-| 6 | [`web-delivery`](../web-delivery/spec.md) | De-Tauri, catalog freshness, Cloudflare Pages, PWA, the mobile visualizer gate. |
+| 6 | [`web-delivery`](../web-delivery/spec.md) | De-Tauri, catalog freshness, Cloudflare Pages, PWA. The mobile gate was dropped ([ADR-0016](../../adr/0016-visualizer-ungated-on-mobile.md)). |
 | 7 | [`test-foundation`](../test-foundation/spec.md) | Engine parser tests first — highest defect density, zero infrastructure — then server tests and the contract snapshot. |
 | — | [`api-pagination-header`](../api-pagination-header/spec.md) | Off the dependency chain. Moves `/sheets/search`'s total to `X-Total-Count` ([ADR-0015](../../adr/0015-pagination-total-as-a-response-header.md)). |
 | — | [`mobile-webview-spike`](../mobile-webview-spike/) | Gates **v1.1**, not v1.0. Run it early and in parallel; a bad result reopens [ADR-0003](../../adr/0003-web-pwa-drop-tauri.md). |
