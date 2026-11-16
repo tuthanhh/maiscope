@@ -33,8 +33,14 @@ issue 06)
 - [x] SPA fallback **not needed**: the router is on `createWebHashHistory`
       (`router.ts:40`), so every route is a fragment and the server only ever serves
       `/`. Deep links cannot 404. Revisit if the router moves to history mode
-- [ ] Preview deployments on PRs (their origins must not be in the CORS allowlist
-      unless deliberately added)
+- [x] Preview deployments on PRs (their origins must not be in the CORS allowlist
+      unless deliberately added) — **dropped** 2026-11-17, maintainer's
+      call. Three reasons, all already in this ticket: the project is Direct
+      Upload, so a preview is another runner build per PR; preview origins
+      are unique per branch and the allowlist is exact-match, so a preview
+      cannot reach the API without a server change to accept a pattern; and
+      on a solo repo with manual master deploys a preview shows what
+      `pnpm dev` shows. Revisit only if a second contributor appears
 - [x] Production origin added to `CORS_ALLOWED_ORIGINS` in `fly.toml`
       (`https://maiscope.pages.dev`, alongside the dev server) — needs an API
       deploy to take effect, since `[env]` is baked in at deploy time

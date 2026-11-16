@@ -59,7 +59,14 @@ Also resolve the facts the plan currently assumes rather than knows.
       "known gaps" updated (2026-09-16) to match the role split actually
       shipped, replacing the earlier `SEED_DATABASE_URL` plan that turned out
       unnecessary
-- [ ] Fly billing alerts configured — there is no hard spend cap
+- [x] Fly billing alerts configured — there is no hard spend cap — **Fly
+      offers none** (maintainer checked the organisation's Billing page,
+      2026-11-17). Fallback recorded instead: spend is bounded by
+      construction — one `shared-cpu` machine, `min_machines_running = 0`,
+      no volumes — and the maintainer glances at Billing monthly. Anything
+      that would raise the ceiling (a second machine, a bigger size, a
+      volume) is a `fly.toml` diff on a dispatch, never an automatic
+      scale-up
 
 
 ## Comments
