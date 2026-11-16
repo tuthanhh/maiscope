@@ -63,7 +63,7 @@ Unscheduled.
 | ├ [api-rewrite](work/api-rewrite/spec.md) | planned | v2.0 |
 | └ [community-charts](work/community-charts/spec.md) | planned | v2.0 |
 | [server-contributions](work/server-contributions/spec.md) | superseded | — |
-| [parser-defects](work/parser-defects/spec.md) | active | v1.0 |
+| [parser-defects](work/parser-defects/spec.md) | shipped | v1.0 |
 | [mobile-webview-spike](work/mobile-webview-spike/) | planned | v1.1 |
 | [docs-restructure](work/docs-restructure/spec.md) | shipped | — |
 | [server-sync-tier](work/server-sync-tier/) | shipped | — |
