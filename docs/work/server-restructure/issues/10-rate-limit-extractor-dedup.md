@@ -7,12 +7,17 @@ folded into a cleanup pass.
 
 **Blocked by:** 08
 
-**Status:** todo
+**Status:** done — 2026-11-17, option 2 as a header list
+([ADR-0019](../../../adr/0019-trusted-ip-headers-are-configuration.md))
 
-- [ ] Decide whether `SmartIpKeyExtractor`'s wider trust chain is acceptable
-- [ ] Collapse `FlyClientIpKeyExtractor`'s fallbacks accordingly
-- [ ] Drop the direct `governor` dependency if the return type stops naming
-      `NoOpMiddleware`
+- [x] Decide whether `SmartIpKeyExtractor`'s wider trust chain is acceptable
+      — no; trust is deployment configuration (`TRUSTED_IP_HEADERS`)
+- [x] Collapse `FlyClientIpKeyExtractor`'s fallbacks accordingly — replaced
+      by `TrustedHeadersKeyExtractor`: listed headers in order, then the
+      socket; `X-Forwarded-For` never read
+- [x] Drop the direct `governor` dependency if the return type stops naming
+      `NoOpMiddleware` — weighed and kept; the reaper test needs the type
+      (reasoning in the ADR)
 
 ## 1. `FlyClientIpKeyExtractor` reimplements what the library ships
 
@@ -128,3 +133,12 @@ on Fly after 06, `fly-client-ip` before it, empty locally) rather than a
 boolean. Recommendation: option 2 in that form, as its own ticket, scheduled
 with 06 so the custom domain never ships with a shared bucket. Part 2 of
 this ticket (the `governor` pin) is independent and can go with it.
+
+**Done 2026-11-17.** `Config::trusted_ip_headers` from `TRUSTED_IP_HEADERS`
+(comma-separated, lower-cased, validated as header names at startup, empty
+default); `fly.toml` sets `fly-client-ip`; the router tests set it on their
+`Config` since `oneshot` has no socket. Six extractor tests replace the four,
+including one that an untrusted header is ignored and one that
+`X-Forwarded-For` is never read. The custom-domain proxy that motivated the
+header-list form was dropped the same day (`web-delivery` 06), but the
+form stands: the list is what makes a bare run safe.

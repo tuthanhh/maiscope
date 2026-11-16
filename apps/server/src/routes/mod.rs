@@ -51,7 +51,11 @@ pub fn router(state: AppState) -> Router {
     // shouldn't compete with real traffic for a bucket) by never passing
     // through this layer at all, rather than trying to special-case it
     // inside the limiter.
-    let (limit_layer, limiter) = rate_limit::layer(RATE_LIMIT_BURST_SIZE, RATE_LIMIT_PERIOD);
+    let (limit_layer, limiter) = rate_limit::layer(
+        &state.config.trusted_ip_headers,
+        RATE_LIMIT_BURST_SIZE,
+        RATE_LIMIT_PERIOD,
+    );
     rate_limit::spawn_reaper(limiter, RATE_LIMIT_CLEANUP_INTERVAL);
 
     let limited = Router::new()
@@ -114,6 +118,9 @@ mod tests {
                 database_max_connections: 1,
                 port: 0,
                 cors_allowed_origins: vec![],
+                // The router tests key requests by this header, as production
+                // does behind Fly; `oneshot` carries no socket address.
+                trusted_ip_headers: vec!["fly-client-ip".to_string()],
                 log_filter: "off".to_string(),
                 log_json: false,
             }),

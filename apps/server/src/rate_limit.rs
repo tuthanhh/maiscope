@@ -3,10 +3,11 @@
 //! one misconfigured script pulling a heavy endpoint in a loop.
 
 use std::net::{IpAddr, SocketAddr};
+use std::sync::Arc;
 use std::time::Duration;
 
 use axum::extract::ConnectInfo;
-use axum::http::{HeaderMap, Request};
+use axum::http::{HeaderMap, HeaderName, Request};
 use axum::response::IntoResponse;
 use governor::middleware::NoOpMiddleware;
 use tower_governor::governor::{GovernorConfig, GovernorConfigBuilder, SharedRateLimiter};
@@ -15,30 +16,46 @@ use tower_governor::{GovernorError, GovernorLayer};
 
 use crate::error::AppError;
 
-const FLY_CLIENT_IP: &str = "fly-client-ip";
-const X_FORWARDED_FOR: &str = "x-forwarded-for";
+/// Keys on the first configured header that carries an IP, in trust order,
+/// and on the peer socket address when none does. Which headers are trusted
+/// is deployment configuration (`Config::trusted_ip_headers`, ADR-0019), not
+/// a constant: behind Fly's edge proxy every request's *peer* address is
+/// the proxy itself, so `fly-client-ip` must be trusted there — while a bare
+/// `cargo run` must trust no header at all, or any client can mint itself a
+/// fresh bucket per request by setting one.
+///
+/// Only headers a proxy *sets* belong in the list. `X-Forwarded-For` is
+/// appended to, so its first entry is whatever the client wrote; it is not
+/// read here under any configuration.
+#[derive(Debug, Clone)]
+pub struct TrustedHeadersKeyExtractor {
+    headers: Arc<[HeaderName]>,
+}
 
-/// Keys on `Fly-Client-IP` (set by Fly's edge proxy) first, `X-Forwarded-For`
-/// second, and the actual peer socket address last. Behind Fly's proxy every
-/// request's *peer* address is the proxy itself — keying on that naively
-/// would rate-limit the entire userbase as one client. The peer-address
-/// fallback exists for local dev and anything not behind Fly, where there is
-/// no proxy header to trust.
-#[derive(Debug, Clone, Copy)]
-pub struct FlyClientIpKeyExtractor;
+impl TrustedHeadersKeyExtractor {
+    /// `names` are lower-case header names already validated by `Config`.
+    pub fn new(names: &[String]) -> Self {
+        let headers: Vec<HeaderName> = names
+            .iter()
+            .map(|n| HeaderName::from_bytes(n.as_bytes()).expect("validated by Config"))
+            .collect();
+        Self {
+            headers: headers.into(),
+        }
+    }
+}
 
-impl KeyExtractor for FlyClientIpKeyExtractor {
+impl KeyExtractor for TrustedHeadersKeyExtractor {
     type Key = IpAddr;
 
     fn name(&self) -> &'static str {
-        "fly-client-ip"
+        "trusted-ip-headers"
     }
 
     fn extract<T>(&self, req: &Request<T>) -> Result<Self::Key, GovernorError> {
-        let headers = req.headers();
-
-        fly_client_ip(headers)
-            .or_else(|| x_forwarded_for(headers))
+        self.headers
+            .iter()
+            .find_map(|name| header_ip(req.headers(), name))
             .or_else(|| peer_addr(req))
             .ok_or(GovernorError::UnableToExtractKey)
     }
@@ -48,18 +65,12 @@ impl KeyExtractor for FlyClientIpKeyExtractor {
     }
 }
 
-fn fly_client_ip(headers: &HeaderMap) -> Option<IpAddr> {
+/// The header's value as one IP. A value that is not a single address (a
+/// list, garbage) is treated as absent and the next header is consulted.
+fn header_ip(headers: &HeaderMap, name: &HeaderName) -> Option<IpAddr> {
     headers
-        .get(FLY_CLIENT_IP)
+        .get(name)
         .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.trim().parse().ok())
-}
-
-fn x_forwarded_for(headers: &HeaderMap) -> Option<IpAddr> {
-    headers
-        .get(X_FORWARDED_FOR)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.split(',').next())
         .and_then(|s| s.trim().parse().ok())
 }
 
@@ -90,14 +101,15 @@ pub(crate) fn spawn_reaper(limiter: SharedRateLimiter<IpAddr, NoOpMiddleware>, e
 /// so tests can use a tiny quota instead of the production numbers — see
 /// `routes::router` for those and the reasoning behind them.
 pub(crate) fn layer(
+    trusted_ip_headers: &[String],
     burst_size: u32,
     period: Duration,
 ) -> (
-    GovernorLayer<FlyClientIpKeyExtractor, NoOpMiddleware, axum::body::Body>,
+    GovernorLayer<TrustedHeadersKeyExtractor, NoOpMiddleware, axum::body::Body>,
     SharedRateLimiter<IpAddr, NoOpMiddleware>,
 ) {
     let config: GovernorConfig<_, _> = GovernorConfigBuilder::default()
-        .key_extractor(FlyClientIpKeyExtractor)
+        .key_extractor(TrustedHeadersKeyExtractor::new(trusted_ip_headers))
         .period(period)
         .burst_size(burst_size)
         .finish()
@@ -117,10 +129,10 @@ pub(crate) fn layer(
             retry_after_secs: wait_time.max(1),
         }
         .into_response(),
-        // Only reachable if FlyClientIpKeyExtractor itself fails, which it
-        // never does in practice — it always falls back to the peer address,
-        // and main.rs wires ConnectInfo so that's always available. Kept as
-        // a safety net, not a path real traffic should hit.
+        // Only reachable if the extractor itself fails, which it never does
+        // in practice — it always falls back to the peer address, and
+        // main.rs wires ConnectInfo so that's always available. Kept as a
+        // safety net, not a path real traffic should hit.
         GovernorError::UnableToExtractKey | GovernorError::Other { .. } => {
             AppError::Internal("rate limiter failed").into_response()
         }
@@ -138,6 +150,12 @@ mod tests {
     use axum::routing::get;
     use tower::ServiceExt;
 
+    const FLY_CLIENT_IP: &str = "fly-client-ip";
+
+    fn fly() -> TrustedHeadersKeyExtractor {
+        TrustedHeadersKeyExtractor::new(&[FLY_CLIENT_IP.to_string()])
+    }
+
     fn request_from(ip: &str) -> Request<Body> {
         Request::builder()
             .uri("/")
@@ -146,50 +164,80 @@ mod tests {
             .unwrap()
     }
 
-    #[test]
-    fn extractor_prefers_fly_client_ip_over_x_forwarded_for() {
-        let req = Request::builder()
-            .uri("/")
-            .header(FLY_CLIENT_IP, "203.0.113.9")
-            .header(X_FORWARDED_FOR, "198.51.100.7")
-            .body(Body::empty())
-            .unwrap();
-
-        let key = FlyClientIpKeyExtractor.extract(&req).unwrap();
-        assert_eq!(key, "203.0.113.9".parse::<IpAddr>().unwrap());
-    }
-
-    #[test]
-    fn extractor_falls_back_to_x_forwarded_for_when_no_fly_header() {
-        // The client's own IP is the leftmost entry — everything after it
-        // was appended by proxies between the client and here.
-        let req = Request::builder()
-            .uri("/")
-            .header(X_FORWARDED_FOR, "198.51.100.7, 10.0.0.1")
-            .body(Body::empty())
-            .unwrap();
-
-        let key = FlyClientIpKeyExtractor.extract(&req).unwrap();
-        assert_eq!(key, "198.51.100.7".parse::<IpAddr>().unwrap());
-    }
-
-    #[test]
-    fn extractor_falls_back_to_peer_address_when_no_headers_present() {
-        // Local dev's actual case: no proxy, so no Fly-Client-IP or
-        // X-Forwarded-For header exists at all.
-        let mut req = Request::builder().uri("/").body(Body::empty()).unwrap();
+    fn with_peer(mut req: Request<Body>, ip: [u8; 4]) -> Request<Body> {
         req.extensions_mut()
-            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 54321))));
+            .insert(ConnectInfo(SocketAddr::from((ip, 54321))));
+        req
+    }
 
-        let key = FlyClientIpKeyExtractor.extract(&req).unwrap();
-        assert_eq!(key, IpAddr::from([127, 0, 0, 1]));
+    #[test]
+    fn a_trusted_header_beats_the_peer_address() {
+        // Behind Fly the peer is the proxy; the header is the client.
+        let req = with_peer(request_from("203.0.113.9"), [10, 0, 0, 1]);
+        assert_eq!(
+            fly().extract(&req).unwrap(),
+            "203.0.113.9".parse::<IpAddr>().unwrap()
+        );
+    }
+
+    #[test]
+    fn headers_are_consulted_in_trust_order() {
+        let ex = TrustedHeadersKeyExtractor::new(&[
+            "cf-connecting-ip".to_string(),
+            FLY_CLIENT_IP.to_string(),
+        ]);
+        let req = Request::builder()
+            .uri("/")
+            .header("cf-connecting-ip", "198.51.100.7")
+            .header(FLY_CLIENT_IP, "203.0.113.9")
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(
+            ex.extract(&req).unwrap(),
+            "198.51.100.7".parse::<IpAddr>().unwrap()
+        );
+
+        // The first header absent: the second is used.
+        assert_eq!(
+            ex.extract(&request_from("203.0.113.9")).unwrap(),
+            "203.0.113.9".parse::<IpAddr>().unwrap()
+        );
+    }
+
+    // The point of ADR-0019: with nothing trusted, a header is just bytes.
+    // A client that sets one on a bare deployment gets its socket address,
+    // not a fresh bucket.
+    #[test]
+    fn an_untrusted_header_is_ignored() {
+        let ex = TrustedHeadersKeyExtractor::new(&[]);
+        let req = with_peer(request_from("203.0.113.9"), [127, 0, 0, 1]);
+        assert_eq!(ex.extract(&req).unwrap(), IpAddr::from([127, 0, 0, 1]));
+    }
+
+    #[test]
+    fn x_forwarded_for_is_never_read() {
+        let req = with_peer(
+            Request::builder()
+                .uri("/")
+                .header("x-forwarded-for", "198.51.100.7, 10.0.0.1")
+                .body(Body::empty())
+                .unwrap(),
+            [127, 0, 0, 1],
+        );
+        assert_eq!(fly().extract(&req).unwrap(), IpAddr::from([127, 0, 0, 1]));
+    }
+
+    #[test]
+    fn a_trusted_header_with_garbage_falls_through() {
+        let req = with_peer(request_from("not-an-ip"), [127, 0, 0, 1]);
+        assert_eq!(fly().extract(&req).unwrap(), IpAddr::from([127, 0, 0, 1]));
     }
 
     #[test]
     fn extractor_fails_when_nothing_is_available() {
         let req = Request::builder().uri("/").body(Body::empty()).unwrap();
         assert!(matches!(
-            FlyClientIpKeyExtractor.extract(&req),
+            fly().extract(&req),
             Err(GovernorError::UnableToExtractKey)
         ));
     }
@@ -207,7 +255,7 @@ mod tests {
         // state for another whole period, so the wait below has to clear
         // 2 x period.
         let period = Duration::from_millis(200);
-        let (limit_layer, limiter) = layer(1, period);
+        let (limit_layer, limiter) = layer(&[FLY_CLIENT_IP.to_string()], 1, period);
         let app = Router::new()
             .route("/", get(|| async { "ok" }))
             .layer(limit_layer);
@@ -238,7 +286,7 @@ mod tests {
     async fn retry_after_is_at_least_one_second_at_the_production_period() {
         let app = Router::new()
             .route("/", get(|| async { "ok" }))
-            .layer(layer(1, Duration::from_secs(1)).0);
+            .layer(layer(&[FLY_CLIENT_IP.to_string()], 1, Duration::from_secs(1)).0);
 
         assert_eq!(
             app.clone()
@@ -276,7 +324,7 @@ mod tests {
         // period is rate-limited, keeping this test fast (no real waiting).
         let app = Router::new()
             .route("/", get(|| async { "ok" }))
-            .layer(layer(1, Duration::from_secs(60)).0);
+            .layer(layer(&[FLY_CLIENT_IP.to_string()], 1, Duration::from_secs(60)).0);
 
         let first = app
             .clone()

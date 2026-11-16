@@ -31,6 +31,13 @@ pub struct Config {
     /// Exact `Origin` values allowed to call the API cross-origin. Empty means
     /// "no allowlist configured" — see `from_env` for what that implies.
     pub cors_allowed_origins: Vec<String>,
+    /// Request headers trusted to carry the real client IP, in trust order,
+    /// lower-case. Empty means "trust nothing but the socket" — correct for
+    /// a bare `cargo run`, and the default. Behind a proxy that *sets* a
+    /// header (Fly's `fly-client-ip`), name it here; never name one a client
+    /// can smuggle through, such as `x-forwarded-for` behind a proxy that
+    /// appends to it (ADR-0019).
+    pub trusted_ip_headers: Vec<String>,
     /// `tracing_subscriber::EnvFilter` directive string (ticket 05).
     pub log_filter: String,
     pub log_json: bool,
@@ -139,6 +146,26 @@ pub(crate) fn redact_database_url(url: &str) -> String {
 /// `None` (unset) defaults to `false` — pretty/human-readable, matching every
 /// other unset default in this file favoring easy local dev. Only `"true"`
 /// (case-insensitive) turns JSON on; anything else is `false`.
+/// Comma-separated header names, trimmed, lower-cased, empties dropped. A
+/// name that is not a valid HTTP header name is a startup error: a typo here
+/// would silently fall back to the socket address and rate-limit every user
+/// behind the proxy as one.
+fn parse_trusted_ip_headers(raw: String) -> Result<Vec<String>, ConfigError> {
+    raw.split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| {
+            let name = s.to_ascii_lowercase();
+            axum::http::HeaderName::from_bytes(name.as_bytes())
+                .map(|_| name)
+                .map_err(|_| ConfigError::Invalid {
+                    var: "TRUSTED_IP_HEADERS",
+                    reason: format!("'{s}' is not a valid header name"),
+                })
+        })
+        .collect()
+}
+
 fn parse_log_json(raw: Option<String>) -> bool {
     match raw {
         Some(raw) => raw.eq_ignore_ascii_case("true"),
@@ -158,12 +185,15 @@ impl Config {
         let log_json = parse_log_json(optional("LOG_JSON")?);
         let cors_allowed_origins =
             parse_cors_origins(optional("CORS_ALLOWED_ORIGINS")?.unwrap_or_default());
+        let trusted_ip_headers =
+            parse_trusted_ip_headers(optional("TRUSTED_IP_HEADERS")?.unwrap_or_default())?;
 
         Ok(Config {
             database_url,
             database_max_connections,
             port,
             cors_allowed_origins,
+            trusted_ip_headers,
             log_filter,
             log_json,
         })
@@ -263,6 +293,29 @@ mod tests {
     fn parse_cors_origins_trims_and_drops_empties() {
         let origins = parse_cors_origins(" https://a.example, https://b.example ,,".to_string());
         assert_eq!(origins, vec!["https://a.example", "https://b.example"]);
+    }
+
+    #[test]
+    fn parse_trusted_ip_headers_lowercases_trims_and_keeps_order() {
+        assert_eq!(
+            parse_trusted_ip_headers(" CF-Connecting-IP, fly-client-ip ,,".to_string()).unwrap(),
+            vec!["cf-connecting-ip".to_string(), "fly-client-ip".to_string()]
+        );
+        assert_eq!(
+            parse_trusted_ip_headers(String::new()).unwrap(),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn parse_trusted_ip_headers_rejects_an_invalid_header_name() {
+        assert!(matches!(
+            parse_trusted_ip_headers("fly client ip".to_string()),
+            Err(ConfigError::Invalid {
+                var: "TRUSTED_IP_HEADERS",
+                ..
+            })
+        ));
     }
 
     #[test]

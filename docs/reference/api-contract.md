@@ -394,9 +394,11 @@ Status enum: `pending | approved | rejected | merged`.
   also be listed in `Access-Control-Expose-Headers`, or a cross-origin browser
   cannot read it — silently. `GET /sheets/search` still sends a `total` body
   field as well; v1 is frozen with both, and v2 sends the header only.
-- **Rate limits**: per-IP (keyed on `Fly-Client-IP`, not per-user — there is
-  no auth yet), generous burst with a slow refill (`server-restructure` issue
-  08). `429` + `Retry-After` (always at least `1` — the underlying limiter
+- **Rate limits**: per-IP (keyed on the client IP from the configured
+  trusted headers — `Fly-Client-IP` on Fly, the socket address elsewhere,
+  [ADR-0019](../adr/0019-trusted-ip-headers-are-configuration.md) — not
+  per-user; there is no auth yet), generous burst with a slow refill
+  (`server-restructure` issue 08). `429` + `Retry-After` (always at least `1` — the underlying limiter
   reports whole seconds and would otherwise say `0`, i.e. "retry now"), same
   `{ "error": "rate_limited", "message": ... }` shape as every other error.
   `/healthcheck` is exempt. Phase 2 write endpoints (§5) reuse this same
