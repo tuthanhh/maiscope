@@ -16,7 +16,8 @@ directly to production — and the loss would be silent during a restore.
 **Blocked by:** 01
 
 **Status:** in-progress — `.github/workflows/backup-database.yml` written
-2026-09-13; restore rehearsed locally, not yet on Neon
+2026-09-13; **it never ran until 2026-11-16, see Comments**; restore rehearsed
+locally, not yet on Neon
 
 ## Assessment (2026-09-13)
 
@@ -62,6 +63,36 @@ captures the state *before* the nightly sync rather than after it.
       Neon, and that has not happened yet)
 - [ ] Dump size and duration recorded; revisit when charts reach ~1500 songs
       (size is recorded — 8.13MB against a fully seeded database, see the
-      Assessment above — but no duration is recorded anywhere in this ticket
-      or in `.github/workflows/backup-database.yml`)
-- [ ] Backup contents contain no secrets beyond the data itself
+      Assessment above — but no duration can be recorded yet: the workflow has
+      never completed a run, see Comments. Record it from the first green run's
+      "Dump the database" step)
+- [x] Backup contents contain no secrets beyond the data itself — `pg_dump`
+      (not `pg_dumpall`) writes schema and rows only; roles and their passwords
+      are cluster-level and never enter a per-database dump. The connection
+      string is read from a secret, used on the command line of one step, and
+      never written to the archive or the step summary. Verified by reading
+      the workflow, 2026-11-16.
+
+## Comments
+
+**2026-11-16 — the scheduled backup never ran.** Every one of the 60 nightly
+runs since the workflow landed concluded `skipped`. There is no production
+backup, and there never was one; the "last night's dump" recovery window
+described in ticket 01 did not exist.
+
+Cause: the job carried `if: vars.CHART_DATA_REPO != ''`, meant to skip cleanly
+until the destination was configured. But `CHART_DATA_REPO` is an
+**environment** variable on `production` (ticket 04 recorded exactly that), and
+a job-level `if` is evaluated before the job's environment is bound — so
+`vars.CHART_DATA_REPO` was empty at that point on every run, and the job
+skipped. `seed-charts.yml` checks the same variable inside a step, where the
+environment has resolved, which is why it worked and this did not.
+
+Fix: the job-level `if` is gone and a first step checks the variable instead,
+failing with `::error` rather than skipping. Deliberate change of behaviour: a
+nightly failure gets read, and this nightly skip was not read for two months.
+
+**To close the loop (needs a dispatch, not a local command):** run
+`backup-database.yml` by hand once, confirm a `maiscope-YYYYMMDD.dump` lands in
+the chart-data repo under `backups/`, and record the step duration here. Then
+ticket 01's recovery-window claim becomes true.

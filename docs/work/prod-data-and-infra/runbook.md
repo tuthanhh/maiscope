@@ -96,6 +96,12 @@ the three-attempt debugging trail.
 
 Still open:
 
+- **No backup existed before 2026-11-16.** `backup-database.yml` skipped every
+  scheduled run for two months because its job-level `if` read an
+  environment-scoped variable before the environment was bound. Fixed in the
+  workflow; the first real dump needs a manual dispatch and is not confirmed
+  until a `backups/maiscope-YYYYMMDD.dump` is in the chart-data repo. See
+  [ticket 05](issues/05-backups.md).
 - **The current credential was pasted into a chat transcript** (predates
   2026-09-16's work) and should be rotated.
 - **Restore has not been rehearsed into a real Neon branch**, only locally —
