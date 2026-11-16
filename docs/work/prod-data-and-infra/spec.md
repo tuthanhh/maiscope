@@ -35,7 +35,7 @@ actual restore window decides whether "roll back the data" is a true statement.
 | 02 | [Vendor the upstream `data.json` snapshot](issues/02-vendor-upstream-datajson.md) | **Dropped.** Nothing truncates any more, so there is nothing to make survivable |
 | 03 | [Scheduled upstream refresh, delivered as a PR](issues/03-scheduled-upstream-refresh-pr.md) | **Dropped.** Its one surviving goal is now [`sync-rename-alarm`](../sync-rename-alarm/spec.md) |
 | 04 | [Catalog reload and chart seed, kept separate](issues/04-seed-workflows.md) | The reload half is obsolete; only `seed-charts.yml` is in scope |
-| 05 | [Backups: scheduled `pg_dump` plus Neon's restore window](issues/05-backups.md) | |
+| 05 | [Backups: scheduled `pg_dump` plus Neon's restore window](issues/05-backups.md) | Done 2026-11-16: first backup committed, restore rehearsed on Neon |
 
 ## Decisions that constrain this work
 

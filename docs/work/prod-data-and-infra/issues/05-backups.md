@@ -15,9 +15,9 @@ directly to production — and the loss would be silent during a restore.
 
 **Blocked by:** 01
 
-**Status:** in-progress — `.github/workflows/backup-database.yml` written
-2026-09-13; **first backup committed 2026-11-16, see Comments**; restore
-rehearsed locally, not yet on Neon
+**Status:** done — 2026-11-16. Workflow written 2026-09-13, never ran until
+the guard fix; first backup committed and restore rehearsed on Neon the same
+day, see Comments
 
 ## Assessment (2026-09-13)
 
@@ -57,10 +57,11 @@ captures the state *before* the nightly sync rather than after it.
       credentials in repo secrets
 - [x] Retention policy chosen (e.g. daily for 7, weekly for 8) and enforced
 - [x] Pre-mutation dumps wired into issue 04's workflows
-- [ ] **Restore rehearsed once for real** into a scratch Neon branch, and the
-      procedure written into `runbook.md` — an untested backup is not a backup
-      (rehearsed locally 2026-09-13, per the Assessment above; the box says
-      Neon, and that has not happened yet)
+- [x] **Restore rehearsed once for real** into a scratch Neon branch, and the
+      procedure written into `runbook.md` — 2026-11-16, see Comments. Fresh
+      empty database on a throwaway branch, `pg_restore --no-owner
+      --no-privileges`, **6.3s**, and every number matched the live
+      `/sync/manifest`: 1879 songs / 7481 sheets / 6559 charts / revision 10
 - [x] Dump size and duration recorded; revisit when charts reach ~1500 songs.
       First real run, 2026-11-16 (`43833756112`): **8,388,287 bytes, 26s** for
       the "Dump the database" step (`pg_dump -Fc -Z9` from a GitHub runner to
@@ -138,3 +139,33 @@ the token *after* noting where it is used, then save, then dispatch.
 
 **A production backup now exists**, and the nightly schedule will run from
 here. Ticket 01's "last night's dump" recovery window is true from tonight.
+
+**2026-11-16, 16:30 +07 — restore rehearsed on Neon.** The same dump,
+downloaded from the chart-data repo (`gh api` with the raw accept header,
+8,388,287 bytes, `pg_restore --list` reads 118 TOC entries), restored into a
+**fresh empty database** on a throwaway branch `restore-rehearsal` — empty on
+purpose, so the dump alone had to rebuild the schema and the data, with no
+branch-copied rows to hide a gap.
+
+```
+pg_restore -d "$SCRATCH_DATABASE_URL" --no-owner --no-privileges maiscope-20261116.dump
+  6.309s wall
+
+ songs | sheets | charts | revision
+  1879 |   7481 |   6559 |       10
+
+GET https://maiscope-api.fly.dev/api/v1/sync/manifest
+  {"counts":{"charts":6559,"sheets":7481,"songs":1879},"revision":10,"updateTime":"2026-10-30"}
+```
+
+Client `pg_restore` 18.6 against server 18.7, dumped by `pg_dump` 18 on the
+runner (`Dump Version: 1.16-0`). `--no-privileges` added to the runbook's
+`--no-owner`: the archive carries `GRANT`s to `maiscope_app`, which would
+apply (roles are project-wide in Neon) but are not what a rehearsal is
+testing. Branch deleted afterwards.
+
+**What this proves and what it does not.** The nightly dump restores to an
+exact copy of the catalog in seconds; "we can roll the data back" is now a
+fact with a date. It does not cover the Neon PITR path (6-hour window,
+ticket 01), which was not exercised and does not need to be — the dump is the
+recovery path for anything older than six hours anyway.
