@@ -28,6 +28,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import("~/pages/visualizer.vue"),
   },
   {
+    path: "/community",
+    name: "community",
+    component: () => import("~/pages/community.vue"),
+  },
+  {
     path: "/about",
     name: "about",
     component: () => import("~/pages/about.vue"),

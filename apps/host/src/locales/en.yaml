@@ -12,6 +12,20 @@ page-title:
   about: About
   bug-report: Report Issue
   source-code: Source Code
+  community: Community
+
+# Navigation (frontend-redesign 09)
+nav:
+  songs: Songs
+  community: Community
+  play: Play
+  menu: Menu
+  theme: Theme
+  language: Language
+
+# Community placeholder until community-charts lands
+community:
+  coming: Fan charts arrive with the community library.
 
 # General UIs
 ui:
