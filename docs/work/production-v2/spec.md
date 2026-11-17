@@ -96,8 +96,8 @@ revision-probe design is working and is not what is broken.
    not by omission. It returns the moment anything but this project's own
    frontend consumes the API.
 6. **Deleting an account strips identity; it does not delete published work.**
-   A deletion nulls `login` and `avatar_url`, sets `deleted_at` and revokes
-   `refresh_token_hash`, keeping the row so uploads stay attributed and a
+   A deletion nulls `login` and `avatar_url`, sets `deleted_at` and deletes
+   every `user_sessions` row, keeping the row so uploads stay attributed and a
    moderator still has a target. `github_id` is *retained* — without it a
    re-login mints a second account and the tombstone is unreachable — so
    re-authenticating with the same GitHub account reactivates the tombstone.
@@ -238,7 +238,7 @@ a later reader does not mistake a choice for an oversight.
   A custom domain would make same-site cookies possible and stays **optional** —
   `CORS_ALLOWED_ORIGINS` is already config-driven, so adopting one needs no code
   change. Until then XSS on the frontend origin is credential theft, bounded by
-  a 30-day `refresh_token_expires_at` and rotation on every use.
+  a 30-day `user_sessions.expires_at` and rotation on every use.
 
 ## Child features
 

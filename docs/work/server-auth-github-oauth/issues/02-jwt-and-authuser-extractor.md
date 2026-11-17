@@ -26,7 +26,7 @@ load-bearing beyond this feature.
       — HS256 pinned, no leeway, `exp` and `sub` required
 - [x] `pub fn generate_refresh_token() -> String` — 32 random bytes, hex; **not** a JWT
 - [x] `pub fn hash_refresh_token(token: &str) -> String` — SHA-256 hex digest, the
-      value stored in `users.refresh_token_hash`
+      value stored in `user_sessions.refresh_token_hash`
 - [x] `pub struct AuthUser { pub id: Uuid, pub role: Role }` implementing
       `FromRequestParts<AppState>`
 - [x] `AuthUser` rejects with `401` on a missing, malformed, invalid, or expired token

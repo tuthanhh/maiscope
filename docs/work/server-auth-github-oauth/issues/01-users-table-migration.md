@@ -7,7 +7,7 @@
 > faithful to that plan's Task 1; wording is not byte-identical to the original.
 
 **What to build:** The `users` table backing contract §4, plus the four crates the
-auth tier needs. `refresh_token_hash` stores a SHA-256 hash of the current refresh
+auth tier needs. `user_sessions.refresh_token_hash` stores a SHA-256 hash of a refresh
 token, never the token itself — a database leak must not hand out working
 credentials.
 
@@ -17,8 +17,7 @@ credentials.
 
 - [x] `apps/server/migrations/20261117120000_users.up.sql` creates `users`:
       `id UUID PK DEFAULT uuidv7()`, `github_id BIGINT UNIQUE NOT NULL`, `login TEXT`,
-      `avatar_url TEXT`, `role TEXT NOT NULL DEFAULT 'user'`, `refresh_token_hash TEXT UNIQUE`,
-      `refresh_token_expires_at TIMESTAMPTZ`, `deleted_at TIMESTAMPTZ`,
+      `avatar_url TEXT`, `role TEXT NOT NULL DEFAULT 'user'`, `deleted_at TIMESTAMPTZ`,
       `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`, `updated_at` likewise
 - [x] Matching `.down.sql` drops the table
 - [x] `role` constrained to `user | moderator | admin`
@@ -97,3 +96,14 @@ row at most); `users_refresh_token_has_expiry` keeps hash and expiry paired;
 `role` to `user`**, so reactivation restores the account but not its
 privileges, which an admin re-grants by hand. `updated_at` stays
 trigger-free; tickets 03, 04 and 06 set it in their `UPDATE`s.
+
+**2026-11-17 — refresh tokens move to `user_sessions`** (maintainer decision,
+before ticket 03). One `refresh_token_hash` on `users` meant one live
+session: every login replaced it, so signing in on a phone logged the desktop
+out within a JWT lifetime. `user_sessions` holds one row per signed-in device
+(`user_id`, `refresh_token_hash UNIQUE`, `expires_at NOT NULL`), cascading
+from `users`. Rotation touches its own row; deletion removes all of a user's
+rows. The `users_refresh_token_has_expiry` CHECK is gone, replaced by
+`expires_at NOT NULL`. Same migration, edited in place: nothing had deployed
+it. Read the September comments above with `users.refresh_token_*` meaning
+`user_sessions.*`.

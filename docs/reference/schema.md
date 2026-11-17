@@ -169,13 +169,13 @@ Append-only history — every applied revision adds a row (`chart_id`,
 ## Account tables (built)
 
 Not part of `Data`: nothing here reaches `/catalog`, and no catalog table
-references it. Migration `20261117120000_users`. The handlers that write it
-(login, refresh, deletion) are `server-auth-github-oauth` tickets 03, 04 and
-06; the constraints below hold regardless of which path writes.
+references these. Migration `20261117120000_users`. The handlers that write
+them (login, refresh, deletion) are `server-auth-github-oauth` tickets 03, 04
+and 06; the constraints below hold regardless of which path writes.
 
 ### `users`
-One row per GitHub identity that has ever signed in (`server-auth-github-oauth`,
-contract §4). Stores no email and no password.
+One row per GitHub identity that has ever signed in (contract §4). Stores no
+email and no password.
 - `id UUID` primary key, minted by `uuidv7()` like `songs.id`. It is the JWT
   `sub` and what community uploads will be attributed to.
 - `github_id BIGINT UNIQUE NOT NULL` — GitHub's numeric user id, the login's
@@ -184,17 +184,22 @@ contract §4). Stores no email and no password.
   Nullable only for a deleted account: `users_tombstone_shape` requires a
   `login` while `deleted_at` is null.
 - `role` — `user | moderator | admin`, enforced by a `CHECK`, default `user`.
-- `refresh_token_hash UNIQUE` — SHA-256 of the current refresh token, never
-  the token itself, so a leaked row is not a working credential. A refresh
-  presents only the token, so the hash is the lookup key.
-  `refresh_token_expires_at` bounds a stolen token that is never used;
-  `users_refresh_token_has_expiry` keeps the two both set or both null.
 - `deleted_at` — set by account deletion, which is a tombstone, not a row
-  removal: `login`, `avatar_url` and the refresh token are nulled, `role`
-  drops to `user`, and the row stays, keeping uploads attributed.
+  removal: `login` and `avatar_url` are nulled, `role` drops to `user`, the
+  user's sessions are deleted, and the row stays, keeping uploads attributed.
   `users_tombstone_shape` enforces that shape. Signing in again with the same
   GitHub account reactivates the row, without its former role.
 - `updated_at` — no trigger; every `UPDATE` sets it, as on `sheets`.
+
+### `user_sessions`
+One row per signed-in device, so each holds its own refresh token.
+- `user_id` → `users(id)` `ON DELETE CASCADE`, indexed.
+- `refresh_token_hash UNIQUE NOT NULL` — SHA-256 of the refresh token, never
+  the token itself, so a leaked row is not a working credential. A refresh
+  presents only the token, so the hash is the lookup key; rotation replaces it
+  in place.
+- `expires_at NOT NULL` — 30 days from issue or last rotation. It bounds a
+  stolen token that is never used, which rotation alone does not.
 
 ## Relationships
 
@@ -232,7 +237,7 @@ convention. See `deleted_songs`/`deleted_sheets` above.
 
 ## Conventions
 
-- `id UUID DEFAULT uuidv7()` PK on `songs` and `users`; `id BIGSERIAL` surrogate PK on
+- `id UUID DEFAULT uuidv7()` PK on `songs`, `users` and `user_sessions`; `id BIGSERIAL` surrogate PK on
   `sheets` and `charts`; natural composite PKs on lookups and sub-tables.
 - Timestamps `TIMESTAMPTZ DEFAULT now()`; dates `DATE`.
 - Numerics `DOUBLE PRECISION` (`bpm`, `*_value`); counts `INTEGER`.

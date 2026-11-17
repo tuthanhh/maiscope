@@ -131,7 +131,7 @@ pub fn generate_refresh_token() -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// The value stored in `users.refresh_token_hash`. Unsalted SHA-256 is enough
+/// The value stored in `user_sessions.refresh_token_hash`. Unsalted SHA-256 is enough
 /// here, unlike for a password: the input is 256 random bits, so there is no
 /// dictionary to precompute.
 pub fn hash_refresh_token(token: &str) -> String {

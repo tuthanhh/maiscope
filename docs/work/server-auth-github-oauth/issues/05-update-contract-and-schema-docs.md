@@ -22,8 +22,8 @@ tickets 01–04 actually built, in the same change — the repository's doc-sync
       response `{ "token", "refreshToken" }`, and that refresh tokens rotate on use
 - [ ] JWT lifetime (15 minutes) stated
 - [ ] `401` conditions documented for every §4 endpoint
-- [ ] `docs/reference/schema.md` gains the `users` table: every column, the role
-      constraint, and a note that `refresh_token_hash` holds a SHA-256 digest, never
-      a usable token
+- [ ] `docs/reference/schema.md` gains the `users` and `user_sessions` tables:
+      every column, the constraints, and a note that `refresh_token_hash` holds a
+      SHA-256 digest, never a usable token
 - [ ] No documented endpoint lacks an implementation, and no implemented endpoint
       is missing from the contract

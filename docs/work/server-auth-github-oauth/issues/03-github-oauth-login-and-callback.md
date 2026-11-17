@@ -56,8 +56,9 @@ an additive field. Ticket 05 updates the contract to match in the same feature.
       `role` is still not overwritten, and after a deletion it is `user`
       (issue 01's comments)
 - [ ] Every `UPDATE` sets `updated_at = now()`
-- [ ] Refresh token generated, hashed, stored in `users.refresh_token_hash`,
-      with `refresh_token_expires_at` set to now + 30 days
+- [ ] Refresh token generated, hashed, and stored as a **new** `user_sessions`
+      row with `expires_at` now + 30 days; the user's other sessions are left
+      alone, apart from pruning their expired rows
 - [ ] Response body: `{ "token": "<jwt>", "refreshToken": "<opaque>", "user": { ... } }`
 - [ ] Failure paths return the contract error shape, never a raw OAuth error
 - [ ] Client secret never logged, never returned
