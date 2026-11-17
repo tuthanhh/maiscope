@@ -166,7 +166,6 @@ const ticks = computed(() => {
     width: 100%;
     background: transparent;
     margin: 0;
-    outline: none;
     z-index: 2;
     position: relative;
     cursor: pointer;

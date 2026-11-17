@@ -10,7 +10,9 @@
 // table's `difficulties[].color`, set inline as `--diff`, falling back to
 // `--fg` when a difficulty has none.
 // ─────────────────────────────────────────────────────────────
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@use "./breakpoints" as bp;
+
+// The two font families load from index.html (a <link>, not an @import).
 
 :root {
   // ── primitives ──
@@ -64,6 +66,8 @@
   --scrim: rgb(255 255 255 / 0.7);
   --focus: var(--fg);
   --danger-fg: var(--n-900);
+  // Native controls (select popups, checkboxes, scrollbars) follow the mode.
+  color-scheme: light;
 
   // ── component ──
   --card-gap: var(--s-4);
@@ -105,9 +109,10 @@
   --inverse-hover: var(--n-300);
   --scrim: rgb(0 0 0 / 0.72);
   --danger-fg: var(--n-100);
+  color-scheme: dark;
 }
 
-@media (max-width: 767px) {
+@media (max-width: #{bp.$bp-md - 1px}) {
   :root {
     --card-gap: var(--s-3);
   }
@@ -142,14 +147,13 @@
   font: 700 48px/48px var(--f-sans);
   letter-spacing: -0.02em;
 }
-@media (max-width: 767px) {
+@media (max-width: #{bp.$bp-md - 1px}) {
+  // Only the sizes drop; line heights stay as the type scale sets them.
   .t-title {
     font-size: 20px;
-    line-height: 24px;
   }
   .t-display {
     font-size: 36px;
-    line-height: 36px;
   }
 }
 .t-num {
@@ -167,12 +171,5 @@
   outline: 1px solid var(--focus);
   outline-offset: 2px;
 }
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 1ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 1ms !important;
-  }
-}
+// Reduced motion removes the 8px rise of a modal or drawer entering and
+// nothing else: the fade stays (`mv-fade` in theme.scss is redefined there).

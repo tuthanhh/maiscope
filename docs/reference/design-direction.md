@@ -96,6 +96,7 @@ scrim.
 | `--line-strong` | `--n-300` | `--n-700` | Input borders, focused hairline |
 | `--inverse-bg` | `--n-900` | `--n-100` | Primary button, active chip |
 | `--inverse-fg` | `--n-0` | `--n-1000` | Text on inverse |
+| `--inverse-hover` | `--n-700` | `--n-300` | Primary button hover and active |
 | `--scrim` | `rgb(255 255 255 / .7)` | `rgb(0 0 0 / .72)` | Behind modal and drawer |
 | `--focus` | `--fg` | `--fg` | Focus outline |
 | `--danger-fg` | `--n-900` | `--n-100` | Error text; errors are not red, they are framed |
@@ -128,7 +129,8 @@ Seven roles replace the fourteen sizes in use today.
 | `title` | sans | 24 / 28 | 600 | -0.015em | as is | Modal and chart page title |
 | `display` | sans | 48 / 48 | 700 | -0.02em | as is | Home brand only |
 
-On phones `title` drops to 20 and `display` to 36; nothing else changes.
+On phones `title` drops to 20 and `display` to 36; nothing else changes,
+line heights included.
 Numbers are always mono, including inside sans lines ("174 BPM" sets the
 figure in mono). Japanese text takes `font-feature-settings: "palt"` in
 the sans roles so proportional kana does not gap.

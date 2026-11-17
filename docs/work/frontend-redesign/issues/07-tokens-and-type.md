@@ -33,3 +33,14 @@ The v1 `--mv-*` names are re-pointed at the semantic layer, so every
 unrestyled screen already takes the new palette — including the muted grey
 raised to pass AA (`#999` → `#767676`). Checked in headless Chromium in both
 modes; the dark class swaps only the semantic layer.
+
+**2026-11-17 — review.** Applied: both font families load from a `<link>`
+in `index.html` (a CSS `@import` behind other rules is ignored, which had
+likely kept JetBrains Mono from loading since before this ticket); the v1
+`outline: none` on inputs is gone, so `:focus-visible` shows everywhere;
+reduced motion removes only the rise (`mv-fade` becomes opacity-only), not
+all motion; phones change only the two sizes; `color-scheme` follows the
+mode so native popups and checkboxes go dark; `--inverse-hover` is recorded
+in design-direction's semantic table. Accepted as the spec's: dark hairlines
+are fainter than v1's (`--line` is `--n-900`), and `--mv-bd2` collapses onto
+`--line` until those screens are restyled.
