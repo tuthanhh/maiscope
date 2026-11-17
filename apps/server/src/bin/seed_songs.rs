@@ -21,10 +21,15 @@
 //! A difficulty present in the maidata with no matching sheet in the catalog
 //! is reported (song legitimately doesn't have that difficulty, or the
 //! catalog is stale) — except master/remaster, which are commonly and
-//! expectedly absent for many songs, so those are skipped silently. UTAGE
-//! folders (`&lv_7=`, charts in slot 7) are counted and skipped: the catalog
-//! keys those sheets by a kanji tag, not by slot — `catalog-difficulties`
-//! issue 03 — so they are not a failure of this run.
+//! expectedly absent for many songs, so those are skipped silently.
+//!
+//! UTAGE folders (`&inote_7=`) resolve separately (`resolve_utage`): the
+//! catalog keys each UTAGE sheet by a tag (`【協】`), which `&lv_7=` names by
+//! its `difficulties.code` (`協`), and titles them `[協]X` or plain `X` where
+//! the folder says `[協] X`. Only a unique sheet seeds. One side of a buddy
+//! chart (`[1P]`/`[2P]`) is counted and set aside: the catalog has one sheet
+//! for both sides. An unmatched or ambiguous UTAGE folder fails the run like
+//! any other unmatched chart.
 //!
 //! Anything that fails to match — a title matching no catalog song at all
 //! (upstream renamed it, most likely), an ambiguous type, or a non-master
@@ -242,6 +247,158 @@ fn nfc(s: &str) -> String {
     s.nfc().collect()
 }
 
+// ── UTAGE (maidata slot 7) ───────────────────────────────────────────────────
+
+/// The catalog's UTAGE sheets, indexed by (NFC title, difficulty). Kept apart
+/// from [`Catalog`]: a UTAGE song shares its plain title with the standard
+/// song it parodies, and the two must never be candidates for each other.
+#[derive(Debug, Default)]
+struct UtageIndex {
+    sheets: HashMap<(String, String), Vec<SheetRef>>,
+    /// `difficulties.code` → `difficulties.difficulty`: `協` → `【協】`.
+    /// maidata's `&lv_7=` is the code, so the lookup needs no transformation.
+    codes: HashMap<String, String>,
+}
+
+impl UtageIndex {
+    fn add_code(&mut self, code: &str, difficulty: &str) {
+        self.codes.insert(code.to_string(), difficulty.to_string());
+    }
+
+    fn add_sheet(&mut self, title: &str, difficulty: &str, sheet: SheetRef) {
+        self.sheets
+            .entry((nfc(title), difficulty.to_string()))
+            .or_default()
+            .push(sheet);
+    }
+}
+
+/// What one slot-7 folder claims about itself.
+#[derive(Debug)]
+struct UtageClaim<'a> {
+    /// `&title=`, e.g. `[宴] 人マニア [14?]`.
+    title: &'a str,
+    /// e.g. `[X] 人マニア`.
+    dir_name: &'a str,
+    /// `&lv_7=`, the bare tag: `X`.
+    tag: &'a str,
+}
+
+#[derive(Debug, PartialEq)]
+enum UtageResolution {
+    Matched(SheetRef),
+    /// One side of a two-player chart. The catalog holds one sheet for both
+    /// sides and a sheet holds one chart, so neither side is seeded.
+    Buddy,
+    /// `&lv_7=` is no `difficulties.code`.
+    UnknownTag,
+    NoSheet,
+    /// Several sheets fit and nothing in the folder says which.
+    Ambiguous(Vec<String>),
+}
+
+/// Every title form the folder offers is looked up under its tag's difficulty,
+/// and the candidates are pooled: only a single sheet across all forms seeds.
+/// Taking the first form that hits instead would pick silently when two
+/// catalog charts carry the same tag under different title forms, and a
+/// mismatched chart renders as if it were correct. Matching is exact (NFC);
+/// there is no loose fold here, by design.
+fn resolve_utage(claim: &UtageClaim, index: &UtageIndex) -> UtageResolution {
+    let dir = claim.dir_name.trim();
+    let title = claim.title.trim();
+    let tag = claim.tag.trim();
+
+    // The folder suffix is the reliable signal; one sample spells the title
+    // prefix バティ rather than バディ.
+    let buddy = ["[1P]", "[2P]"].iter().any(|side| dir.ends_with(side))
+        || ["/1P]", "/2P]"].iter().any(|side| title.contains(side));
+    if buddy {
+        return UtageResolution::Buddy;
+    }
+
+    let Some(difficulty) = index.codes.get(tag) else {
+        return UtageResolution::UnknownTag;
+    };
+
+    let plain = strip_level(strip_tag(title));
+    let forms = [
+        join_tag(dir),            // `[X] 人マニア` → `[X]人マニア`
+        strip_tag(dir).to_string(), // `[光] Reach For The Stars` → the plain title
+        format!("[{tag}]{plain}"), // `[宴] WE'RE BACK!! [12+?]` → `[逆]WE'RE BACK!!`
+        plain.to_string(),
+    ];
+
+    let mut found: Vec<&SheetRef> = Vec::new();
+    for form in forms.iter().filter(|f| !f.is_empty()) {
+        let Some(sheets) = index.sheets.get(&(nfc(form), difficulty.clone())) else {
+            continue;
+        };
+        for sheet in sheets {
+            if !found.iter().any(|f| f.sheet_expr == sheet.sheet_expr) {
+                found.push(sheet);
+            }
+        }
+    }
+
+    match found.as_slice() {
+        [] => UtageResolution::NoSheet,
+        [sheet] => UtageResolution::Matched((*sheet).clone()),
+        many => UtageResolution::Ambiguous(many.iter().map(|s| s.sheet_expr.clone()).collect()),
+    }
+}
+
+/// Charts whose sheet exactly one folder resolved to, and a report line for
+/// every sheet several folders resolved to. None of a colliding sheet's
+/// folders is seeded: nothing says which of them is the catalog's chart.
+fn split_collisions(
+    matches: HashMap<String, Vec<(String, ChartToApply)>>,
+) -> (Vec<ChartToApply>, Vec<String>) {
+    let mut unique = Vec::new();
+    let mut colliding = Vec::new();
+    let mut matches: Vec<_> = matches.into_iter().collect();
+    matches.sort_by(|a, b| a.0.cmp(&b.0)); // stable report order
+    for (sheet_expr, mut folders) in matches {
+        if folders.len() == 1 {
+            unique.push(folders.pop().unwrap().1);
+        } else {
+            let names: Vec<String> = folders.into_iter().map(|(dir, _)| dir).collect();
+            colliding.push(format!("{names:?} all resolve to {sheet_expr}"));
+        }
+    }
+    (unique, colliding)
+}
+
+/// `[X] 人マニア` → `人マニア`. Anything not opening with a bracket is unchanged.
+fn strip_tag(s: &str) -> &str {
+    match (s.starts_with('['), s.find(']')) {
+        (true, Some(end)) => s[end + 1..].trim_start(),
+        _ => s,
+    }
+}
+
+/// `[X] 人マニア` → `[X]人マニア`: the catalog writes no space after the tag.
+fn join_tag(s: &str) -> String {
+    match (s.starts_with('['), s.find(']')) {
+        (true, Some(end)) => format!("{}{}", &s[..=end], s[end + 1..].trim_start()),
+        _ => s.to_string(),
+    }
+}
+
+/// `人マニア [14?]` → `人マニア`. Only a trailing bracket that reads as a level
+/// (`14?`, `13+?`, `*`) is cut, so a title ending in its own bracket survives.
+fn strip_level(s: &str) -> &str {
+    let s = s.trim_end();
+    if let Some(body) = s.strip_suffix(']')
+        && let Some(open) = body.rfind('[')
+    {
+        let level = &body[open + 1..];
+        if !level.is_empty() && level.chars().all(|c| c.is_ascii_digit() || "+?*".contains(c)) {
+            return body[..open].trim_end();
+        }
+    }
+    s
+}
+
 /// Anything that failed to match is a chart that has quietly stopped
 /// loading — a renamed title and a missing difficulty are the same failure
 /// seen at two granularities, so both fail the run. `--allow-unmatched`
@@ -261,6 +418,8 @@ fn exit_code(unmatched_titles: usize, unmatched_difficulties: usize, allow_unmat
 /// next `&key=` line or EOF (inote bodies span many lines with no `&` prefix
 /// of their own).
 fn parse_maidata(text: &str) -> HashMap<String, String> {
+    // A byte-order mark would sit in front of the first `&` and hide that key.
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     let mut out = HashMap::new();
     let mut current_key: Option<String> = None;
     let mut buf: Vec<&str> = Vec::new();
@@ -321,8 +480,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     for (id, title) in &songs {
         catalog.add_song(*id, title);
     }
-    // UTAGE sheets are keyed by a kanji tag, not a slot (catalog-difficulties
-    // 03); loading them would only make every UTAGE song look ambiguous.
+    // UTAGE sheets go to their own index below: their plain titles collide
+    // with the standard songs they parody.
     let sheet_rows: Vec<(i64, String, String, i64, String, String)> = sqlx::query_as(
         "SELECT song_id_fk, type, difficulty, id, sheet_expr, level \
          FROM sheets WHERE type <> 'utage' ORDER BY id",
@@ -342,6 +501,34 @@ async fn main() -> Result<(), Box<dyn Error>> {
         );
     }
 
+    let mut utage = UtageIndex::default();
+    let codes: Vec<(String, String)> =
+        sqlx::query_as("SELECT code, difficulty FROM difficulties")
+            .fetch_all(&pool)
+            .await?;
+    for (code, difficulty) in &codes {
+        utage.add_code(code, difficulty);
+    }
+    let utage_rows: Vec<(String, String, i64, String, String)> = sqlx::query_as(
+        "SELECT s.title, sh.difficulty, sh.id, sh.sheet_expr, sh.level \
+         FROM sheets sh JOIN songs s ON s.id = sh.song_id_fk \
+         WHERE sh.type = 'utage' AND s.title IS NOT NULL AND sh.difficulty IS NOT NULL \
+         ORDER BY sh.id",
+    )
+    .fetch_all(&pool)
+    .await?;
+    for (title, difficulty, id, sheet_expr, level) in utage_rows {
+        utage.add_sheet(
+            &title,
+            &difficulty,
+            SheetRef {
+                id,
+                sheet_expr,
+                level,
+            },
+        );
+    }
+
     // `applied` counts real writes only. Counting attempts instead makes a
     // re-seed of unchanged data report the same number as the first run,
     // which is precisely the log line CI reads to tell whether anything
@@ -351,7 +538,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Every chart to write, collected across all songs and applied in one batch.
     let mut pending: Vec<ChartToApply> = Vec::new();
     let mut skipped_songs = 0usize;
-    let mut skipped_utage = 0usize;
+    let mut buddy_utage: Vec<String> = Vec::new();
+    // sheet_expr → (folder, chart). Held back from `pending` until every
+    // folder is read: two folders landing on one sheet is a collision, and
+    // the batch would otherwise keep whichever came last without a word.
+    let mut utage_matches: HashMap<String, Vec<(String, ChartToApply)>> = HashMap::new();
+    let mut unmatched_utage: Vec<String> = Vec::new();
     let mut unmatched_titles: Vec<String> = Vec::new();
     let mut unmatched_difficulties: Vec<String> = Vec::new();
     let mut loosely_matched: Vec<String> = Vec::new();
@@ -380,11 +572,40 @@ async fn main() -> Result<(), Box<dyn Error>> {
             continue;
         };
 
-        // Slot 7 is UTAGE. Those sheets are not loaded (see above), so a
-        // folder that is only UTAGE would otherwise be reported as unmatched
-        // when it is merely not seedable yet.
+        // Slot 7 is UTAGE. No sample folder mixes it with slots 2-6, so the
+        // folder is done once its UTAGE chart is resolved.
         if kv.contains_key("lv_7") || kv.contains_key("inote_7") {
-            skipped_utage += 1;
+            let Some(inote) = kv.get("inote_7").filter(|t| !t.trim().is_empty()) else {
+                continue; // a level with no chart: nothing to seed
+            };
+            let tag = kv.get("lv_7").map(String::as_str).unwrap_or("");
+            let claim = UtageClaim {
+                title,
+                dir_name: &dir_name,
+                tag,
+            };
+            match resolve_utage(&claim, &utage) {
+                UtageResolution::Matched(sheet) => utage_matches
+                    .entry(sheet.sheet_expr.clone())
+                    .or_default()
+                    .push((
+                        dir_name.clone(),
+                        ChartToApply {
+                            sheet_id: sheet.id,
+                            sheet_expr: sheet.sheet_expr,
+                            content: inote.clone(),
+                        },
+                    )),
+                UtageResolution::Buddy => buddy_utage.push(dir_name.clone()),
+                UtageResolution::UnknownTag => {
+                    unmatched_utage.push(format!("{dir_name}: &lv_7={tag} is no difficulty code"))
+                }
+                UtageResolution::NoSheet => {
+                    unmatched_utage.push(format!("{dir_name}: '{title}' tag {tag}: no UTAGE sheet"))
+                }
+                UtageResolution::Ambiguous(exprs) => unmatched_utage
+                    .push(format!("{dir_name}: '{title}' could be any of {exprs:?}")),
+            }
             continue;
         }
 
@@ -461,6 +682,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
+    let (unique, colliding) = split_collisions(utage_matches);
+    pending.extend(unique);
+    unmatched_utage.extend(colliding);
+
     // One transaction for every chart, rather than one per chart. The whole batch
     // is built first so nothing is held open while walking 1927 directories off
     // disk, and so `catalog_meta.revision` advances once for the run instead of
@@ -476,9 +701,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!(
         "seeded {applied} sheets ({unchanged} already up to date), \
          {} unmatched difficulties, {} unmatched titles, {skipped_songs} songs skipped entirely, \
-         {skipped_utage} UTAGE folders not seedable yet, {} matched loosely",
+         {} unmatched UTAGE, {} buddy UTAGE folders set aside, {} matched loosely",
         unmatched_difficulties.len(),
         unmatched_titles.len(),
+        unmatched_utage.len(),
+        buddy_utage.len(),
         loosely_matched.len()
     );
 
@@ -488,9 +715,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
     report("unmatched titles", &unmatched_titles);
     report("unmatched difficulties", &unmatched_difficulties);
+    report("unmatched UTAGE", &unmatched_utage);
+    report(
+        "buddy UTAGE folders set aside (one catalog sheet for both sides)",
+        &buddy_utage,
+    );
 
+    // An unmatched UTAGE folder is an unmatched title seen through slot 7.
     let code = exit_code(
-        unmatched_titles.len(),
+        unmatched_titles.len() + unmatched_utage.len(),
         unmatched_difficulties.len(),
         allow_unmatched,
     );
@@ -694,5 +927,146 @@ mod tests {
             resolve(&claim("Halcyon [ST]", "Halcyon [ST]", &[]), &catalog()),
             Resolution::NoSong
         );
+    }
+
+    // ── resolve_utage ─────────────────────────────────────────────────────
+    // Every claim below is the header of a real sample folder, and every
+    // catalog row a real catalog row.
+
+    fn utage_index() -> UtageIndex {
+        let mut u = UtageIndex::default();
+        for tag in ["X", "光", "蔵", "協", "逆", "充"] {
+            u.add_code(tag, &format!("【{tag}】"));
+        }
+        u.add_sheet("[X]人マニア", "【X】", sheet("[X]人マニア|utage|【X】", "14?"));
+        u.add_sheet("Reach For The Stars", "【蔵】", sheet("(宴) Reach For The Stars|utage|【蔵】", "*"));
+        u.add_sheet("Reach For The Stars", "【光】", sheet("(宴) Reach For The Stars (2)|utage|【光】", "*"));
+        u.add_sheet("Love You", "【協】", sheet("(宴) Love You|utage|【協】", "*"));
+        u.add_sheet("[協]Love You", "【協】", sheet("[協]Love You|utage|【協】", "12?"));
+        u.add_sheet("[逆]WE'RE BACK!!", "【逆】", sheet("[逆]WE'RE BACK!!|utage|【逆】", "12+?"));
+        u.add_sheet("[充]エンジェル ドリーム", "【充】", sheet("[充]エンジェル ドリーム|utage|【充】", "11?"));
+        u
+    }
+
+    fn utage<'a>(title: &'a str, dir: &'a str, tag: &'a str) -> UtageClaim<'a> {
+        UtageClaim { title, dir_name: dir, tag }
+    }
+
+    fn utage_matched(expr: &str) -> UtageResolution {
+        UtageResolution::Matched(
+            utage_index()
+                .sheets
+                .values()
+                .flatten()
+                .find(|s| s.sheet_expr == expr)
+                .cloned()
+                .unwrap(),
+        )
+    }
+
+    // Title mismatch: the folder writes `[X] 人マニア`, the catalog `[X]人マニア`.
+    // Label mismatch: `&lv_7=X` against the catalog's `【X】`.
+    #[test]
+    fn a_folder_name_without_the_space_after_its_tag_is_the_catalog_title() {
+        assert_eq!(
+            resolve_utage(&utage("[宴] 人マニア [14?]", "[X] 人マニア", "X"), &utage_index()),
+            utage_matched("[X]人マニア|utage|【X】")
+        );
+    }
+
+    // Older UTAGE songs carry the plain title; the tag tells two of them
+    // apart, and the standard "Reach For The Stars" is never a candidate.
+    #[test]
+    fn the_tag_picks_between_utage_charts_of_one_plain_title() {
+        let u = utage_index();
+        assert_eq!(
+            resolve_utage(&utage("[宴] Reach For The Stars", "[光] Reach For The Stars", "光"), &u),
+            utage_matched("(宴) Reach For The Stars (2)|utage|【光】")
+        );
+        assert_eq!(
+            resolve_utage(&utage("[宴] Reach For The Stars", "[蔵] Reach For The Stars", "蔵"), &u),
+            utage_matched("(宴) Reach For The Stars|utage|【蔵】")
+        );
+    }
+
+    // The folder name lost the apostrophe (`WE_RE`) and its tag differs
+    // from `&lv_7=`; the `&title=` minus its `[宴]` and level is the match.
+    #[test]
+    fn the_maidata_title_without_its_prefix_and_level_also_matches() {
+        assert_eq!(
+            resolve_utage(&utage("[宴] WE'RE BACK!! [12+?]", "[戻] WE_RE BACK!!", "逆"), &utage_index()),
+            utage_matched("[逆]WE'RE BACK!!|utage|【逆】")
+        );
+    }
+
+    // Two catalog charts carry 協 for "Love You", one under each title form,
+    // and the folder names no level. Either pick could be the wrong chart.
+    #[test]
+    fn a_folder_fitting_two_sheets_is_ambiguous_not_a_guess() {
+        assert!(matches!(
+            resolve_utage(&utage("[宴] Love You", "[協] Love You", "協"), &utage_index()),
+            UtageResolution::Ambiguous(ref v) if v.len() == 2
+        ));
+    }
+
+    #[test]
+    fn either_side_of_a_buddy_chart_is_set_aside() {
+        let u = utage_index();
+        assert_eq!(
+            resolve_utage(&utage("[宴/バディ/1P]エンジェル ドリーム [11?]", "[充] エンジェル ドリーム [1P]", "充"), &u),
+            UtageResolution::Buddy
+        );
+        // One sample folder spells it バティ; the folder suffix still says.
+        assert_eq!(
+            resolve_utage(&utage("[宴/バティ/1P]エンジェル ドリーム", "[充] エンジェル ドリーム [1P]", "充"), &u),
+            UtageResolution::Buddy
+        );
+    }
+
+    #[test]
+    fn a_tag_that_is_no_difficulty_code_is_reported() {
+        assert_eq!(
+            resolve_utage(&utage("[宴] 人マニア [14?]", "[X] 人マニア", "Y"), &utage_index()),
+            UtageResolution::UnknownTag
+        );
+    }
+
+    #[test]
+    fn a_utage_title_the_catalog_lacks_matches_nothing() {
+        assert_eq!(
+            resolve_utage(&utage("[宴] Nothing", "[X] Nothing", "X"), &utage_index()),
+            UtageResolution::NoSheet
+        );
+    }
+
+    fn chart(expr: &str) -> ChartToApply {
+        ChartToApply {
+            sheet_id: 0,
+            sheet_expr: expr.to_string(),
+            content: String::new(),
+        }
+    }
+
+    #[test]
+    fn two_folders_on_one_utage_sheet_seed_neither() {
+        let mut m: HashMap<String, Vec<(String, ChartToApply)>> = HashMap::new();
+        m.entry("a".into()).or_default().push(("A".into(), chart("a")));
+        m.entry("b".into()).or_default().push(("B1".into(), chart("b")));
+        m.entry("b".into()).or_default().push(("B2".into(), chart("b")));
+
+        let (unique, colliding) = split_collisions(m);
+
+        assert_eq!(unique.iter().map(|c| c.sheet_expr.as_str()).collect::<Vec<_>>(), ["a"]);
+        assert_eq!(colliding, [r#"["B1", "B2"] all resolve to b"#]);
+    }
+
+    // 25 sample files, 8 of them UTAGE, open with a UTF-8 byte-order mark.
+    // Read as part of the first line, it hid `&title=` and the folder was
+    // dropped as untitled.
+    #[test]
+    fn a_byte_order_mark_does_not_hide_the_first_key() {
+        let kv = parse_maidata("\u{feff}&title=[宴] 3rd Avenue [12?]\n&lv_7=覚\n");
+        assert_eq!(kv.get("title").map(String::as_str), Some("[宴] 3rd Avenue [12?]"));
+        assert_eq!(kv.get("lv_7").map(String::as_str), Some("覚"));
     }
 }
