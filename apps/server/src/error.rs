@@ -1,10 +1,11 @@
-//! Single error type for the API (ticket 02). Every handler but `get_chart`
-//! returns `Result<_, AppError>` — `get_chart` is excepted by contract §2/§6:
-//! it returns plain-text errors, not this JSON shape.
+//! Single error type for the API (ticket 02). Every handler returns
+//! `Result<_, AppError>` except the chart endpoints: v1's `get_chart`, which
+//! predates this and returns its own plain-text errors, and v2's, which
+//! returns [`PlainText`] — the same errors, rendered as text.
 
 use axum::{
     Json,
-    http::StatusCode,
+    http::{HeaderName, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use serde_json::json;
@@ -22,6 +23,9 @@ pub enum AppError {
     BadRequest(String),
     /// `/sync/delta`'s `since` predates the last full reload (contract §3).
     SnapshotRequired,
+    /// The request is valid but this server cannot serve it yet: a chart row
+    /// holding no inline text (contract §2).
+    NotImplemented(String),
     /// No credential presented (contract §4).
     Unauthorized(&'static str),
     /// A credential presented and refused: an expired or invalid JWT, a dead
@@ -45,83 +49,143 @@ pub enum AppError {
     Internal(&'static str),
 }
 
-impl IntoResponse for AppError {
-    fn into_response(self) -> Response {
+/// What an error becomes on the wire, whatever the body's format. Built in one
+/// place, so the JSON and plain-text renderings cannot disagree on a status
+/// or on what is redacted; the logging happens here too, once.
+struct Rendered {
+    status: StatusCode,
+    code: &'static str,
+    /// `None` only for `snapshot_required`, whose JSON body has no message.
+    message: Option<String>,
+    header: Option<(HeaderName, String)>,
+}
+
+impl AppError {
+    fn render(self) -> Rendered {
+        let plain = |status, code, message: String| Rendered {
+            status,
+            code,
+            message: Some(message),
+            header: None,
+        };
         match self {
             AppError::Database(e) => {
                 tracing::error!(error = %e, "database query failed");
-                (
+                plain(
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "error": "database_error", "message": "internal error" })),
+                    "database_error",
+                    "internal error".into(),
                 )
-                    .into_response()
             }
-            AppError::NotFound { kind, key } => (
+            AppError::NotFound { kind, key } => plain(
                 StatusCode::NOT_FOUND,
-                Json(
-                    json!({ "error": "not_found", "message": format!("{kind} '{key}' not found") }),
-                ),
-            )
-                .into_response(),
-            AppError::BadRequest(message) => (
-                StatusCode::BAD_REQUEST,
-                Json(json!({ "error": "bad_request", "message": message })),
-            )
-                .into_response(),
+                "not_found",
+                format!("{kind} '{key}' not found"),
+            ),
+            AppError::BadRequest(message) => plain(StatusCode::BAD_REQUEST, "bad_request", message),
             // RFC 6750 §3.1: a request with no credential gets the bare
             // scheme; one whose token was refused also gets
             // `error="invalid_token"`. The body is the same shape for both.
-            AppError::Unauthorized(message) => (
-                StatusCode::UNAUTHORIZED,
-                [(axum::http::header::WWW_AUTHENTICATE, "Bearer")],
-                Json(json!({ "error": "unauthorized", "message": message })),
-            )
-                .into_response(),
-            AppError::InvalidToken(message) => (
-                StatusCode::UNAUTHORIZED,
-                [(
-                    axum::http::header::WWW_AUTHENTICATE,
-                    r#"Bearer error="invalid_token""#,
-                )],
-                Json(json!({ "error": "unauthorized", "message": message })),
-            )
-                .into_response(),
-            AppError::SnapshotRequired => (
-                StatusCode::CONFLICT,
-                Json(json!({ "error": "snapshot_required" })),
-            )
-                .into_response(),
+            AppError::Unauthorized(message) => Rendered {
+                header: Some((header::WWW_AUTHENTICATE, "Bearer".into())),
+                ..plain(StatusCode::UNAUTHORIZED, "unauthorized", message.into())
+            },
+            AppError::InvalidToken(message) => Rendered {
+                header: Some((
+                    header::WWW_AUTHENTICATE,
+                    r#"Bearer error="invalid_token""#.into(),
+                )),
+                ..plain(StatusCode::UNAUTHORIZED, "unauthorized", message.into())
+            },
+            AppError::SnapshotRequired => Rendered {
+                status: StatusCode::CONFLICT,
+                code: "snapshot_required",
+                message: None,
+                header: None,
+            },
+            AppError::NotImplemented(message) => {
+                plain(StatusCode::NOT_IMPLEMENTED, "not_implemented", message)
+            }
             AppError::BadGateway(context) => {
                 tracing::error!(context, "upstream call failed");
-                (
+                plain(
                     StatusCode::BAD_GATEWAY,
-                    Json(
-                        json!({ "error": "upstream_error", "message": "upstream service failed" }),
-                    ),
+                    "upstream_error",
+                    "upstream service failed".into(),
                 )
-                    .into_response()
             }
             AppError::Internal(context) => {
                 tracing::error!(context, "internal error");
-                (
+                plain(
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "error": "internal_error", "message": "internal error" })),
+                    "internal_error",
+                    "internal error".into(),
                 )
-                    .into_response()
             }
-            AppError::RateLimited { retry_after_secs } => (
-                StatusCode::TOO_MANY_REQUESTS,
-                [(
-                    axum::http::header::RETRY_AFTER,
-                    retry_after_secs.to_string(),
-                )],
-                Json(json!({
-                    "error": "rate_limited",
-                    "message": format!("rate limit exceeded, retry after {retry_after_secs}s")
-                })),
-            )
-                .into_response(),
+            AppError::RateLimited { retry_after_secs } => Rendered {
+                header: Some((header::RETRY_AFTER, retry_after_secs.to_string())),
+                ..plain(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    "rate_limited",
+                    format!("rate limit exceeded, retry after {retry_after_secs}s"),
+                )
+            },
         }
+    }
+}
+
+impl Rendered {
+    fn into_response_with(self, body: impl IntoResponse) -> Response {
+        let mut response = (self.status, body).into_response();
+        if let Some((name, value)) = self.header {
+            response.headers_mut().insert(
+                name,
+                HeaderValue::from_str(&value).expect("error headers are ASCII"),
+            );
+        }
+        response
+    }
+}
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        let rendered = self.render();
+        let body = match &rendered.message {
+            Some(message) => json!({ "error": rendered.code, "message": message }),
+            None => json!({ "error": rendered.code }),
+        };
+        rendered.into_response_with(Json(body))
+    }
+}
+
+/// An [`AppError`] rendered as `text/plain`: the message alone, with the same
+/// status, headers and redaction as the JSON form. For the chart endpoint,
+/// whose success body is simai text the engine reads as text whatever the
+/// status (`api-rewrite` 05). Built from an `AppError`, so a handler cannot
+/// put a raw database error in front of the client by returning one.
+#[derive(Debug)]
+pub struct PlainText(pub AppError);
+
+impl IntoResponse for PlainText {
+    fn into_response(self) -> Response {
+        let rendered = self.0.render();
+        let body = rendered
+            .message
+            .clone()
+            .unwrap_or_else(|| rendered.code.to_string());
+        rendered.into_response_with(body)
+    }
+}
+
+impl From<AppError> for PlainText {
+    fn from(e: AppError) -> Self {
+        PlainText(e)
+    }
+}
+
+impl From<sqlx::Error> for PlainText {
+    fn from(e: sqlx::Error) -> Self {
+        PlainText(AppError::Database(e))
     }
 }
 
@@ -259,6 +323,56 @@ mod tests {
         assert_eq!(
             body_json(response).await,
             json!({ "error": "rate_limited", "message": "rate limit exceeded, retry after 42s" })
+        );
+    }
+
+    async fn body_text(response: Response) -> String {
+        String::from_utf8(
+            to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap()
+                .to_vec(),
+        )
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn plain_text_keeps_the_status_and_the_redaction() {
+        let response = PlainText(AppError::Database(sqlx::Error::PoolTimedOut)).into_response();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(
+            response.headers()[header::CONTENT_TYPE]
+                .to_str()
+                .unwrap()
+                .starts_with("text/plain")
+        );
+        assert_eq!(body_text(response).await, "internal error");
+    }
+
+    #[tokio::test]
+    async fn plain_text_carries_the_message_and_any_challenge() {
+        let response = PlainText(AppError::NotFound {
+            kind: "chart",
+            key: "x".into(),
+        })
+        .into_response();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(body_text(response).await, "chart 'x' not found");
+
+        let response = PlainText(AppError::Unauthorized("missing bearer token")).into_response();
+        assert_eq!(response.headers()[header::WWW_AUTHENTICATE], "Bearer");
+
+        let response = PlainText(AppError::SnapshotRequired).into_response();
+        assert_eq!(body_text(response).await, "snapshot_required");
+    }
+
+    #[tokio::test]
+    async fn not_implemented_is_501() {
+        let response = AppError::NotImplemented("no inline text".into()).into_response();
+        assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(
+            body_json(response).await,
+            json!({ "error": "not_implemented", "message": "no inline text" })
         );
     }
 }

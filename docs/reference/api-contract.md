@@ -124,6 +124,17 @@ case-sensitive (`X` is not `x`). The bracketed name (`【協】`) is not an
 address. `400` for a malformed id; `404` for an unknown song, type or code —
 the lookup is the validation.
 
+### `GET /api/songs/{id}/sheets/{type}/{difficulty}/chart`
+
+The sheet's simai text, `200 text/plain; charset=utf-8`, for the engine.
+Errors are **plain text** too — the engine reads this body as text whatever
+the status — but they are the same errors as everywhere else, with the same
+statuses and the same redaction: `400` malformed id, `404` no such sheet
+(`sheet '…' not found`) or no chart for it (`chart '…' not found`), `501` a
+chart row without inline text, `500` with the body `internal error` and
+nothing more. v1's handler put a database error's own text in the body; this
+one cannot.
+
 ---
 
 ## 1. Catalog — replaces static `data.json`  *(shipped)*
@@ -527,7 +538,10 @@ Status enum: `pending | approved | rejected | merged`.
   `not_found`, `snapshot_required` (§3), `rate_limited`, and on the v2 branch
   `bad_request` and `upstream_error` (`502`, opaque, for a failing GitHub —
   §4).
-  Exception: `GET /sheets/{songId}/chart` returns plain-text errors (§2).
+  Exception: the chart endpoints — v1's `GET /sheets/{songId}/chart` (§2) and
+  v2's `…/chart` (§0) — return plain-text errors. v2's are `AppError`s
+  rendered as text: same status, same redaction, body the message alone.
+  `not_implemented` (`501`) is v2's code for a chart without inline text.
 - **Pagination**: `?page` (1-based) + `?pageSize` (default 22, max 100). The
   total is returned as an **`X-Total-Count` response header**
   ([ADR-0015](../adr/0015-pagination-total-as-a-response-header.md)). It must

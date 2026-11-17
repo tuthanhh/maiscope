@@ -76,3 +76,44 @@ pub async fn fetch_official_sheets(
     .fetch_all(pool)
     .await
 }
+
+/// What the chart endpoint can say about one sheet.
+pub enum ChartText {
+    /// No such sheet.
+    NoSheet,
+    /// The sheet exists; no chart row does.
+    NoChart,
+    /// A chart row with no inline text (blob-only, not served yet).
+    NotInline,
+    Inline(String),
+}
+
+/// The simai text for one sheet, addressed as the v2 routes address it. One
+/// statement, so the four outcomes come from one snapshot.
+pub async fn fetch_chart_text(
+    pool: &PgPool,
+    song_id: Uuid,
+    r#type: &str,
+    difficulty_code: &str,
+) -> Result<ChartText, sqlx::Error> {
+    let row = sqlx::query!(
+        r#"SELECT c.id IS NOT NULL AS "has_row!", c.content
+           FROM sheets s
+           JOIN difficulties d ON d.difficulty = s.difficulty
+           LEFT JOIN charts c ON c.sheet_id = s.id AND c.format = 'maimai-simai'
+           WHERE s.song_id_fk = $1 AND s.type = $2 AND d.code = $3"#,
+        song_id,
+        r#type,
+        difficulty_code
+    )
+    .fetch_optional(pool)
+    .await?;
+    Ok(match row {
+        None => ChartText::NoSheet,
+        Some(row) if !row.has_row => ChartText::NoChart,
+        Some(row) => match row.content {
+            Some(text) => ChartText::Inline(text),
+            None => ChartText::NotInline,
+        },
+    })
+}

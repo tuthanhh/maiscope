@@ -6,7 +6,7 @@ use axum::{
 use sqlx::PgPool;
 use sqlx::types::Uuid;
 
-use crate::error::AppError;
+use crate::error::{AppError, PlainText};
 use crate::queries;
 use crate::state::AppState;
 use crate::types::{OfficialSheet, OfficialSong};
@@ -15,6 +15,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/songs/{id}", get(song))
         .route("/songs/{id}/sheets/{type}/{difficulty}", get(sheet))
+        .route("/songs/{id}/sheets/{type}/{difficulty}/chart", get(chart))
 }
 
 /// A song id from a path. Taken as a `String` and parsed here, so a malformed
@@ -82,6 +83,36 @@ async fn sheet(
         fields: sheet.into(),
         song: song.into(),
     }))
+}
+
+// GET /api/songs/{id}/sheets/{type}/{difficulty}/chart — the simai text for
+// the engine. Errors are plain text because the engine reads this body as
+// text whatever the status; they are `AppError`s all the same, so a database
+// failure is "internal error", never the sqlx message v1's handler sent.
+async fn chart(
+    Path((id, r#type, difficulty)): Path<(String, String, String)>,
+    State(pool): State<PgPool>,
+) -> Result<String, PlainText> {
+    let song_id = parse_song_id(&id)?;
+    let key = || format!("{id}/{type}/{difficulty}");
+    match queries::fetch_chart_text(&pool, song_id, &r#type, &difficulty).await? {
+        queries::ChartText::Inline(text) => Ok(text),
+        queries::ChartText::NoSheet => Err(AppError::NotFound {
+            kind: "sheet",
+            key: key(),
+        }
+        .into()),
+        queries::ChartText::NoChart => Err(AppError::NotFound {
+            kind: "chart",
+            key: key(),
+        }
+        .into()),
+        queries::ChartText::NotInline => Err(AppError::NotImplemented(format!(
+            "chart for '{}' has no inline simai content",
+            key()
+        ))
+        .into()),
+    }
 }
 
 #[cfg(test)]
@@ -240,6 +271,108 @@ mod tests {
             .unwrap();
         let body: Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(body["difficulty"], "協");
+        Ok(())
+    }
+
+    async fn get_chart(pool: &PgPool, id: &str, code: &str) -> axum::response::Response {
+        match chart(
+            Path((id.to_string(), "utage".to_string(), code.to_string())),
+            State(pool.clone()),
+        )
+        .await
+        {
+            Ok(text) => text.into_response(),
+            Err(error) => error.into_response(),
+        }
+    }
+
+    async fn text_of(response: axum::response::Response) -> String {
+        String::from_utf8(
+            axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap()
+                .to_vec(),
+        )
+        .unwrap()
+    }
+
+    /// Chart rows for the seeded UTAGE sheets: inline text on `協`, a
+    /// blob-only row on `X`.
+    async fn seed_charts(pool: &PgPool, song: Uuid) -> sqlx::Result<()> {
+        sqlx::query!(
+            "INSERT INTO charts (sheet_id, sheet_expr, format, content, hash)
+             SELECT id, sheet_expr, 'maimai-simai', '&title=Title', 'h'
+             FROM sheets WHERE song_id_fk = $1 AND difficulty = '【協】'",
+            song
+        )
+        .execute(pool)
+        .await?;
+        sqlx::query!(
+            "INSERT INTO charts (sheet_id, sheet_expr, format)
+             SELECT id, sheet_expr, 'maimai-simai'
+             FROM sheets WHERE song_id_fk = $1 AND difficulty = '【X】'",
+            song
+        )
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn the_chart_is_plain_text(pool: PgPool) -> sqlx::Result<()> {
+        let id = seed(&pool).await?;
+        seed_charts(&pool, id).await?;
+        let response = get_chart(&pool, &id.to_string(), "協").await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(
+            response.headers()[axum::http::header::CONTENT_TYPE]
+                .to_str()
+                .unwrap()
+                .starts_with("text/plain")
+        );
+        assert_eq!(text_of(response).await, "&title=Title");
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn chart_misses_are_plain_text_too(pool: PgPool) -> sqlx::Result<()> {
+        let id = seed(&pool).await?;
+        seed_charts(&pool, id).await?;
+        let id = id.to_string();
+
+        let blob_only = get_chart(&pool, &id, "X").await;
+        assert_eq!(blob_only.status(), StatusCode::NOT_IMPLEMENTED);
+
+        // The master sheet exists and has no chart row; `即` is no sheet.
+        let no_chart = chart(
+            Path((id.clone(), "dx".to_string(), "master".to_string())),
+            State(pool.clone()),
+        )
+        .await
+        .unwrap_err()
+        .into_response();
+        assert_eq!(no_chart.status(), StatusCode::NOT_FOUND);
+        assert!(text_of(no_chart).await.starts_with("chart '"));
+        let no_sheet = get_chart(&pool, &id, "即").await;
+        assert_eq!(no_sheet.status(), StatusCode::NOT_FOUND);
+        assert!(text_of(no_sheet).await.starts_with("sheet '"));
+
+        let bad_id = get_chart(&pool, "nope", "協").await;
+        assert_eq!(bad_id.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(text_of(bad_id).await, "'nope' is not a song id");
+        Ok(())
+    }
+
+    // The leak v1's handler had: a database error's own text in the body.
+    #[sqlx::test]
+    async fn a_database_error_never_reaches_the_body(pool: PgPool) -> sqlx::Result<()> {
+        let id = seed(&pool).await?;
+        sqlx::query("ALTER TABLE charts RENAME TO charts_gone")
+            .execute(&pool)
+            .await?;
+        let response = get_chart(&pool, &id.to_string(), "協").await;
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(text_of(response).await, "internal error");
         Ok(())
     }
 }
