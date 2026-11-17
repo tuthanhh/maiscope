@@ -156,6 +156,9 @@ written, the maintainer picked from options. Recorded in
   manifest shrinks to its `revision`.
 - **The five reference tables** are `GET /api/reference` and also ride inside
   the Catalog, per ADR-0021.
+- **Vanished rows are hidden.** A song or sheet with a standing tombstone is
+  not served; the sync clears the tombstone if the row returns. Picked after
+  the feature review found delta's removal left no other signal.
 
 ## Tickets
 

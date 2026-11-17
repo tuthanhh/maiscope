@@ -11,23 +11,25 @@ mod v1;
 use std::time::Duration;
 
 use axum::Router;
+use axum::extract::OriginalUri;
+use axum::http::StatusCode;
 use axum::http::{HeaderValue, Method, header};
 use tower_http::cors::CorsLayer;
 use tower_http::trace::{DefaultOnResponse, TraceLayer};
 use tracing::Level;
 
+use crate::error::AppError;
 use crate::rate_limit;
 use crate::state::AppState;
 
 // Generous, uniform across every rate-limited route: burst of 30 requests,
 // refilling 1/second after that. A legitimate browser session rarely does
-// more than a handful of these per minute — repeat /catalog visits mostly
-// hit the ticket-07 cache/304 path instead of a fresh fetch, and
-// search-as-you-type on /sheets/search is the busiest realistic case, which
-// this burst comfortably absorbs. A script looping on /catalog starts
-// getting 429s after 30 requests and is capped to ~1 req/s after that — the
-// "blast radius" this ticket is about, not a defence against a determined
-// abuser (that's caching, ticket 07, and this being generous by design).
+// more than a handful of these per minute — repeat Catalog visits mostly hit
+// the ETag/304 path (`server-restructure` 07) instead of a fresh fetch. A
+// script looping on the Catalog starts getting 429s after 30 requests and is
+// capped to ~1 req/s after that — the "blast radius" `server-restructure` 08
+// is about, not a defence against a determined abuser (that's caching, and
+// this being generous by design).
 const RATE_LIMIT_BURST_SIZE: u32 = 30;
 const RATE_LIMIT_PERIOD: Duration = Duration::from_secs(1);
 
@@ -77,12 +79,11 @@ pub fn router(state: AppState) -> Router {
     );
     rate_limit::spawn_reaper(github_limiter, RATE_LIMIT_CLEANUP_INTERVAL);
 
-    // v2 routes live under `/api` with no version segment; the catalog joins
-    // them in api-rewrite. Refresh and me share the catalog's bucket, so one
-    // IP has one budget for ordinary traffic.
+    // v2 routes live under `/api` with no version segment. Refresh and me
+    // share the reads' bucket, so one IP has one budget for ordinary traffic.
     //
-    // `no_store` wraps the auth routes only, not the `/api` nest: the catalog
-    // is cacheable and will move in beside them.
+    // `no_store` wraps the auth routes only, not the `/api` nest: the Catalog
+    // and reference tables beside them are cacheable.
     let auth_routes = Router::new()
         .merge(auth::github_router().layer(github_limit_layer))
         .merge(auth::session_router().layer(limit_layer.clone()))
@@ -97,19 +98,26 @@ pub fn router(state: AppState) -> Router {
         .merge(health::router())
         .merge(reads)
         .merge(auth_routes)
-        // An address that matches no route is the contract's 404, not axum's
-        // empty body.
-        .fallback(|uri: axum::http::Uri| async move {
-            crate::error::AppError::NotFound {
+        // An address that matches no route, or a route asked with the wrong
+        // method, answers in the contract's shape rather than axum's empty
+        // body. `OriginalUri`: inside the nest the URI has lost its `/api`.
+        .fallback(|uri: OriginalUri| async move {
+            AppError::NotFound {
                 kind: "route",
                 key: extract::quoted(uri.path()),
             }
-        });
+        })
+        .method_not_allowed_fallback(|| async { AppError::MethodNotAllowed });
 
     Router::new()
         .nest(
             "/api/v1",
-            Router::new().merge(v1::health_router()).merge(limited),
+            Router::new()
+                .merge(v1::health_router())
+                .merge(limited)
+                // Kept as on master — an empty 404 — rather than falling
+                // through to the v2 fallback: v1 answers as it always has.
+                .fallback(|| async { StatusCode::NOT_FOUND }),
         )
         .nest("/api", api)
         // Both default to DEBUG; DEFAULT_LOG_FILTER (config.rs) is
@@ -136,8 +144,8 @@ pub fn router(state: AppState) -> Router {
         )
         .layer(tower_http::compression::CompressionLayer::new())
         // CORS here is an egress control, not a security control — curl
-        // ignores it entirely. The real cap on abuse is ticket 08's rate
-        // limiting. Credentials travel in an `Authorization` header the page
+        // ignores it entirely. The real cap on abuse is the rate limiting
+        // (`server-restructure` 08). Credentials travel in an `Authorization` header the page
         // sets, never in cookies, so no `allow_credentials`: a listed origin
         // gains nothing a script on it could not already send.
         //
@@ -528,5 +536,45 @@ mod tests {
                 .unwrap_or_else(|_| panic!("{path} did not answer JSON"));
             assert_eq!(body["error"], code, "{path}");
         }
+    }
+
+    #[sqlx::test]
+    async fn misses_name_the_full_path_and_v1_keeps_its_empty_404(pool: PgPool) {
+        let app = router(test_state(pool));
+        let response = app
+            .clone()
+            .oneshot(get_from("/api/nothing-here", "203.0.113.100"))
+            .await
+            .unwrap();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(body["message"], "route '/api/nothing-here' not found");
+
+        let response = app
+            .clone()
+            .oneshot(get_from("/api/v1/nothing-here", "203.0.113.100"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert!(bytes.is_empty(), "v1 misses stay as they were on master");
+
+        let post = Request::builder()
+            .method("POST")
+            .uri("/api/reference")
+            .header("fly-client-ip", "203.0.113.100")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.oneshot(post).await.unwrap();
+        assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(body["error"], "method_not_allowed");
     }
 }

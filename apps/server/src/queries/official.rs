@@ -6,6 +6,11 @@
 //! The `$n IS NULL OR …` filters cost the single-song paths their index once
 //! Postgres settles on a generic plan: a scan of ~7.5k sheets, milliseconds.
 //! Accepted for one query shape over three; split them if it ever shows.
+//!
+//! Rows upstream no longer lists are hidden: a song or sheet with a standing
+//! tombstone in `deleted_songs` / `deleted_sheets` is not served (ADR-0026).
+//! The sync clears the tombstone when the row returns. A vanished song's
+//! sheets vanish with it, so the sheet filter alone covers the sheet routes.
 
 use sqlx::PgConnection;
 use sqlx::types::Uuid;
@@ -27,8 +32,9 @@ pub async fn fetch_official_songs(
         r#"SELECT id, category, title, artist, bpm, image_name, version,
                   to_char(release_date, 'YYYY-MM-DD') AS release_date, is_locked, comment
            FROM songs
-           WHERE $1::uuid IS NULL OR id = $1
-           ORDER BY source_index"#,
+           WHERE ($1::uuid IS NULL OR id = $1)
+             AND NOT EXISTS (SELECT 1 FROM deleted_songs d WHERE d.song_id = songs.song_id)
+           ORDER BY source_index, id"#,
         id
     )
     .fetch_all(conn)
@@ -56,7 +62,8 @@ pub async fn fetch_official_sheets(
             s.internal_level_value,
             s.note_designer,
             EXISTS (
-                SELECT 1 FROM charts c WHERE c.sheet_id = s.id AND c.content IS NOT NULL
+                SELECT 1 FROM charts c
+                WHERE c.sheet_id = s.id AND c.format = 'maimai-simai' AND c.content IS NOT NULL
             ) AS "has_chart!",
             (SELECT json_object_agg(key, value) FROM sheet_note_counts WHERE sheet_id = s.id)
                 AS "note_counts: NoteCountsJson",
@@ -72,6 +79,7 @@ pub async fn fetch_official_sheets(
            LEFT JOIN difficulties d ON d.difficulty = s.difficulty
            WHERE ($1::uuid IS NULL OR s.song_id_fk = $1)
              AND ($2::text IS NULL OR (s.type = $2 AND d.code = $3))
+             AND NOT EXISTS (SELECT 1 FROM deleted_sheets t WHERE t.sheet_expr = s.sheet_expr)
            ORDER BY s.song_id_fk, s.source_index"#,
         song_id,
         r#type,
@@ -105,7 +113,8 @@ pub async fn fetch_chart_text(
            FROM sheets s
            JOIN difficulties d ON d.difficulty = s.difficulty
            LEFT JOIN charts c ON c.sheet_id = s.id AND c.format = 'maimai-simai'
-           WHERE s.song_id_fk = $1 AND s.type = $2 AND d.code = $3"#,
+           WHERE s.song_id_fk = $1 AND s.type = $2 AND d.code = $3
+             AND NOT EXISTS (SELECT 1 FROM deleted_sheets t WHERE t.sheet_expr = s.sheet_expr)"#,
         song_id,
         r#type,
         difficulty_code
@@ -177,6 +186,38 @@ mod tests {
         );
         let one = fetch_official_songs(&mut conn, Some(second)).await?;
         assert_eq!(one.iter().map(|s| s.id).collect::<Vec<_>>(), [second]);
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn tombstoned_rows_are_hidden(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let (first, second) = seed(&pool).await?;
+        sqlx::query!("INSERT INTO deleted_songs (song_id, revision) VALUES ('b', 1)")
+            .execute(&pool)
+            .await?;
+        sqlx::query!(
+            "INSERT INTO deleted_sheets (sheet_expr, revision)
+             VALUES ('b|dx|master', 1), ('a|dx|expert', 1)"
+        )
+        .execute(&pool)
+        .await?;
+        let mut conn = pool.acquire().await?;
+
+        let songs = fetch_official_songs(&mut conn, None).await?;
+        assert_eq!(songs.iter().map(|s| s.id).collect::<Vec<_>>(), [first]);
+        assert!(
+            fetch_official_songs(&mut conn, Some(second))
+                .await?
+                .is_empty()
+        );
+
+        let pair = |t: &str, d: &str| (t.to_string(), d.to_string());
+        let sheets = fetch_official_sheets(&mut conn, None, None).await?;
+        assert_eq!(keys(&sheets), [pair("dx", "master"), pair("utage", "協")]);
+        assert!(matches!(
+            fetch_chart_text(&mut conn, first, "dx", "expert").await?,
+            ChartText::NoSheet
+        ));
         Ok(())
     }
 

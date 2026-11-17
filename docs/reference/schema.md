@@ -139,11 +139,14 @@ as of `bin/sync_catalog`; they were empty placeholders under `bin/ingest`.
 A row that disappears from the upstream payload is **not** deleted. Deleting a
 song cascades through `sheets` into `charts` and destroys chart text, which
 Postgres is the only copy of ([ADR-0001](../adr/0001-postgres-source-of-truth-for-charts.md)).
-The row stays in `songs`/`sheets`, stays visible in `/catalog`, and gets one
-tombstone row recording the revision it went missing at. `/sync/delta` serves
-those under `tombstones` (contract §3). A row is logged **once**, not on every
-subsequent sync — the PK is `(key, revision)`, so `ON CONFLICT DO NOTHING`
-would still write a fresh entry under each new revision.
+The row stays in `songs`/`sheets` and gets one tombstone row recording the
+revision it went missing at. v1's `/catalog` still shows it and `/sync/delta`
+serves the tombstone (contract §3); the v2 API hides any row with a standing
+tombstone ([ADR-0026](../adr/0026-v2-api-carries-codes-and-read-fields-only.md)).
+A row is logged **once** while it stays missing — the PK is `(key, revision)`,
+so `ON CONFLICT DO NOTHING` would still write a fresh entry under each new
+revision. When upstream lists it again, the sync deletes its tombstone, so the
+tables hold exactly what is missing now.
 
 Accepted cost: the catalog drifts from upstream over time, with no way to tell
 a current song from one dropped years ago. See `docs/work/catalog-sync/spec.md`

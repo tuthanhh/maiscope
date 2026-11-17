@@ -1,6 +1,6 @@
 # ADR-0010 — Differential catalog sync, never deleting songs or sheets
 
-**Status:** accepted; the lookup-table scope clause is narrowed by [ADR-0022](0022-difficulties-derived-and-referenced.md)
+**Status:** accepted; the lookup-table scope clause is narrowed by [ADR-0022](0022-difficulties-derived-and-referenced.md); tombstones are cleared when a row returns, and hide rows from the v2 API, per [ADR-0026](0026-v2-api-carries-codes-and-read-fields-only.md)
 **Date:** 2026-09-14
 
 ## Context

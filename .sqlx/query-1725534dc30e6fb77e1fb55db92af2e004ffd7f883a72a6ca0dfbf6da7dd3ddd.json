@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT c.id IS NOT NULL AS \"has_row!\", c.content\n           FROM sheets s\n           JOIN difficulties d ON d.difficulty = s.difficulty\n           LEFT JOIN charts c ON c.sheet_id = s.id AND c.format = 'maimai-simai'\n           WHERE s.song_id_fk = $1 AND s.type = $2 AND d.code = $3",
+  "query": "SELECT c.id IS NOT NULL AS \"has_row!\", c.content\n           FROM sheets s\n           JOIN difficulties d ON d.difficulty = s.difficulty\n           LEFT JOIN charts c ON c.sheet_id = s.id AND c.format = 'maimai-simai'\n           WHERE s.song_id_fk = $1 AND s.type = $2 AND d.code = $3\n             AND NOT EXISTS (SELECT 1 FROM deleted_sheets t WHERE t.sheet_expr = s.sheet_expr)",
   "describe": {
     "columns": [
       {
@@ -33,5 +33,5 @@
       true
     ]
   },
-  "hash": "0acaa695347dfa97980b82539b27946b0f094bdbdc53cbd32c7dbabe4b1300d7"
+  "hash": "1725534dc30e6fb77e1fb55db92af2e004ffd7f883a72a6ca0dfbf6da7dd3ddd"
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, category, title, artist, bpm, image_name, version,\n                  to_char(release_date, 'YYYY-MM-DD') AS release_date, is_locked, comment\n           FROM songs\n           WHERE $1::uuid IS NULL OR id = $1\n           ORDER BY source_index",
+  "query": "SELECT id, category, title, artist, bpm, image_name, version,\n                  to_char(release_date, 'YYYY-MM-DD') AS release_date, is_locked, comment\n           FROM songs\n           WHERE ($1::uuid IS NULL OR id = $1)\n             AND NOT EXISTS (SELECT 1 FROM deleted_songs d WHERE d.song_id = songs.song_id)\n           ORDER BY source_index, id",
   "describe": {
     "columns": [
       {
@@ -127,5 +127,5 @@
       true
     ]
   },
-  "hash": "4eb134ba34a2ac0e9c81193eba989dcd68ccbc27063e70315dba04d6fdbecd31"
+  "hash": "26e6100e2cd1093636a9e434ab7c3ed69f144427bb778b84a83204aa98099efd"
 }

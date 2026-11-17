@@ -17,15 +17,16 @@ use crate::error::AppError;
 /// (contract §1).
 pub(crate) const CATALOG_CACHE_CONTROL: &str = "public, max-age=3600";
 
-/// `GET /sync/manifest`: this endpoint's whole job is telling the client
-/// whether the catalog changed, so it always revalidates (contract §3).
+/// The manifest (v1 and v2): its whole job is telling the client whether the
+/// Catalog changed, so it always revalidates (contract §3, §0).
 pub(crate) const MANIFEST_CACHE_CONTROL: &str = "no-cache";
 
 /// The `catalog_meta` row both endpoints need, plus the validator derived
 /// from it.
 pub(crate) struct Freshness {
-    /// sha256 over `revision:updateTime`. `GET /sync/manifest` reports this
-    /// bare as `catalogHash`; both endpoints send it quoted as their `ETag`.
+    /// sha256 over `revision:updateTime`, sent quoted as the `ETag` of every
+    /// route that reads it. v1's manifest also reports it bare as
+    /// `catalogHash`; v2's does not.
     pub hash: String,
     pub update_time: String,
     pub revision: i64,

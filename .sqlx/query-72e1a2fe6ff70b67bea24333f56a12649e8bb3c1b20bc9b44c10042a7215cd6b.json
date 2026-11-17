@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO deleted_songs (song_id, revision) VALUES ('b', 1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "72e1a2fe6ff70b67bea24333f56a12649e8bb3c1b20bc9b44c10042a7215cd6b"
+}

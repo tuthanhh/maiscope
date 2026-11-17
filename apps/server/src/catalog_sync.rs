@@ -33,9 +33,14 @@ pub struct SyncStats {
     /// Rows this run logged as vanished for the first time.
     pub songs_vanished: i64,
     pub sheets_vanished: i64,
-    /// Every row ever logged as vanished. Without this the log reads
-    /// "vanished 0" forever after the first miss, which reads as "nothing is
-    /// missing" when the truth is "nothing newly went missing".
+    /// Rows upstream lists again after having vanished: their tombstones are
+    /// cleared, so the v2 API serves them again (ADR-0026).
+    pub songs_returned: i64,
+    pub sheets_returned: i64,
+    /// Rows missing upstream right now — every tombstone still standing.
+    /// Without this the log reads "vanished 0" forever after the first miss,
+    /// which reads as "nothing is missing" when the truth is "nothing newly
+    /// went missing".
     pub songs_vanished_total: i64,
     pub sheets_vanished_total: i64,
     pub songs_skipped_no_id: i64,
@@ -67,10 +72,10 @@ impl SyncStats {
     pub fn summary_markdown(&self) -> String {
         let mut out = format!(
             "### Catalog sync: revision {} ({})\n\n\
-             | | inserted | updated | vanished (new) | vanished (all time) |\n\
-             |---|---|---|---|---|\n\
-             | songs | {} | {} | {} | {} |\n\
-             | sheets | {} | {} | {} | {} |\n",
+             | | inserted | updated | vanished (new) | returned | missing now |\n\
+             |---|---|---|---|---|---|\n\
+             | songs | {} | {} | {} | {} | {} |\n\
+             | sheets | {} | {} | {} | {} | {} |\n",
             self.revision,
             if self.revision_advanced {
                 "advanced"
@@ -80,10 +85,12 @@ impl SyncStats {
             self.songs_inserted,
             self.songs_updated,
             self.songs_vanished,
+            self.songs_returned,
             self.songs_vanished_total,
             self.sheets_inserted,
             self.sheets_updated,
             self.sheets_vanished,
+            self.sheets_returned,
             self.sheets_vanished_total,
         );
         if self.rename_signature() {
@@ -110,6 +117,8 @@ impl SyncStats {
             || self.sheets_updated > 0
             || self.songs_vanished > 0
             || self.sheets_vanished > 0
+            || self.songs_returned > 0
+            || self.sheets_returned > 0
     }
 }
 
@@ -240,11 +249,25 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
         stats.sheets_updated += needs_revision_bump.len() as i64;
     }
 
-    // Rows the database holds that upstream no longer lists. They are logged for
-    // /sync/delta and left in place — deleting a sheet would cascade to its
-    // chart text. Rows already logged are not logged again: the deletion tables
-    // are keyed (song_id, revision), so ON CONFLICT DO NOTHING would still write
-    // a second entry under a new revision.
+    // Rows upstream lists again after vanishing: their tombstones go, so the
+    // v2 reads (which hide tombstoned rows, ADR-0026) serve them again, and the
+    // return counts as a change so clients refetch.
+    stats.songs_returned = sqlx::query("DELETE FROM deleted_songs WHERE song_id = ANY($1)")
+        .bind(&song_ids)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected() as i64;
+    stats.sheets_returned = sqlx::query("DELETE FROM deleted_sheets WHERE sheet_expr = ANY($1)")
+        .bind(&sheet_exprs)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected() as i64;
+
+    // Rows the database holds that upstream no longer lists. They are logged
+    // and left in place — deleting a sheet would cascade to its chart text —
+    // and the v2 reads hide them. Rows already logged are not logged again:
+    // the deletion tables are keyed (song_id, revision), so ON CONFLICT DO
+    // NOTHING would still write a second entry under a new revision.
     stats.songs_vanished_ids = sqlx::query_scalar::<_, String>(
         "INSERT INTO deleted_songs (song_id, revision) \
          SELECT s.song_id, $2 FROM songs s \
@@ -1512,6 +1535,29 @@ mod tests {
         Ok(())
     }
 
+    // A song that vanishes and comes back must not stay hidden: the v2 reads
+    // hide tombstoned rows, so the return clears the tombstone and moves the
+    // revision for clients to refetch.
+    #[sqlx::test]
+    async fn a_returning_song_clears_its_tombstone(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(ONE_SONG)).await?;
+        apply(&pool, &payload(r#"{ "songs": [] }"#)).await?;
+
+        let back = apply(&pool, &payload(ONE_SONG)).await?;
+        assert_eq!(back.songs_returned, 1);
+        assert_eq!(back.sheets_returned, 1);
+        assert_eq!(back.songs_vanished_total, 0, "nothing is missing now");
+        assert!(
+            back.revision_advanced,
+            "a return is a change clients must see"
+        );
+
+        // And it can vanish again, logged afresh.
+        let again = apply(&pool, &payload(r#"{ "songs": [] }"#)).await?;
+        assert_eq!(again.songs_vanished, 1);
+        Ok(())
+    }
+
     // The inviolable constraint: no code path may DELETE from or cascade to
     // songs, sheets or charts. Sub-table reconciliation now runs for every sheet
     // in the payload, including unchanged ones, so this is the path that guards
@@ -2403,6 +2449,7 @@ mod tests {
             songs_inserted: 1,
             songs_updated: 2,
             songs_vanished: 1,
+            songs_returned: 7,
             songs_vanished_total: 4,
             sheets_inserted: 5,
             sheets_updated: 6,
@@ -2419,10 +2466,10 @@ mod tests {
             stats.summary_markdown(),
             "### Catalog sync: revision 9 (advanced)\n\
              \n\
-             | | inserted | updated | vanished (new) | vanished (all time) |\n\
-             |---|---|---|---|---|\n\
-             | songs | 1 | 2 | 1 | 4 |\n\
-             | sheets | 5 | 6 | 0 | 3 |\n\
+             | | inserted | updated | vanished (new) | returned | missing now |\n\
+             |---|---|---|---|---|---|\n\
+             | songs | 1 | 2 | 1 | 7 | 4 |\n\
+             | sheets | 5 | 6 | 0 | 0 | 3 |\n\
              \n\
              **Rename signature:** a song vanished and a song appeared in one run. \
              The run committed; check by hand whether these are one song renamed.\n\

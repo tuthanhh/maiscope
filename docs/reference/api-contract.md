@@ -96,7 +96,9 @@ five reference arrays of `GET /api/reference` beside `songs`:
   "difficulties": […], "regions": […] }
 ```
 
-Songs and sheets are in upstream order. Absent fields are omitted, not `null`;
+Songs and sheets are in upstream order; songs and sheets upstream no longer
+lists are not served (they keep their rows and come back if upstream does —
+ADR-0026). Absent fields are omitted, not `null`;
 `hasChart` is always present. Inside `noteCounts` a key may be `null`: the
 count is unknown for that note kind, which a screen shows differently from
 `0`. The songs, sheets, reference tables and `ETag` come from one database
@@ -149,12 +151,20 @@ nothing else is sent (v1's `updateTime`, `catalogHash` and `counts` had no
 reader). `Cache-Control: no-cache`, `ETag`, `304` as v1. There is no
 `/api/sync/delta`
 ([ADR-0026](../adr/0026-v2-api-carries-codes-and-read-fields-only.md)): a
-changed revision means refetching the Catalog, which its `ETag` makes cheap
-when nothing else moved.
+changed revision means refetching the whole Catalog. **Refetch with
+`cache: 'no-cache'`** (and the reference tables likewise): the Catalog is
+`max-age=3600`, so a plain fetch can be answered from the browser's cache with
+the previous revision's body for up to an hour. The `ETag`'s `304` saves bytes
+only on a repeat visit at an unchanged revision.
 
-Under `/api`, a path that matches no route is `404 not_found` in the §6
-envelope, and every path or parameter axum cannot parse is `400 bad_request`
-— never axum's plain-text defaults.
+The manifest, the Catalog and the reference tables send the same `ETag`
+value — one validator for one Catalog revision. Caches key by URL, so this is
+not an identity; do not compare it across routes.
+
+Under `/api/…`, a path that matches no route is `404 not_found` and a route
+asked with a method it does not serve is `405 method_not_allowed`, both in
+the §6 envelope; a path or parameter that cannot be parsed is
+`400 bad_request`. `/api/v1/…` misses keep v1's empty `404`.
 
 ---
 

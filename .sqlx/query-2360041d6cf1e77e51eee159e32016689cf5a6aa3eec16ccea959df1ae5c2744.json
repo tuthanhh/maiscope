@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO deleted_sheets (sheet_expr, revision)\n             VALUES ('b|dx|master', 1), ('a|dx|expert', 1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "2360041d6cf1e77e51eee159e32016689cf5a6aa3eec16ccea959df1ae5c2744"
+}

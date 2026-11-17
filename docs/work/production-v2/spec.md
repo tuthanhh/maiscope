@@ -214,7 +214,14 @@ a crash loop while the previous release keeps serving.
       dashboard (`openssl rand -base64 48` for the latter)
 - [ ] The frontend's `/auth/callback` route exists and fails closed on
       `state` (`frontend-redesign` 05)
-- [ ] `backup-database.yml` before `deploy.yml`, per ADR-0024
+- [ ] `backup-database.yml` before `deploy.yml`, per ADR-0024. Its runbook
+      covers the song-id migration; the deploy also runs the difficulty,
+      `users`, revision-bump and sheet-address migrations, all additive. The
+      sheet-address `UNIQUE` aborts the release command if production ever
+      held two sheets at one (song, type, difficulty) — impossible while
+      `sheet_expr` is unique, but that is the failure to recognise
+- [ ] After the deploy: `/api/reference`, `/api/catalog` and
+      `/api/sync/manifest` answer, and the manifest's revision moved by one
 
 ## Accepted, not solved
 

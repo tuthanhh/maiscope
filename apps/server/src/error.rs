@@ -22,7 +22,10 @@ pub enum AppError {
 
     BadRequest(String),
     /// `/sync/delta`'s `since` predates the last full reload (contract §3).
+    /// v1 only; goes with it (`api-rewrite` 07).
     SnapshotRequired,
+    /// A route asked with a method it does not serve.
+    MethodNotAllowed,
     /// The request is valid but this server cannot serve it yet: a chart row
     /// holding no inline text (contract §2).
     NotImplemented(String),
@@ -103,6 +106,11 @@ impl AppError {
                 message: None,
                 header: None,
             },
+            AppError::MethodNotAllowed => plain(
+                StatusCode::METHOD_NOT_ALLOWED,
+                "method_not_allowed",
+                "method not allowed".into(),
+            ),
             AppError::NotImplemented(message) => {
                 plain(StatusCode::NOT_IMPLEMENTED, "not_implemented", message)
             }

@@ -18,6 +18,8 @@ stopped calling v1).
 - [ ] Queries, types and domain code used only by v1 go with it: sheet search
       and its params, `sheetExpr`-keyed lookups, delta, the v1 wire types. The
       compiler's dead-code warnings are the checklist
+- [ ] v1-only leftovers go too: `AppError::SnapshotRequired`, `Freshness`'s
+      `catalogHash` doc, the `/api/v1` empty-404 fallback in `routes/mod.rs`
 - [ ] CORS stops exposing `X-Total-Count` until a v2 route sends it
       (`community-charts` browse will)
 - [ ] `test-foundation` 02's two deferred tests (the delta 409 path, the

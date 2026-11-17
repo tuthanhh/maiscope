@@ -1,11 +1,13 @@
 -- api-rewrite: the v2 deploy moves the Catalog revision forward once.
 --
--- Two stale validators end here. Every browser holds a v1-shaped Catalog in
--- IndexedDB under the revision the manifest reports; without a bump the v2
--- manifest would report the same number and the client would paint v1 data
--- into v2 code. And `20261117090000_difficulty_code` added the derived UTAGE
--- `difficulties` rows without bumping, so the reference tables' ETag never
--- moved for them.
+-- `20261117090000_difficulty_code` added the derived UTAGE `difficulties`
+-- rows without bumping, so the reference tables' ETag never moved for them;
+-- this ends that.
+--
+-- It does NOT keep a v1-shaped Catalog cached in a browser from being read as
+-- v2: v1 clients still running after this deploy refetch and store v1 data
+-- under the new revision. That protection is the client's — its IndexedDB
+-- cache is versioned by payload shape (`frontend-redesign` 04).
 --
 -- A no-op before the first sync (no row). The sync compares digests, not
 -- revision values, so a jump it did not make is harmless to it.

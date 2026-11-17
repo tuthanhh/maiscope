@@ -19,5 +19,9 @@
       read as v2. The server also bumps the revision once at the v2 deploy
       (migration `20261117130000`); this is the client's half, and the one
       that does not depend on a migration having run
+- [ ] After the manifest reports a new revision, the Catalog and reference
+      tables are refetched with `cache: 'no-cache'` — both are
+      `max-age=3600`, so a plain fetch can return the previous revision from
+      the browser cache (contract §0)
 - [ ] The filter panel's "Catalog not loaded" check reads the store's loading
       status: v2 does not send `updateTime`, which it used as the sentinel
