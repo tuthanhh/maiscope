@@ -82,17 +82,25 @@ string (`category`/`version`/`type`/`difficulty`/`region`) is the PK.
 One row per song. Mirrors `Song.ts` raw fields (`song_id`, `category`, `title`,
 `artist`, `bpm`, `image_name`, `version`, `release_date`, `is_new`, `is_locked`,
 `comment`). Extras:
+- `id UUID` primary key, a UUID v7 minted by the column default `uuidv7()`
+  (Postgres 18). It is the song's public identity: what URLs will carry.
+  Not `song_id`, which is upstream's title text: non-ASCII for most songs,
+  sometimes holding `/`, and changed by any upstream title correction. The
+  key is identity-bearing, so nothing may re-insert a song under a fresh id;
+  the sync upserts on `song_id` and never names `id`, so an existing song
+  keeps its own.
 - `song_no` — derived display order (client also recomputes in `preprocessData`).
 - `source_index` — position in the upstream `data.json`, so a sync is
   reproducible and stable ordering survives re-imports.
-- `song_id UNIQUE` — natural identity (nullable per `Song.songId: string | null`).
+- `song_id UNIQUE`: upstream's natural key and the sync's conflict target
+  (nullable per `Song.songId: string | null`). Not used in URLs.
 
 ### `sheets`
 One row per playable chart slot of a song (a song has several sheets across
 type×difficulty). Mirrors `Sheet.ts` raw fields (`type`, `difficulty`, `level`,
 `level_value`, `internal_level`, `internal_level_value`, `note_designer`,
 `is_special`). Key columns:
-- `song_id_fk` — the real link to `songs.id` (source of truth).
+- `song_id_fk UUID`: the real link to `songs.id` (source of truth).
 - `sheet_expr` — denormalized cross-tier key, `UNIQUE`; the lookup key for
   `GET /sheets/{sheetExpr}` and charts.
 - `source_index` — upstream ordering, as on `songs`.
@@ -195,8 +203,8 @@ convention. See `deleted_songs`/`deleted_sheets` above.
 
 ## Conventions
 
-- `id BIGSERIAL` surrogate PK on `songs`/`sheets`; natural composite PKs on
-  lookups and sub-tables.
+- `id UUID DEFAULT uuidv7()` PK on `songs`; `id BIGSERIAL` surrogate PK on
+  `sheets` and `charts`; natural composite PKs on lookups and sub-tables.
 - Timestamps `TIMESTAMPTZ DEFAULT now()`; dates `DATE`.
 - Numerics `DOUBLE PRECISION` (`bpm`, `*_value`); counts `INTEGER`.
 - Migrations are **reversible**: each is a `.up.sql` / `.down.sql` pair. `0001`

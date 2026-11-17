@@ -295,7 +295,7 @@ mod tests {
 
     async fn seed_song_with_sheet(pool: &PgPool) -> (i64, String) {
         seed_difficulties(pool, &["master".to_string()]).await;
-        let song_id: i64 = sqlx::query_scalar(
+        let song_id: sqlx::types::Uuid = sqlx::query_scalar(
             "INSERT INTO songs (song_id, title, source_index) VALUES ($1, $2, $3) RETURNING id",
         )
         .bind("maimai_song")
@@ -455,7 +455,7 @@ mod tests {
     /// `n` sheets under one song, so a batch has more than one row to get wrong.
     async fn seed_sheets(pool: &PgPool, n: usize) -> Vec<(i64, String)> {
         seed_difficulties(pool, &(0..n).map(|i| format!("d{i}")).collect::<Vec<_>>()).await;
-        let song_id: i64 = sqlx::query_scalar(
+        let song_id: sqlx::types::Uuid = sqlx::query_scalar(
             "INSERT INTO songs (song_id, title, source_index) VALUES ($1, $2, $3) RETURNING id",
         )
         .bind("maimai_song")

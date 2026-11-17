@@ -19,7 +19,7 @@ use crate::upstream::{
     RawData, RawOverride, RawSheet, RawSong, parse_date, parse_update_time, sheet_expr,
 };
 use sqlx::Row as _;
-use sqlx::types::Json;
+use sqlx::types::{Json, Uuid};
 use sqlx::types::chrono::{DateTime, NaiveDate, Utc};
 use sqlx::{PgConnection, PgPool};
 use std::collections::{BTreeMap, HashMap};
@@ -126,7 +126,7 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
         .iter()
         .map(|(_, s)| s.song_id.clone().unwrap())
         .collect();
-    let song_pks: HashMap<String, i64> =
+    let song_pks: HashMap<String, Uuid> =
         sqlx::query_as("SELECT song_id, id FROM songs WHERE song_id = ANY($1)")
             .bind(&song_ids)
             .fetch_all(&mut *tx)
@@ -524,6 +524,9 @@ async fn upsert_songs(
     }
 
     let changed: Vec<(String, bool)> = sqlx::query_as(
+        // `id` appears nowhere here, and must not: the column default mints
+        // it for a new song, and an update that assigned it would change the
+        // URL of a song whenever any of its fields changed (song-public-id).
         "INSERT INTO songs \
          (song_id, song_no, category, title, artist, bpm, image_name, version, \
           release_date, is_new, is_locked, comment, source_index, revision) \
@@ -578,7 +581,7 @@ async fn upsert_songs(
 /// One payload sheet resolved against its parent song's primary key.
 struct SheetRow<'a> {
     expr: String,
-    song_pk: i64,
+    song_pk: Uuid,
     /// The sheet's index within its own song — `sheets.source_index`.
     source_index: i32,
     raw: &'a RawSheet,
@@ -591,7 +594,7 @@ struct SheetRow<'a> {
 /// later one.
 fn dedupe_sheets<'a>(
     songs: &[(usize, &'a RawSong)],
-    song_pks: &HashMap<String, i64>,
+    song_pks: &HashMap<String, Uuid>,
 ) -> Vec<SheetRow<'a>> {
     let mut deduped: Vec<SheetRow<'a>> = Vec::new();
     let mut at: HashMap<String, usize> = HashMap::new();
@@ -630,7 +633,7 @@ async fn upsert_sheets(
     revision: i64,
 ) -> Result<HashMap<String, bool>, sqlx::Error> {
     let n = sheets.len();
-    let mut song_id_fk: Vec<i64> = Vec::with_capacity(n);
+    let mut song_id_fk: Vec<Uuid> = Vec::with_capacity(n);
     let mut expr: Vec<String> = Vec::with_capacity(n);
     let mut ty: Vec<Option<String>> = Vec::with_capacity(n);
     let mut difficulty: Vec<Option<String>> = Vec::with_capacity(n);
@@ -664,7 +667,7 @@ async fn upsert_sheets(
          SELECT t.song_id_fk, t.sheet_expr, t.type, t.difficulty, t.level, t.level_value, \
                 t.internal_level, t.internal_level_value, t.note_designer, t.is_special, \
                 t.source_index, $12::bigint \
-         FROM unnest($1::bigint[], $2::text[], $3::text[], $4::text[], $5::text[], \
+         FROM unnest($1::uuid[], $2::text[], $3::text[], $4::text[], $5::text[], \
                      $6::double precision[], $7::text[], $8::double precision[], \
                      $9::text[], $10::bool[], $11::int[]) \
               AS t(song_id_fk, sheet_expr, type, difficulty, level, level_value, \
@@ -2166,6 +2169,86 @@ mod tests {
             .fetch_one(&pool)
             .await?;
         assert_eq!(songs, 0);
+        Ok(())
+    }
+
+    // ── song ids (song-public-id) ────────────────────────────────────────────
+
+    const ID_SONGS: &str = r#"{
+        "songs": [
+            { "songId": "Halcyon", "title": "Halcyon", "artist": "xi",
+              "sheets": [{ "type": "dx", "difficulty": "master", "level": "13" }] },
+            { "songId": "[協]Love You", "title": "[協]Love You",
+              "sheets": [{ "type": "utage", "difficulty": "【協】", "level": "12?" }] }
+        ]
+    }"#;
+
+    async fn ids_by_song_id(pool: &PgPool) -> Vec<(String, Uuid)> {
+        sqlx::query_as("SELECT song_id, id FROM songs ORDER BY song_id")
+            .fetch_all(pool)
+            .await
+            .unwrap()
+    }
+
+    #[sqlx::test]
+    async fn every_synced_song_is_minted_a_uuid_v7(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(ID_SONGS)).await?;
+
+        let ids = ids_by_song_id(&pool).await;
+        assert_eq!(ids.len(), 2);
+        for (song_id, id) in &ids {
+            assert_eq!(id.get_version_num(), 7, "{song_id} got {id}");
+        }
+        assert_ne!(ids[0].1, ids[1].1);
+        Ok(())
+    }
+
+    // The primary key is identity-bearing: re-presenting a song the table
+    // already holds must reuse its id by matching on `song_id`, never mint a
+    // fresh one, or every URL for that song changes.
+    #[sqlx::test]
+    async fn re_presenting_a_song_reuses_its_id(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(ID_SONGS)).await?;
+        let before = ids_by_song_id(&pool).await;
+
+        let edited = ID_SONGS.replace(r#""artist": "xi""#, r#""artist": "xi (edited)""#);
+        let stats = apply(&pool, &payload(&edited)).await?;
+
+        assert_eq!(stats.songs_updated, 1, "the edit must actually be applied");
+        assert_eq!(ids_by_song_id(&pool).await, before);
+        Ok(())
+    }
+
+    // The regression that would break every link at once: the daily sync of an
+    // unchanged catalog must not touch a single id.
+    #[sqlx::test]
+    async fn an_unchanged_resync_keeps_every_id(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(ID_SONGS)).await?;
+        let before = ids_by_song_id(&pool).await;
+
+        apply(&pool, &payload(ID_SONGS)).await?;
+
+        assert_eq!(ids_by_song_id(&pool).await, before);
+        Ok(())
+    }
+
+    // A song upstream stops listing is tombstoned, not deleted, and keeps its
+    // id: a manual rename fix needs something to re-point, and a song that
+    // comes back must come back at the same URL.
+    #[sqlx::test]
+    async fn a_tombstoned_song_keeps_its_id_and_returns_with_it(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(ID_SONGS)).await?;
+        let before = ids_by_song_id(&pool).await;
+
+        let halcyon_only = r#"{ "songs": [
+            { "songId": "Halcyon", "title": "Halcyon", "artist": "xi",
+              "sheets": [{ "type": "dx", "difficulty": "master", "level": "13" }] } ] }"#;
+        let stats = apply(&pool, &payload(halcyon_only)).await?;
+        assert_eq!(stats.songs_vanished, 1);
+        assert_eq!(ids_by_song_id(&pool).await, before);
+
+        apply(&pool, &payload(ID_SONGS)).await?;
+        assert_eq!(ids_by_song_id(&pool).await, before);
         Ok(())
     }
 }

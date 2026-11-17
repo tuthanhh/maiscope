@@ -29,7 +29,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:17 # matches the root docker-compose.yml
+        image: postgres:18 # matches the root docker-compose.yml and Neon
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres

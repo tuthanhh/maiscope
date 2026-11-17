@@ -10,14 +10,27 @@ the precise failure this feature exists to prevent.
 
 **Blocked by:** 01 — the key must already be a UUID.
 
-**Status:** todo
+**Status:** done (2026-11-17)
 
-- [ ] New songs are minted an id during the sync
-- [ ] The `DO UPDATE` branch does not list `id` among its assignments
-- [ ] A test that runs the sync twice over the same upstream payload and asserts
+- [x] New songs are minted an id during the sync
+- [x] The `DO UPDATE` branch does not list `id` among its assignments
+- [x] A test that runs the sync twice over the same upstream payload and asserts
       every song `id` is unchanged — the regression that would silently break
       every link in the system
-- [ ] A test that a changed field on an existing song leaves its `id`
+- [x] A test that a changed field on an existing song leaves its `id`
       alone
-- [ ] Tombstoned songs keep their `id`, so a manual rename fix has
+- [x] Tombstoned songs keep their `id`, so a manual rename fix has
       something to re-point
+
+## Comments
+
+**2026-11-17: done, with no change to what the sync does.** Ticket 01 put the
+mint in the column default (`uuidv7()`), and the songs upsert never named
+`id`, so a new song already gets one and an existing song keeps its own.
+This ticket adds the regression tests and a comment on the upsert saying
+why `id` must stay out of it. Tests: an unchanged re-sync keeps every id; an
+edited song keeps its id; a tombstoned song keeps its id and returns with it.
+
+Checked by mutation: making the update re-mint `id` fails the edited-song
+test. The other two still pass under that mutation, since the sync skips
+an unchanged row entirely; they guard a re-insert by any other path.

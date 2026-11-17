@@ -48,6 +48,7 @@ use std::path::{Path, PathBuf};
 
 use server::chart_revision::{ChartToApply, apply_chart_revisions};
 use sqlx::postgres::PgPoolOptions;
+use sqlx::types::Uuid;
 use unicode_normalization::UnicodeNormalization;
 
 /// maidata inote slot -> this app's difficulty code (mirrors sheets.difficulty).
@@ -103,20 +104,20 @@ struct SheetRef {
 #[derive(Debug, Default)]
 struct Catalog {
     /// NFC title → every song holding it (78 titles are held by more than one).
-    songs_by_title: HashMap<String, Vec<i64>>,
+    songs_by_title: HashMap<String, Vec<Uuid>>,
     /// `fold`ed title → the same, for the second pass.
-    songs_by_fold: HashMap<String, Vec<i64>>,
+    songs_by_fold: HashMap<String, Vec<Uuid>>,
     /// (song, type) → difficulty → sheet. UTAGE sheets are not loaded.
-    sheets: HashMap<(i64, String), HashMap<String, SheetRef>>,
+    sheets: HashMap<(Uuid, String), HashMap<String, SheetRef>>,
 }
 
 impl Catalog {
-    fn add_song(&mut self, id: i64, title: &str) {
+    fn add_song(&mut self, id: Uuid, title: &str) {
         self.songs_by_title.entry(nfc(title)).or_default().push(id);
         self.songs_by_fold.entry(fold(title)).or_default().push(id);
     }
 
-    fn add_sheet(&mut self, song_id: i64, chart_type: &str, difficulty: &str, sheet: SheetRef) {
+    fn add_sheet(&mut self, song_id: Uuid, chart_type: &str, difficulty: &str, sheet: SheetRef) {
         self.sheets
             .entry((song_id, chart_type.to_string()))
             .or_default()
@@ -124,7 +125,7 @@ impl Catalog {
     }
 
     /// The chart types a song has sheets for, in a stable order.
-    fn types_of(&self, song_id: i64) -> Vec<&str> {
+    fn types_of(&self, song_id: Uuid) -> Vec<&str> {
         let mut types: Vec<&str> = self
             .sheets
             .keys()
@@ -151,7 +152,7 @@ struct Claim<'a> {
 #[derive(Debug, PartialEq)]
 enum Resolution {
     Matched {
-        song_id: i64,
+        song_id: Uuid,
         chart_type: String,
         /// Which key matched, for the log: `title`, `dir`, `title~`, `dir~`.
         via: &'static str,
@@ -159,7 +160,7 @@ enum Resolution {
     /// No catalog song under any form of the title.
     NoSong,
     /// Several (song, type) candidates and the levels do not single one out.
-    Ambiguous(Vec<(i64, String)>),
+    Ambiguous(Vec<(Uuid, String)>),
 }
 
 fn resolve<'a>(claim: &Claim, catalog: &'a Catalog) -> Resolution {
@@ -169,10 +170,10 @@ fn resolve<'a>(claim: &Claim, catalog: &'a Catalog) -> Resolution {
 
     // An empty key never matches: a folder with a blank `&title=` must not
     // land on the one catalog song whose title folds to nothing.
-    let lookup = |index: &'a HashMap<String, Vec<i64>>, key: String| {
+    let lookup = |index: &'a HashMap<String, Vec<Uuid>>, key: String| {
         (!key.is_empty()).then(|| index.get(&key)).flatten()
     };
-    let attempts: [(&'static str, Option<&Vec<i64>>); 4] = [
+    let attempts: [(&'static str, Option<&Vec<Uuid>>); 4] = [
         ("title", lookup(&catalog.songs_by_title, nfc(title_base))),
         ("dir", lookup(&catalog.songs_by_title, nfc(dir_base))),
         ("title~", lookup(&catalog.songs_by_fold, fold(title_base))),
@@ -185,7 +186,7 @@ fn resolve<'a>(claim: &Claim, catalog: &'a Catalog) -> Resolution {
         return Resolution::NoSong;
     };
 
-    let candidates: Vec<(i64, String)> = songs
+    let candidates: Vec<(Uuid, String)> = songs
         .iter()
         .flat_map(|&song_id| {
             catalog
@@ -206,12 +207,12 @@ fn resolve<'a>(claim: &Claim, catalog: &'a Catalog) -> Resolution {
         _ => {
             // Score each candidate by how many of the folder's levels agree
             // with that type's sheet levels; a unique best wins.
-            let scored: Vec<(usize, &(i64, String))> = candidates
+            let scored: Vec<(usize, &(Uuid, String))> = candidates
                 .iter()
                 .map(|c| (level_agreement(claim, catalog.sheets.get(c)), c))
                 .collect();
             let best = scored.iter().map(|(s, _)| *s).max().unwrap_or(0);
-            let winners: Vec<&(i64, String)> = scored
+            let winners: Vec<&(Uuid, String)> = scored
                 .iter()
                 .filter(|(s, _)| *s == best)
                 .map(|(_, c)| *c)
@@ -488,8 +489,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // did before. ORDER BY keeps the candidate lists, and so the reports,
     // stable between runs.
     let mut catalog = Catalog::default();
-    let songs: Vec<(i64, String)> =
-        sqlx::query_as("SELECT id, title FROM songs WHERE title IS NOT NULL ORDER BY id")
+    let songs: Vec<(Uuid, String)> =
+        sqlx::query_as("SELECT id, title FROM songs WHERE title IS NOT NULL ORDER BY source_index, song_id")
             .fetch_all(&pool)
             .await?;
     for (id, title) in &songs {
@@ -497,7 +498,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
     // UTAGE sheets go to their own index below: their plain titles collide
     // with the standard songs they parody.
-    let sheet_rows: Vec<(i64, String, String, i64, String, String)> = sqlx::query_as(
+    let sheet_rows: Vec<(Uuid, String, String, i64, String, String)> = sqlx::query_as(
         "SELECT song_id_fk, type, difficulty, id, sheet_expr, level \
          FROM sheets WHERE type <> 'utage' ORDER BY id",
     )
@@ -759,6 +760,11 @@ fn report(label: &str, entries: &[String]) {
 mod tests {
     use super::*;
 
+    /// Song n of the test catalog; the resolver treats the key as opaque.
+    fn song(n: u128) -> Uuid {
+        Uuid::from_u128(n)
+    }
+
     #[test]
     fn a_clean_run_exits_zero() {
         assert_eq!(exit_code(0, 0, false), 0);
@@ -797,21 +803,21 @@ mod tests {
     /// DX-only "Halcyon", and two songs sharing the title "Dup".
     fn catalog() -> Catalog {
         let mut c = Catalog::default();
-        c.add_song(1, "39");
-        c.add_sheet(1, "std", "master", sheet("39|std|master", "12+"));
-        c.add_sheet(1, "std", "expert", sheet("39|std|expert", "9"));
-        c.add_sheet(1, "dx", "master", sheet("39|dx|master", "13"));
-        c.add_sheet(1, "dx", "expert", sheet("39|dx|expert", "9"));
-        c.add_song(2, "Halcyon");
-        c.add_sheet(2, "dx", "master", sheet("Halcyon|dx|master", "13"));
-        c.add_song(3, "Dup");
-        c.add_sheet(3, "std", "master", sheet("Dup#3|std|master", "10"));
-        c.add_song(4, "Dup");
-        c.add_sheet(4, "std", "master", sheet("Dup#4|std|master", "11"));
-        c.add_song(5, "Retribution ～ Cycle ～");
-        c.add_sheet(5, "dx", "master", sheet("Retribution|dx|master", "14"));
-        c.add_song(6, "\u{3000}");
-        c.add_sheet(6, "dx", "master", sheet("blank|dx|master", "1"));
+        c.add_song(song(1), "39");
+        c.add_sheet(song(1), "std", "master", sheet("39|std|master", "12+"));
+        c.add_sheet(song(1), "std", "expert", sheet("39|std|expert", "9"));
+        c.add_sheet(song(1), "dx", "master", sheet("39|dx|master", "13"));
+        c.add_sheet(song(1), "dx", "expert", sheet("39|dx|expert", "9"));
+        c.add_song(song(2), "Halcyon");
+        c.add_sheet(song(2), "dx", "master", sheet("Halcyon|dx|master", "13"));
+        c.add_song(song(3), "Dup");
+        c.add_sheet(song(3), "std", "master", sheet("Dup#3|std|master", "10"));
+        c.add_song(song(4), "Dup");
+        c.add_sheet(song(4), "std", "master", sheet("Dup#4|std|master", "11"));
+        c.add_song(song(5), "Retribution ～ Cycle ～");
+        c.add_sheet(song(5), "dx", "master", sheet("Retribution|dx|master", "14"));
+        c.add_song(song(6), "\u{3000}");
+        c.add_sheet(song(6), "dx", "master", sheet("blank|dx|master", "1"));
         c
     }
 
@@ -823,7 +829,7 @@ mod tests {
         }
     }
 
-    fn matched(song_id: i64, chart_type: &str, via: &'static str) -> Resolution {
+    fn matched(song_id: Uuid, chart_type: &str, via: &'static str) -> Resolution {
         Resolution::Matched {
             song_id,
             chart_type: chart_type.to_string(),
@@ -836,11 +842,11 @@ mod tests {
         let c = catalog();
         assert_eq!(
             resolve(&claim("39 [DX]", "39 [DX]", &[]), &c),
-            matched(1, "dx", "title")
+            matched(song(1), "dx", "title")
         );
         assert_eq!(
             resolve(&claim("39 [ST]", "39", &[]), &c),
-            matched(1, "std", "title")
+            matched(song(1), "std", "title")
         );
         assert_eq!(split_type_suffix("39 [DX] "), ("39", Some("dx")));
         assert_eq!(split_type_suffix("39"), ("39", None));
@@ -850,7 +856,7 @@ mod tests {
     fn a_single_type_song_needs_no_hint() {
         assert_eq!(
             resolve(&claim("Halcyon", "Halcyon", &[]), &catalog()),
-            matched(2, "dx", "title")
+            matched(song(2), "dx", "title")
         );
     }
 
@@ -861,11 +867,11 @@ mod tests {
         let c = catalog();
         assert_eq!(
             resolve(&claim("39", "39", &[("master", "13"), ("expert", "9")]), &c),
-            matched(1, "dx", "title")
+            matched(song(1), "dx", "title")
         );
         assert_eq!(
             resolve(&claim("39", "39", &[("master", "12+")]), &c),
-            matched(1, "std", "title")
+            matched(song(1), "std", "title")
         );
     }
 
@@ -893,7 +899,7 @@ mod tests {
         let c = catalog();
         assert_eq!(
             resolve(&claim("Dup", "Dup", &[("master", "11")]), &c),
-            matched(4, "std", "title")
+            matched(song(4), "std", "title")
         );
     }
 
@@ -903,7 +909,7 @@ mod tests {
         let c = catalog();
         assert_eq!(
             resolve(&claim("Halc", "Halcyon", &[]), &c),
-            matched(2, "dx", "dir")
+            matched(song(2), "dx", "dir")
         );
     }
 
@@ -912,11 +918,11 @@ mod tests {
         let c = catalog();
         assert_eq!(
             resolve(&claim("Retribution ~ Cycle ~", "x", &[]), &c),
-            matched(5, "dx", "title~")
+            matched(song(5), "dx", "title~")
         );
         assert_eq!(
             resolve(&claim("halcyon", "x", &[]), &c),
-            matched(2, "dx", "title~")
+            matched(song(2), "dx", "title~")
         );
         assert_eq!(fold("Ａ  b\tC"), "a b c");
     }
