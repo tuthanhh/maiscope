@@ -1,6 +1,6 @@
 # Spec — Rename alarm on the catalog sync
 
-**Status:** planned
+**Status:** active
 **Milestone:** v2.0
 **Parent:** [`production-v2`](../production-v2/spec.md)
 
@@ -52,6 +52,11 @@ before `song-public-id` makes the assumption load-bearing.
 - **False alarms are the accepted failure mode.** A song genuinely removed in
   the same run another is genuinely added trips it too. At maimai's release
   cadence that is a handful a year, and the alternative failure mode is silence.
+- **No acknowledged-rename override (2026-11-17).** The ticket asked for an
+  env var to silence a known rename. It is not needed: the vanish sweep logs
+  a song once and the run commits, so the alarm trips on exactly one run and
+  the next one passes. Rejected: building the switch anyway, which would be
+  a control with nothing to control. Revisit if the alarm ever repeats.
 - **Deployable against the current app.** No dependency on any other v2 work, so
   it ships on master before the branch is cut.
 

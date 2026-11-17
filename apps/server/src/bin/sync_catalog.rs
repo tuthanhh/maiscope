@@ -5,11 +5,16 @@
 //! Runs daily from .github/workflows/sync-catalog.yml. Unlike the `ingest` it
 //! replaced, this never truncates and never deletes a song or sheet, so chart
 //! text survives — see docs/work/catalog-sync/spec.md.
+//!
+//! Exit codes: 0 synced; 1 failed, nothing written; 3 synced and committed,
+//! but the run carries the rename signature (a song vanished and a song
+//! appeared), which a person should look at. Under GitHub Actions the run's
+//! counts go to the job summary either way (`GITHUB_STEP_SUMMARY`).
 
 use std::error::Error;
 use std::time::Duration;
 
-use server::catalog_sync::{apply, sanity_check};
+use server::catalog_sync::{SyncStats, apply, sanity_check};
 use server::upstream::RawData;
 use sqlx::postgres::PgPoolOptions;
 
@@ -37,9 +42,25 @@ async fn main() {
         .unwrap_or(DEFAULT_TIMEOUT_SECS);
 
     match tokio::time::timeout(Duration::from_secs(timeout_secs), run()).await {
-        Ok(Ok(())) => {}
+        Ok(Ok(stats)) => {
+            write_job_summary(&stats);
+            if stats.rename_signature() {
+                eprintln!(
+                    "sync_catalog: rename signature. This run committed, but songs vanished \
+                     and appeared together, which is what an upstream title correction \
+                     looks like.\n  vanished: {:?}\n  appeared: {:?}\n\
+                     Nothing was paired or merged. Check by hand; the alarm will not repeat \
+                     for these songs.",
+                    stats.songs_vanished_ids, stats.songs_inserted_ids
+                );
+                std::process::exit(RENAME_SIGNATURE_EXIT);
+            }
+        }
         Ok(Err(e)) => {
             eprintln!("sync_catalog: failed: {e}");
+            append_job_summary(&format!(
+                "### Catalog sync: failed, nothing written\n\n`{e}`\n"
+            ));
             std::process::exit(1);
         }
         Err(_) => {
@@ -49,12 +70,42 @@ async fn main() {
                  'applying' means the transaction was open and has been rolled \
                  back, so nothing was written."
             );
+            append_job_summary(&format!(
+                "### Catalog sync: timed out after {timeout_secs}s, nothing written\n"
+            ));
             std::process::exit(1);
         }
     }
 }
 
-async fn run() -> Result<(), Box<dyn Error>> {
+/// Distinct from 1 so a reader of the workflow can tell "look at this" from
+/// "this broke".
+const RENAME_SIGNATURE_EXIT: i32 = 3;
+
+/// Append the run's counts to the GitHub job summary.
+fn write_job_summary(stats: &SyncStats) {
+    append_job_summary(&stats.summary_markdown());
+}
+
+/// Append to the GitHub job summary, when there is one, so every run says
+/// what it did, failed runs included. A failure to write it is reported but
+/// does not change the exit code.
+fn append_job_summary(markdown: &str) {
+    let Ok(path) = std::env::var("GITHUB_STEP_SUMMARY") else {
+        return;
+    };
+    use std::io::Write as _;
+    let written = std::fs::OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(&path)
+        .and_then(|mut f| f.write_all(markdown.as_bytes()));
+    if let Err(e) = written {
+        eprintln!("sync_catalog: could not write the job summary to {path}: {e}");
+    }
+}
+
+async fn run() -> Result<SyncStats, Box<dyn Error>> {
     dotenvy::dotenv().ok();
     // Empty counts as missing. GitHub Actions substitutes an absent secret with an
     // empty string, so `env::var` succeeds and the failure surfaces 30 lines later
@@ -114,5 +165,5 @@ async fn run() -> Result<(), Box<dyn Error>> {
         stats.sheets_vanished,
     );
 
-    Ok(())
+    Ok(stats)
 }
