@@ -23,27 +23,39 @@ a committed file.
 
 **Blocked by:** None. Start alongside ticket 01.
 
-**Status:** todo
+**Status:** done (2026-11-17): [`docs/reference/design-direction.md`](../../../reference/design-direction.md)
 
-- [ ] Type scale — families, sizes, weights, line heights, and which is used
+- [x] Type scale — families, sizes, weights, line heights, and which is used
       where
-- [ ] Colour tokens, including dark mode if it is in scope, stated as tokens and
+- [x] Colour tokens, including dark mode if it is in scope, stated as tokens and
       not as hex values scattered through components
-- [ ] Spacing scale, and the radius/border/elevation conventions that go with it
-- [ ] Component inventory with a visual spec for each: button, card, table row,
+- [x] Spacing scale, and the radius/border/elevation conventions that go with it
+- [x] Component inventory with a visual spec for each: button, card, table row,
       dialog, form field, pagination control, empty state, error state. These
       are the pieces `components/ui` already hand-rolls — there is no Vuetify,
       no Tailwind, so every one of them is ours to specify
-- [ ] The community surfaces get first-class treatment, not an afterthought:
+- [x] The community surfaces get first-class treatment, not an afterthought:
       upload form, upload *rejection* (which must render a parser error with a
       token in it), community browse, reports queue. They are new, so they have
       no existing look to inherit, and they are why the visual work is on this
       branch at all
-- [ ] A worked example — one existing screen described in the new system — so
+- [x] A worked example — one existing screen described in the new system — so
       the document is testable rather than aspirational
-- [ ] Notes what is explicitly **not** changing: the visualizer's playback
+- [x] Notes what is explicitly **not** changing: the visualizer's playback
       surface (spec: ticket 03 is a split, not a rework)
-- [ ] Lands in `docs/reference/`, committed, before ticket 04 starts
+- [x] Lands in `docs/reference/`, committed, before ticket 04 starts
 
 > Copy is multiplied by `vue-i18n` and `src/locales/`. A direction that invents
 > new labels invents them per language — worth knowing while writing, not after.
+
+## Comments
+
+**2026-11-17: brainstormed, then written.** References: acutic.net,
+sasakure.uk.com, Instagram's phone layout; anti-reference adxdls.saop.cc.
+Twelve decisions, each with its rejected alternatives, are tabled at the
+end of the reference document. Three affect other features: the song page
+is removed (the modal takes a URL, served by the per-song fetch from ticket
+01); upload title and artist are editable overrides (`community-charts`
+issue 02 gains two optional fields); the list view and video search are
+dropped. The difficulty colour comes from `difficulties[].color` as data,
+matching ticket 01's decision.

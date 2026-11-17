@@ -6,9 +6,8 @@ How the engineering skills should consume this repo's domain documentation when 
 
 - **`docs/adr/`** — read the ADRs that touch the area you are about to work in.
   This directory exists and is the authoritative record of past decisions.
-- **`CONTEXT.md`** at the repo root, if it exists — a domain glossary. It does not
-  exist yet; the `/domain-modeling` skill creates it lazily when terms actually
-  get resolved. Proceed silently if it is absent.
+- **`CONTEXT.md`** at the repo root: the domain glossary. The
+  `/domain-modeling` skill adds terms to it as they get resolved.
 
 ## File structure
 
