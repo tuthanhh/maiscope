@@ -80,3 +80,10 @@ and after the migration. The down migration renumbers songs in upstream
 order, since the old integers are gone; a test runs it down and up again
 with sheets and charts still attached. No `/api/v1` response changes: song
 keys never reached a payload, and the catalog snapshot test still passes.
+
+**2026-11-17: how it deploys.** The migration drops the old key columns
+inside the release command, against the expand-and-contract rule. It
+ships as a recorded exception with a backup-first runbook:
+[ADR-0024](../../../adr/0024-song-id-migration-is-a-lossless-drop-on-deploy.md).
+Minting in the database and the Postgres 18 floor:
+[ADR-0023](../../../adr/0023-postgres-18-and-database-minted-song-ids.md).
