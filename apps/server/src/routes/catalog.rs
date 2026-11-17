@@ -189,8 +189,8 @@ mod tests {
         .await
         .unwrap();
         sqlx::query!(
-            "INSERT INTO difficulties (difficulty, name, color, icon_url, icon_height, ordinal)
-             VALUES ('master', 'MASTER', '#9f51dc', 'master.png', 20, 0)"
+            "INSERT INTO difficulties (difficulty, name, code, color, icon_url, icon_height, ordinal)
+             VALUES ('master', 'MASTER', 'master', '#9f51dc', 'master.png', 20, 0)"
         )
         .execute(pool)
         .await

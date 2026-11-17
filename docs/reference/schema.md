@@ -60,8 +60,21 @@ string (`category`/`version`/`type`/`difficulty`/`region`) is the PK.
 - `versions` — game versions (`abbr`, `release_date`) for the version filter/sort.
 - `types` — chart types (e.g. maimai std/DX). Carries `name`/`abbr` + raw
   `icon_url`/`icon_height` (client resolves the URL to absolute).
-- `difficulties` — basic/advanced/expert/master/re:master. `name`, `color`,
-  icon. The `Difficulty` enum in `main.rs` is the request-side mirror of this.
+- `difficulties` — every value `sheets.difficulty` holds, and **partly
+  derived**. Upstream lists five rows (basic/advanced/expert/master/re:master,
+  with `name`, `color`, icon); its UTAGE sheets use 50 bracketed tags (`【協】`)
+  it never lists. `bin/sync_catalog` derives a row for each such value, from
+  the payload's sheets and the stored ones alike, on every run. Derived rows
+  follow the upstream rows, ordered by byte value, so the indexes of the
+  upstream rows keep their meaning. They carry no colour or icon.
+  - `name` is the display form; for a derived row that is the stored value
+    itself (`【協】`).
+  - `code` is the matching and URL form, `UNIQUE`: the bare tag maidata emits
+    (`協`), or the difficulty itself for an upstream row. Case-sensitive (`【r】`
+    exists). Two columns rather than one plus a strip-or-add rule applied on
+    every path.
+  - The `Difficulty` enum in `domain.rs` mirrors the five upstream rows on the
+    request side only.
 - `regions` — release regions (e.g. intl/jp) used by `sheet_regions` and
   `sheet_region_overrides`.
 
