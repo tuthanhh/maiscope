@@ -67,6 +67,10 @@ Response `200`:
                                // "0000-00-00" before the first catalog sync
 }
 ```
+> `difficulties` covers every value a sheet's `difficulty` holds: the five
+> standard rows first, then one row per UTAGE tag (`【協】`, no `color` or icon),
+> ordered by byte value.
+
 > `sheets` is intentionally absent — `preprocessData` derives it from
 > `songs[].sheets`. Keep it that way.
 

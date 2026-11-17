@@ -55,6 +55,7 @@ mod tests {
 
     #[sqlx::test]
     async fn get_song_returns_song_with_sheets(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        crate::test_support::seed_standard_difficulties(&pool).await;
         sqlx::query!(
             "INSERT INTO songs (song_id, title, source_index) VALUES ($1, $2, $3)",
             "maimai_song",

@@ -9,25 +9,25 @@ the sheets themselves during the sync.
 
 **Blocked by:** None.
 
-**Status:** todo
+**Status:** done (2026-11-17)
 
-- [ ] `catalog_sync` collects the distinct difficulty values from the sheets it
+- [x] `catalog_sync` collects the distinct difficulty values from the sheets it
       is about to write, and ensures a `difficulties` row exists for each
-- [ ] Synthesised rows survive the wholesale `DELETE FROM difficulties` +
+- [x] Synthesised rows survive the wholesale `DELETE FROM difficulties` +
       re-insert that the sync does today — reconstructed every run, not
       preserved by accident
-- [ ] `ordinal` places UTAGE labels after the five standard ones, so the
+- [x] `ordinal` places UTAGE labels after the five standard ones, so the
       frontend's index maps keep their existing meaning for existing rows
-- [ ] **Two columns, not one.** `name` is the display form (`【協】`, matching
+- [x] **Two columns, not one.** `name` is the display form (`【協】`, matching
       what `sheets` already stores); `code` is the matching and URL form (`協`,
       matching what maidata emits). The five standard rows get a `code` too
       (`basic`, `master`, …), which they effectively already have
-- [ ] A `UNIQUE` constraint on `code` — it becomes a URL component
-- [ ] A test asserting no value in `sheets.difficulty` is absent from
+- [x] A `UNIQUE` constraint on `code` — it becomes a URL component
+- [x] A test asserting no value in `sheets.difficulty` is absent from
       `difficulties` after a sync
-- [ ] A test asserting `code` is `name` with the brackets stripped, for every
+- [x] A test asserting `code` is `name` with the brackets stripped, for every
       synthesised row — the two columns must not drift
-- [ ] `docs/reference/schema.md` notes that `difficulties` is now partly derived,
+- [x] `docs/reference/schema.md` notes that `difficulties` is now partly derived,
       and documents the `name`/`code` split
 
 ## Comments
@@ -48,3 +48,19 @@ is becoming derived infrastructure rather than a dumb mirror anyway.
 The URL component is `code` — see [`api-rewrite`](../../api-rewrite/spec.md),
 which asked the same question separately and must not get a different answer.
 
+**2026-11-17: done.** The sync derives one row per difficulty value that
+upstream does not list, from the payload's sheets and the stored ones, so a
+sheet upstream stops listing keeps its row. Derived rows sort after the
+upstream rows by byte value rather than first-seen order: the lookup digest
+compares runs, and an order that followed the payload would advance the
+revision on a no-op sync. They carry no colour.
+
+The migration backfills the same rows itself rather than waiting for a sync.
+A deploy of this branch runs ticket 02's foreign key migration straight
+after this one, before any sync can, and the key would fail on the 50
+unlisted tags. Checked on dev: the migrated table and the table after a
+real sync have the same md5.
+
+The browse filter's difficulty chips now list only the difficulties that
+standard and DX sheets use. Without that, the 50 tags would appear as chips.
+UTAGE stays reachable through its type chip.

@@ -39,7 +39,11 @@ cargo run --bin seed_songs         # load chart text, keyed by sheet_expr
 flat directory per song holding `maidata.txt`. It is absent on a fresh clone.
 Matching resolves each folder to one catalog song *and chart type*: `&title=`
 then the folder name, exact then loosely folded; a ` [DX]`/` [ST]` suffix or
-the `&lv_N=` levels pick the type. Unmatched or ambiguous folders warn and skip.
+the `&lv_N=` levels pick the type. A UTAGE folder (`&inote_7=`) matches a
+UTAGE sheet instead: `&lv_7=` names its difficulty by `difficulties.code`, and
+only a single sheet across the folder's title forms seeds. One side of a buddy
+chart (`[1P]`/`[2P]`) is set aside, since the catalog holds one sheet for both.
+Unmatched or ambiguous folders warn and skip.
 
 #### Where infrastructure files live
 

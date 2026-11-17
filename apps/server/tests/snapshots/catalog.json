@@ -11,6 +11,10 @@
       "iconHeight": 20,
       "iconUrl": "master.png",
       "name": "MASTER"
+    },
+    {
+      "difficulty": "basic",
+      "name": "BASIC"
     }
   ],
   "regions": [

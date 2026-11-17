@@ -82,6 +82,7 @@ mod tests {
     async fn catalog_returns_song_with_empty_sheets_when_region_excludes_all(
         pool: sqlx::PgPool,
     ) -> sqlx::Result<()> {
+        crate::test_support::seed_standard_difficulties(&pool).await;
         sqlx::query!(
             "INSERT INTO songs (song_id, title, source_index) VALUES ($1, $2, $3)",
             "maimai_song",
@@ -189,8 +190,17 @@ mod tests {
         .await
         .unwrap();
         sqlx::query!(
-            "INSERT INTO difficulties (difficulty, name, color, icon_url, icon_height, ordinal)
-             VALUES ('master', 'MASTER', '#9f51dc', 'master.png', 20, 0)"
+            "INSERT INTO difficulties (difficulty, name, code, color, icon_url, icon_height, ordinal)
+             VALUES ('master', 'MASTER', 'master', '#9f51dc', 'master.png', 20, 0)"
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+        // A sparse row beside the full one: the optional fields are where a
+        // serde rename or a skip_serializing_if would go unnoticed.
+        sqlx::query!(
+            "INSERT INTO difficulties (difficulty, name, code, ordinal)
+             VALUES ('basic', 'BASIC', 'basic', 1)"
         )
         .execute(pool)
         .await

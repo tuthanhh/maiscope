@@ -60,7 +60,9 @@ impl SyncStats {
     }
 }
 
-/// The five wholesale-replaced lookup tables, all of which carry an `ordinal`.
+/// The five lookup tables, all of which carry an `ordinal`. Four are replaced
+/// wholesale each run; `difficulties` is upserted and pruned (see
+/// [`replace_lookups`]).
 const LOOKUP_TABLES: [&str; 5] = ["categories", "versions", "types", "difficulties", "regions"];
 
 pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Error> {
@@ -91,8 +93,8 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
     let revision = previous + 1;
     stats.revision = revision;
 
-    // The lookup tables are replaced wholesale, so unlike songs and sheets they
-    // have no per-row `IS DISTINCT FROM` guard to report a change. Digest them
+    // The lookup tables are rewritten without a per-row `IS DISTINCT FROM`
+    // guard, unlike songs and sheets, so nothing reports a change. Digest them
     // before and after: without this, a renamed category would be applied but
     // never advance `catalog_meta.revision`, so no client would refetch it.
     let digests_before = lookup_digests(&mut tx).await?;
@@ -249,8 +251,8 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
 // ── lookup tables ────────────────────────────────────────────────────────────
 
 /// md5 over each lookup table's whole contents, in `ordinal` order, in one round
-/// trip. Used only to compare the tables against themselves before and after a
-/// wholesale replace, so the exact row-text format does not matter — only that
+/// trip. Used only to compare the tables against themselves before and after
+/// they are rewritten, so the exact row-text format does not matter — only that
 /// it is stable within one transaction.
 async fn lookup_digests(conn: &mut PgConnection) -> Result<Vec<String>, sqlx::Error> {
     // A table name cannot be a bind parameter. Each name is one of the five
@@ -274,9 +276,10 @@ async fn lookup_digests(conn: &mut PgConnection) -> Result<Vec<String>, sqlx::Er
     (0..LOOKUP_TABLES.len()).map(|i| row.try_get(i)).collect()
 }
 
-/// Ordered lookup tables carry no rows anything else references, and their
-/// `ordinal` is positional, so replacing them wholesale is both safe and simpler
-/// than diffing. This is the one place a DELETE is allowed.
+/// Four of the ordered lookup tables carry no rows anything else references,
+/// and their `ordinal` is positional, so replacing them wholesale is both safe
+/// and simpler than diffing. `difficulties` is the exception: sheets reference
+/// it, so it is upserted and pruned. This is the one place a DELETE is allowed.
 async fn replace_lookups(conn: &mut PgConnection, data: &RawData) -> Result<(), sqlx::Error> {
     let ordinals = |n: usize| (0..n as i32).collect::<Vec<i32>>();
 
@@ -361,47 +364,53 @@ async fn replace_lookups(conn: &mut PgConnection, data: &RawData) -> Result<(), 
     .execute(&mut *conn)
     .await?;
 
-    sqlx::query("DELETE FROM difficulties")
-        .execute(&mut *conn)
-        .await?;
+    // Upstream lists the standard difficulties only, while its UTAGE sheets
+    // use tags it never lists; the rows for those are derived on every run.
+    // The set covers sheets already stored as well as the payload's, because
+    // a sheet upstream stops listing is kept, and so is its difficulty.
+    let stored: Vec<String> =
+        sqlx::query_scalar("SELECT DISTINCT difficulty FROM sheets WHERE difficulty IS NOT NULL")
+            .fetch_all(&mut *conn)
+            .await?;
+    let in_payload = data
+        .songs
+        .iter()
+        .filter(|song| song.song_id.is_some())
+        .flat_map(|song| &song.sheets)
+        .filter_map(|sheet| sheet.difficulty.as_deref());
+    let difficulties = difficulty_rows(
+        &data.difficulties,
+        stored.iter().map(String::as_str).chain(in_payload),
+    );
+
+    // `sheets.difficulty` references this table ON DELETE RESTRICT, so it is
+    // upserted rather than replaced, and only rows no sheet uses are pruned.
+    // `difficulties` already holds every value a sheet holds, so the prune
+    // can never hit the restriction. These rows are written before the sheets
+    // that reference them; reordering that fails the batch on the key.
+    let keys: Vec<&str> = difficulties.iter().map(|d| d.difficulty).collect();
     sqlx::query(
-        "INSERT INTO difficulties (difficulty, name, color, icon_url, icon_height, ordinal) \
-         SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], \
-                              $5::int[], $6::int[])",
+        "INSERT INTO difficulties (difficulty, name, code, color, icon_url, icon_height, ordinal) \
+         SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], \
+                              $6::int[], $7::int[]) \
+         ON CONFLICT (difficulty) DO UPDATE SET \
+           name = EXCLUDED.name, code = EXCLUDED.code, color = EXCLUDED.color, \
+           icon_url = EXCLUDED.icon_url, icon_height = EXCLUDED.icon_height, \
+           ordinal = EXCLUDED.ordinal",
     )
-    .bind(
-        data.difficulties
-            .iter()
-            .map(|d| d.difficulty.clone())
-            .collect::<Vec<_>>(),
-    )
-    .bind(
-        data.difficulties
-            .iter()
-            .map(|d| d.name.clone())
-            .collect::<Vec<_>>(),
-    )
-    .bind(
-        data.difficulties
-            .iter()
-            .map(|d| d.color.clone())
-            .collect::<Vec<_>>(),
-    )
-    .bind(
-        data.difficulties
-            .iter()
-            .map(|d| d.icon_url.clone())
-            .collect::<Vec<_>>(),
-    )
-    .bind(
-        data.difficulties
-            .iter()
-            .map(|d| d.icon_height)
-            .collect::<Vec<_>>(),
-    )
-    .bind(ordinals(data.difficulties.len()))
+    .bind(&keys)
+    .bind(difficulties.iter().map(|d| d.name).collect::<Vec<_>>())
+    .bind(difficulties.iter().map(|d| d.code).collect::<Vec<_>>())
+    .bind(difficulties.iter().map(|d| d.color).collect::<Vec<_>>())
+    .bind(difficulties.iter().map(|d| d.icon_url).collect::<Vec<_>>())
+    .bind(difficulties.iter().map(|d| d.icon_height).collect::<Vec<_>>())
+    .bind(ordinals(difficulties.len()))
     .execute(&mut *conn)
     .await?;
+    sqlx::query("DELETE FROM difficulties WHERE difficulty <> ALL($1)")
+        .bind(&keys)
+        .execute(&mut *conn)
+        .await?;
 
     sqlx::query("DELETE FROM regions")
         .execute(&mut *conn)
@@ -910,6 +919,64 @@ async fn replace_sub_tables(
     .await?;
 
     Ok(())
+}
+
+/// One `difficulties` row as the sync writes it.
+#[derive(Debug, PartialEq)]
+struct DifficultyRow<'a> {
+    difficulty: &'a str,
+    /// Display form. A derived row has nothing better than the value itself,
+    /// which for UTAGE is the bracketed tag (`【協】`).
+    name: &'a str,
+    /// Matching and URL form: the bare tag maidata emits (`協`).
+    code: &'a str,
+    color: Option<&'a str>,
+    icon_url: Option<&'a str>,
+    icon_height: Option<i32>,
+}
+
+/// Upstream's rows in upstream order, then one row per `used` value upstream
+/// does not list, in byte order. Byte order rather than first-seen order
+/// because the result must not depend on payload order: the lookup digest
+/// compares runs, and a reshuffle would advance the revision on a no-op sync.
+/// The migration that introduced `code` backfills with the same rule.
+fn difficulty_rows<'a>(
+    upstream: &'a [crate::upstream::RawDifficulty],
+    used: impl IntoIterator<Item = &'a str>,
+) -> Vec<DifficultyRow<'a>> {
+    let listed: std::collections::HashSet<&str> =
+        upstream.iter().map(|d| d.difficulty.as_str()).collect();
+    let derived: std::collections::BTreeSet<&str> =
+        used.into_iter().filter(|d| !listed.contains(d)).collect();
+
+    upstream
+        .iter()
+        .map(|d| DifficultyRow {
+            difficulty: &d.difficulty,
+            name: &d.name,
+            code: &d.difficulty,
+            color: d.color.as_deref(),
+            icon_url: d.icon_url.as_deref(),
+            icon_height: d.icon_height,
+        })
+        .chain(derived.into_iter().map(|d| DifficultyRow {
+            difficulty: d,
+            name: d,
+            code: bare_tag(d),
+            color: None,
+            icon_url: None,
+            icon_height: None,
+        }))
+        .collect()
+}
+
+/// `【協】` → `協`; anything not shaped like a UTAGE tag is its own code.
+fn bare_tag(difficulty: &str) -> &str {
+    difficulty
+        .strip_prefix('【')
+        .and_then(|rest| rest.strip_suffix('】'))
+        .filter(|tag| !tag.is_empty())
+        .unwrap_or(difficulty)
 }
 
 /// Refuse implausible payloads before any write. The failure this guards is a
@@ -1893,5 +1960,212 @@ mod tests {
     #[test]
     fn sanity_check_allows_growth() {
         assert!(sanity_check(2000, 1845).is_ok());
+    }
+
+    // ── difficulties (catalog-difficulties 01) ───────────────────────────────
+
+    /// Upstream sends rows for the standard difficulties only; its UTAGE
+    /// sheets use bracketed tags it never lists. Two of each, plus a sheet
+    /// with no difficulty at all.
+    const UTAGE_PAYLOAD: &str = r##"{
+        "difficulties": [
+            { "difficulty": "basic", "name": "BASIC", "color": "#22bb5b" },
+            { "difficulty": "master", "name": "MASTER", "color": "#9e45e2" }
+        ],
+        "songs": [
+            { "songId": "Plain", "title": "Plain",
+              "sheets": [{ "type": "dx", "difficulty": "master" },
+                         { "type": "dx" }] },
+            { "songId": "[協]Plain", "title": "[協]Plain",
+              "sheets": [{ "type": "utage", "difficulty": "【協】" }] },
+            { "songId": "[J]Plain", "title": "[J]Plain",
+              "sheets": [{ "type": "utage", "difficulty": "【J】" }] }
+        ]
+    }"##;
+
+    async fn stored_difficulties(pool: &PgPool) -> Vec<(String, String, String, i32)> {
+        sqlx::query_as("SELECT difficulty, name, code, ordinal FROM difficulties ORDER BY ordinal")
+            .fetch_all(pool)
+            .await
+            .unwrap()
+    }
+
+    async fn sheet_difficulties_without_a_row(pool: &PgPool) -> Vec<String> {
+        sqlx::query_scalar(
+            "SELECT DISTINCT difficulty FROM sheets \
+             WHERE difficulty IS NOT NULL \
+               AND difficulty NOT IN (SELECT difficulty FROM difficulties)",
+        )
+        .fetch_all(pool)
+        .await
+        .unwrap()
+    }
+
+    #[sqlx::test]
+    async fn every_sheet_difficulty_has_a_difficulties_row_after_a_sync(
+        pool: PgPool,
+    ) -> sqlx::Result<()> {
+        apply(&pool, &payload(UTAGE_PAYLOAD)).await?;
+
+        assert_eq!(sheet_difficulties_without_a_row(&pool).await, Vec::<String>::new());
+        Ok(())
+    }
+
+    // `name` is the display form the sheets store; `code` is the bare tag
+    // maidata emits and v2 URLs carry. Upstream rows keep their order and
+    // the derived ones follow, so the frontend's index maps keep meaning
+    // what they meant for the five standard rows.
+    #[sqlx::test]
+    async fn derived_rows_follow_upstream_ones_with_the_brackets_stripped_for_code(
+        pool: PgPool,
+    ) -> sqlx::Result<()> {
+        apply(&pool, &payload(UTAGE_PAYLOAD)).await?;
+
+        let s = |v: &str| v.to_string();
+        assert_eq!(
+            stored_difficulties(&pool).await,
+            vec![
+                (s("basic"), s("BASIC"), s("basic"), 0),
+                (s("master"), s("MASTER"), s("master"), 1),
+                (s("【J】"), s("【J】"), s("J"), 2),
+                (s("【協】"), s("【協】"), s("協"), 3),
+            ]
+        );
+        Ok(())
+    }
+
+    // The derived rows are rebuilt every run; they have to come back
+    // identical, or every daily no-op sync
+    // would advance the revision and make every client refetch.
+    #[sqlx::test]
+    async fn derived_rows_are_rebuilt_identically_by_an_unchanged_resync(
+        pool: PgPool,
+    ) -> sqlx::Result<()> {
+        apply(&pool, &payload(UTAGE_PAYLOAD)).await?;
+        let before = stored_difficulties(&pool).await;
+
+        let stats = apply(&pool, &payload(UTAGE_PAYLOAD)).await?;
+
+        assert!(!stats.revision_advanced);
+        assert_eq!(stored_difficulties(&pool).await, before);
+        Ok(())
+    }
+
+    // A sheet upstream stops listing is kept, never deleted, so its
+    // difficulty still needs a row after the payload stops mentioning it.
+    #[sqlx::test]
+    async fn a_vanished_sheet_keeps_its_difficulty_row(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(UTAGE_PAYLOAD)).await?;
+
+        apply(
+            &pool,
+            &payload(r#"{ "songs": [{ "songId": "Plain", "title": "Plain",
+                          "sheets": [{ "type": "dx", "difficulty": "master" }] }] }"#),
+        )
+        .await?;
+
+        assert_eq!(sheet_difficulties_without_a_row(&pool).await, Vec::<String>::new());
+        Ok(())
+    }
+
+    // ── sheets.difficulty foreign key (catalog-difficulties 02) ──────────────
+
+    #[sqlx::test]
+    async fn a_sheet_cannot_hold_a_difficulty_the_table_does_not_know(
+        pool: PgPool,
+    ) -> sqlx::Result<()> {
+        apply(&pool, &payload(UTAGE_PAYLOAD)).await?;
+
+        let unknown = sqlx::query(
+            "UPDATE sheets SET difficulty = '【無】' WHERE sheet_expr = 'Plain|dx|master'",
+        )
+        .execute(&pool)
+        .await;
+
+        assert!(unknown.is_err(), "an unknown difficulty must be rejected");
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn a_difficulty_in_use_cannot_be_deleted(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(UTAGE_PAYLOAD)).await?;
+
+        let deleted = sqlx::query("DELETE FROM difficulties WHERE difficulty = '【協】'")
+            .execute(&pool)
+            .await;
+
+        assert!(deleted.is_err(), "a difficulty sheets use must not be removable");
+        Ok(())
+    }
+
+    // Upstream dropping a row its sheets still use must not fail the sync:
+    // the value is still held, so it is derived like any unlisted one.
+    #[sqlx::test]
+    async fn an_upstream_row_dropped_while_in_use_becomes_a_derived_row(
+        pool: PgPool,
+    ) -> sqlx::Result<()> {
+        apply(&pool, &payload(UTAGE_PAYLOAD)).await?;
+
+        let without_master = UTAGE_PAYLOAD.replace(
+            r##"{ "difficulty": "master", "name": "MASTER", "color": "#9e45e2" }"##,
+            r##"{ "difficulty": "expert", "name": "EXPERT", "color": "#f64861" }"##,
+        );
+        let stats = apply(&pool, &payload(&without_master)).await?;
+
+        assert!(stats.revision_advanced);
+        let s = |v: &str| v.to_string();
+        assert_eq!(
+            stored_difficulties(&pool).await,
+            vec![
+                (s("basic"), s("BASIC"), s("basic"), 0),
+                (s("expert"), s("EXPERT"), s("expert"), 1),
+                (s("master"), s("master"), s("master"), 2),
+                (s("【J】"), s("【J】"), s("J"), 3),
+                (s("【協】"), s("【協】"), s("協"), 4),
+            ]
+        );
+        Ok(())
+    }
+
+    // Over the whole table, not the two rows above: every derived row's
+    // display form is its code inside the full-width brackets, so the two
+    // columns cannot drift apart.
+    #[sqlx::test]
+    async fn every_derived_row_is_its_code_in_brackets(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(UTAGE_PAYLOAD)).await?;
+
+        let drifted: Vec<(String, String)> = sqlx::query_as(
+            "SELECT name, code FROM difficulties \
+             WHERE code <> difficulty AND name <> '【' || code || '】'",
+        )
+        .fetch_all(&pool)
+        .await?;
+        let derived: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM difficulties WHERE code <> difficulty")
+                .fetch_one(&pool)
+                .await?;
+
+        assert_eq!(derived, 2, "the payload's two UTAGE tags are derived");
+        assert_eq!(drifted, Vec::<(String, String)>::new());
+        Ok(())
+    }
+
+    // `code` is a URL component, so two rows sharing one must stop the sync
+    // rather than leave a URL that names two difficulties. The transaction
+    // rolls back, so nothing half-applied is left behind.
+    #[sqlx::test]
+    async fn a_code_shared_by_two_difficulties_fails_the_sync(pool: PgPool) -> sqlx::Result<()> {
+        let clash = UTAGE_PAYLOAD.replace(
+            r##"{ "difficulty": "basic", "name": "BASIC", "color": "#22bb5b" },"##,
+            r##"{ "difficulty": "basic", "name": "BASIC", "color": "#22bb5b" },
+            { "difficulty": "協", "name": "KYOU" },"##,
+        );
+
+        assert!(apply(&pool, &payload(&clash)).await.is_err());
+        let songs: i64 = sqlx::query_scalar("SELECT count(*) FROM songs")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(songs, 0);
+        Ok(())
     }
 }

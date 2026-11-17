@@ -277,7 +277,24 @@ mod tests {
     use super::*;
     use sqlx::PgPool;
 
+    /// `sheets.difficulty` references `difficulties` (catalog-difficulties
+    /// 02); seed the rows a fixture's sheets use. A copy of the binary's
+    /// `test_support::seed_difficulties`: this module is in the library, and
+    /// the library cannot see a module mounted only in `main.rs`.
+    async fn seed_difficulties(pool: &PgPool, difficulties: &[String]) {
+        sqlx::query(
+            "INSERT INTO difficulties (difficulty, name, code, ordinal) \
+             SELECT d, d, d, (o - 1)::int FROM unnest($1::text[]) WITH ORDINALITY AS t(d, o) \
+             ON CONFLICT (difficulty) DO NOTHING",
+        )
+        .bind(difficulties)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
     async fn seed_song_with_sheet(pool: &PgPool) -> (i64, String) {
+        seed_difficulties(pool, &["master".to_string()]).await;
         let song_id: i64 = sqlx::query_scalar(
             "INSERT INTO songs (song_id, title, source_index) VALUES ($1, $2, $3) RETURNING id",
         )
@@ -437,6 +454,7 @@ mod tests {
 
     /// `n` sheets under one song, so a batch has more than one row to get wrong.
     async fn seed_sheets(pool: &PgPool, n: usize) -> Vec<(i64, String)> {
+        seed_difficulties(pool, &(0..n).map(|i| format!("d{i}")).collect::<Vec<_>>()).await;
         let song_id: i64 = sqlx::query_scalar(
             "INSERT INTO songs (song_id, title, source_index) VALUES ($1, $2, $3) RETURNING id",
         )

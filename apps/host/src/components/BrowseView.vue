@@ -76,7 +76,17 @@ const levelOptions = computed(() => toSelectOptions(options.value.levels));
 const regionOptions = computed(() => toSelectOptions(options.value.regions));
 
 const typeChips = computed(() => data.value.types);
-const difficultyChips = computed(() => data.value.difficulties);
+// `difficulties` also lists every UTAGE tag, one per UTAGE sheet. Those are
+// reached through the UTAGE type chip, so the difficulty chips stay the ones
+// standard and DX sheets use.
+const difficultyChips = computed(() => {
+    const used = new Set(
+        data.value.sheets
+            .filter((sheet) => sheet.type !== "utage")
+            .map((sheet) => sheet.difficulty),
+    );
+    return data.value.difficulties.filter((d) => used.has(d.difficulty));
+});
 
 // ── build Filters from UI state, then run the engine ──────────
 const filters = computed<Filters>(() => {

@@ -441,6 +441,7 @@ mod tests {
     use super::*;
 
     async fn seed_song_with_two_sheets(pool: &PgPool) -> (i64, i64, i64) {
+        crate::test_support::seed_standard_difficulties(pool).await;
         let song_pk: i64 = sqlx::query_scalar!(
             "INSERT INTO songs (song_id, source_index) VALUES ($1, $2) RETURNING id",
             "maimai_song",
@@ -551,6 +552,7 @@ mod tests {
 
     #[sqlx::test]
     async fn fetch_sheet_by_expr_joins_song_and_sheet(pool: PgPool) -> sqlx::Result<()> {
+        crate::test_support::seed_standard_difficulties(&pool).await;
         sqlx::query!(
             "INSERT INTO songs (song_id, title, source_index) VALUES ($1, $2, $3)",
             "maimai_song",
@@ -579,6 +581,7 @@ mod tests {
     }
 
     async fn seed_two_songs_for_search(pool: &PgPool) {
+        crate::test_support::seed_standard_difficulties(pool).await;
         sqlx::query!(
             "INSERT INTO songs (song_id, title, artist, category, version, bpm, source_index)
              VALUES ($1, $2, $3, $4, $5, $6, $7)",
