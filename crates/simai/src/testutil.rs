@@ -10,7 +10,7 @@
 #![allow(dead_code)]
 
 use super::note::parse_note;
-use crate::systems::component::{Duration, Note, NoteKind, SlideSegment, SlideShape};
+use crate::types::{Duration, Note, NoteKind, SlideSegment, SlideShape};
 
 /// Parse, panicking with the parser's own message on failure.
 pub(super) fn parse(s: &str) -> Vec<Note> {

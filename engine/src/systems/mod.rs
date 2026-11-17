@@ -7,7 +7,6 @@ mod audio;
 mod chart_playback;
 pub(crate) mod component;
 mod frame_stats;
-pub mod parser;
 mod visual;
 
 const GROWING: f64 = 1.5;
@@ -79,7 +78,7 @@ fn ingest_songs(
     for song in crate::wasm_bridge::take_songs() {
         // A malformed chart shouldn't crash the engine (panics abort the whole
         // wasm module) — log and skip it instead.
-        let events = match parser::parse_chart(&song.chart) {
+        let events = match simai::parse_chart(&song.chart) {
             Ok(events) => events,
             Err(err) => {
                 error!("chart parse failed, skipping song: {err:?}");

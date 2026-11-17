@@ -25,7 +25,7 @@ bevy = { version = "0.18.1", default-features = false, features = [
 bevy_kira_audio = { version = "0.25.0", default-features = false, features = ["mp3", "wav", "ogg"] }
 bevy_prototype_lyon = "0.16.0"
 once_cell = "1.21.4"
-regex = "1.12.3"
+simai = { path = "../crates/simai", features = ["bevy"] }
 wasm-bindgen = "=0.2.122" # pinned to match installed wasm-bindgen CLI (schema must match exactly)
 
 

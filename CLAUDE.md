@@ -151,18 +151,24 @@ layer. The one exception to per-module placement is
 `apps/server/tests/song_id_migration.rs`: it runs a migration down and up
 through the migrator, which no module owns.
 
-`engine/` tests the simai parser. Per-note tests are inline `#[cfg(test)]`
-modules in `systems/parser/` — `parse_note`, `parse_slide_note` and
-`parse_duration_bracket` are private to that module tree, so an integration test
-cannot reach them. Shared helpers live in `systems/parser/testutil.rs`. The
-corpus test in `engine/tests/corpus.rs` drives the one public entry point,
-`parse_chart`, over the fixtures in `engine/tests/fixtures/` and snapshots event
-counts to `engine/tests/corpus-snapshot.txt`:
+`crates/simai` is the simai parser, a crate with no Bevy in its graph
+([ADR-0014](docs/adr/0014-simai-parser-as-its-own-crate.md)). Per-note tests are
+inline `#[cfg(test)]` modules in its `src/` — `parse_note`, `parse_slide_note`
+and `parse_duration_bracket` are private, so an integration test cannot reach
+them. Shared helpers live in `src/testutil.rs`. The corpus test in
+`crates/simai/tests/corpus.rs` drives the one public entry point, `parse_chart`,
+over the fixtures in `tests/fixtures/` and snapshots event counts to
+`tests/corpus-snapshot.txt`:
 
 ```sh
-cargo test -p engine                              # needs libasound2-dev, libudev-dev
-UPDATE_SNAPSHOT=1 cargo test -p engine --test corpus   # accept a counts change
+cargo test -p simai                                   # no system packages needed
+UPDATE_SNAPSHOT=1 cargo test -p simai --test corpus   # accept a counts change
+cargo test -p engine                                  # engine-only tests; needs libasound2-dev, libudev-dev
 ```
+
+`engine` enables `simai`'s `bevy` feature for one derive. Never build the
+workspace as a whole (`--workspace`): Cargo unifies features across crates
+built together, which would pull Bevy into the server's graph.
 
 `apps/host/` still has no tests. Both are tracked in
 [`docs/work/test-foundation/`](docs/work/test-foundation/).

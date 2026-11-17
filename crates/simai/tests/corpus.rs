@@ -4,7 +4,7 @@
 //! This is the net that catches a parser change nobody thought to write a unit
 //! test for. It is deliberately coarse — it asserts *shape*, not correctness.
 //! A misparsed slide that still produces one note per token slips through here
-//! and is caught by the inline tests in `systems/parser/` instead.
+//! and is caught by the inline tests in `src/` instead.
 //!
 //! Fixtures are hand-written simai under `tests/fixtures/`, chart text only.
 //! See `tests/fixtures/README.md` for what belongs there and why.
@@ -14,7 +14,7 @@
 //! entering the repo. They are deliberately left out of the snapshot, so the
 //! committed expectations do not depend on files a fresh clone will not have.
 
-use engine::chart::{ChartEvent, parse_chart};
+use simai::{ChartEvent, parse_chart};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -115,7 +115,7 @@ fn every_fixture_parses_without_panicking() {
 
 /// Event counts match `tests/fixtures/snapshot.txt`.
 ///
-/// To accept an intended change: `UPDATE_SNAPSHOT=1 cargo test -p engine`,
+/// To accept an intended change: `UPDATE_SNAPSHOT=1 cargo test -p simai`,
 /// then **read the diff before committing it**. A snapshot you regenerate without
 /// reading is a snapshot that asserts nothing.
 #[test]
@@ -130,7 +130,7 @@ fn event_counts_match_snapshot() {
 
     let expected = fs::read_to_string(&snapshot_path).unwrap_or_else(|_| {
         panic!(
-            "{} is missing — create it with UPDATE_SNAPSHOT=1 cargo test -p engine",
+            "{} is missing — create it with UPDATE_SNAPSHOT=1 cargo test -p simai",
             snapshot_path.display()
         )
     });
@@ -139,6 +139,6 @@ fn event_counts_match_snapshot() {
         expected.trim(),
         actual.trim(),
         "\nevent counts changed. If this is intended:\n  \
-         UPDATE_SNAPSHOT=1 cargo test -p engine\n"
+         UPDATE_SNAPSHOT=1 cargo test -p simai\n"
     );
 }
