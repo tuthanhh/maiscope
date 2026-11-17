@@ -7,6 +7,7 @@ import config from "~/app/config";
 import { installAudioUnlock } from "~/utils/audioUnlock";
 
 import "~/assets/styles/global.scss";
+import "~/assets/styles/tokens.scss";
 import "~/assets/styles/theme.scss";
 
 async function bootstrap() {

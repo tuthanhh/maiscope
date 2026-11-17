@@ -14,7 +14,8 @@ import MvSheetDialog from "~/components/dialogs/MvSheetDialog.vue";
 
 defineOptions({ name: "DefaultLayout" });
 
-const { t } = useI18n();
+const i18n = useI18n();
+const { t } = i18n;
 const dataStore = useDataStore();
 const { isDarkMode } = useDarkMode();
 
@@ -46,10 +47,20 @@ onMounted(() => {
     dataStore.loadData();
 });
 
+// The browser picks a CJK face from the language, so <html lang> follows the
+// active locale (design-direction, "Type families").
+watch(
+    () => i18n.localeProperties.iso ?? i18n.locale,
+    (iso) => {
+        document.documentElement.lang = iso;
+    },
+    { immediate: true },
+);
+
 watch(
     isDarkMode,
     () => {
-        // Flip the monochrome design tokens (theme.scss :root.dark).
+        // Swap the semantic token layer (tokens.scss :root.dark).
         document.documentElement.classList.toggle("dark", isDarkMode.value);
     },
     { immediate: true },
