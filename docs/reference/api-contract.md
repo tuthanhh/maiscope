@@ -11,6 +11,10 @@ revision-probe sync tier. Auth (§4) is phase 2; §5 is superseded by
 > It is developed on a branch and replaces this API at merge; the two never
 > serve simultaneously, and it drops the version segment entirely (`/api/...`).
 > No further behaviour lands here.
+>
+> **On the `v2` branch the replacement is being built** and is described in
+> §0, under `/api`. §1–3 keep describing `/api/v1` until `api-rewrite` 07
+> deletes it; §4 (auth) is already v2-only.
 
 Each section carries its implementation status:
 
@@ -33,6 +37,39 @@ The frontend rehydrates a frozen, prototype-linked object graph in
 `utils/data.ts:preprocessData`. **The server returns raw fields only** — it does
 NOT send derived fields (`songNo`, `imageUrl`, `imageUrlM`, `sheetExpr`,
 `notePercents`, `$canonicalSheet`). The client computes those, as it does today.
+
+---
+
+## 0. v2 reads — `/api`  *(v2 branch)*
+
+Authored from scratch (`api-rewrite`). Payloads carry raw fields that a
+screen reads and nothing else, and name a difficulty by its `code`
+([ADR-0026](../adr/0026-v2-api-carries-codes-and-read-fields-only.md)); the
+client resolves names and colours through the reference tables and derives
+`imageUrl` itself. Errors use the §6 envelope.
+
+### `GET /api/healthcheck`
+
+`{ "status": "good" }`. Outside every rate limiter.
+
+### `GET /api/reference`
+
+The five reference tables, each in its table's order — the boot fetch that
+lets any screen resolve names without the Catalog
+([ADR-0021](../adr/0021-catalog-snapshot-plus-reference-tables-no-server-search.md)):
+
+```jsonc
+{ "categories":   [{ "category": "POPS＆アニメ" }],
+  "versions":     [{ "version": "maimai でらっくす", "abbr": "でらっくす" }],
+  "types":        [{ "type": "dx", "name": "DX", "abbr": "DX" }],
+  "difficulties": [{ "code": "master", "name": "MASTER", "color": "#9e45e2" },
+                   { "code": "協", "name": "【協】", "color": null }],
+  "regions":      [{ "region": "jp", "name": "日本版" }] }
+```
+
+`abbr` and `color` may be `null`. The tables change only with the Catalog, so
+they share its `ETag` (`304` on `If-None-Match`) and its
+`Cache-Control: public, max-age=3600`.
 
 ---
 

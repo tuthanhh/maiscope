@@ -1,5 +1,7 @@
 mod auth;
 mod caching;
+mod health;
+mod reference;
 mod v1;
 
 use std::time::Duration;
@@ -79,9 +81,13 @@ pub fn router(state: AppState) -> Router {
     // is cacheable and will move in beside them.
     let auth_routes = Router::new()
         .merge(auth::github_router().layer(github_limit_layer))
-        .merge(auth::session_router().layer(limit_layer))
+        .merge(auth::session_router().layer(limit_layer.clone()))
         .layer(axum::middleware::map_response(auth::no_store));
-    let api = Router::new().merge(auth_routes);
+    let reads = Router::new().merge(reference::router()).layer(limit_layer);
+    let api = Router::new()
+        .merge(health::router())
+        .merge(reads)
+        .merge(auth_routes);
 
     Router::new()
         .nest(
@@ -191,18 +197,24 @@ mod tests {
         }
         assert!(throttled, "rate-limit layer is not wired to /sync/manifest");
 
-        // Same IP, now throttled — health must still answer.
-        for _ in 0..RATE_LIMIT_BURST_SIZE + 5 {
-            let response = app
-                .clone()
-                .oneshot(get_from("/api/v1/healthcheck", ip))
-                .await
-                .unwrap();
-            assert_eq!(
-                response.status(),
-                StatusCode::OK,
-                "healthcheck must never be rate limited"
-            );
+        // The v2 reads share that bucket, so they are throttled too.
+        let response = app
+            .clone()
+            .oneshot(get_from("/api/reference", ip))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        // Same IP, now throttled — both healthchecks must still answer.
+        for path in ["/api/v1/healthcheck", "/api/healthcheck"] {
+            for _ in 0..RATE_LIMIT_BURST_SIZE + 5 {
+                let response = app.clone().oneshot(get_from(path, ip)).await.unwrap();
+                assert_eq!(
+                    response.status(),
+                    StatusCode::OK,
+                    "{path} must never be rate limited"
+                );
+            }
         }
         Ok(())
     }

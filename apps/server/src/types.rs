@@ -314,3 +314,53 @@ pub struct TokenPair {
     pub token: String,
     pub refresh_token: String,
 }
+
+// ── v2 read API (api-rewrite) ──────────────────────────────────────────────
+//
+// New structs rather than v1's with fields skipped: v1 answers byte-for-byte
+// as before until `api-rewrite` 07 deletes it, and these carry only what a
+// screen reads (ADR-0026, docs/reference/screen-data-requirements.md).
+
+/// `GET /api/reference`, and the same five arrays inside `GET /api/catalog`
+/// (ADR-0021). Each list is in its table's `ordinal` order.
+#[derive(Debug, Serialize)]
+pub struct Reference {
+    pub categories: Vec<ReferenceCategory>,
+    pub versions: Vec<ReferenceVersion>,
+    pub types: Vec<ReferenceType>,
+    pub difficulties: Vec<ReferenceDifficulty>,
+    pub regions: Vec<ReferenceRegion>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ReferenceCategory {
+    pub category: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ReferenceVersion {
+    pub version: String,
+    pub abbr: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ReferenceType {
+    pub r#type: String,
+    pub name: String,
+    pub abbr: Option<String>,
+}
+
+/// Keyed by `code`, the form a sheet's `difficulty` and its URL carry
+/// (`master`, `協`); `name` is the display form (`MASTER`, `【協】`).
+#[derive(Debug, Serialize)]
+pub struct ReferenceDifficulty {
+    pub code: String,
+    pub name: String,
+    pub color: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ReferenceRegion {
+    pub region: String,
+    pub name: String,
+}

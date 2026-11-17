@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO categories (category, ordinal) VALUES ('maimai', 1), ('POPS', 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "3fbf9b6ed6678d093f0c8941b1a879c76d6aacebaa6054ca2cb09b21162c8b71"
+}
