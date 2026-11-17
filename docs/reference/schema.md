@@ -163,14 +163,21 @@ Append-only history — every applied revision adds a row (`chart_id`,
 ```
 catalog_meta   (singleton: update_time)
 
-categories / versions / types / difficulties / regions   (standalone lookups, ordinal)
+categories / versions / types / regions   (standalone lookups, ordinal)
+
+difficulties ─< sheets.difficulty   (ON DELETE RESTRICT)
 
 songs ─< sheets ─┬─< sheet_note_counts
                  ├─< sheet_regions
                  └─< sheet_region_overrides
 ```
-Lookups are standalone (no FK from songs/sheets — `Song.category` etc. are plain
-strings the client cross-references, matching the frontend's loose coupling). FKs
+Lookups are standalone except `difficulties` (no FK from songs/sheets to the
+others — `Song.category` etc. are plain strings the client cross-references,
+matching the frontend's loose coupling). `sheets.difficulty` references
+`difficulties.difficulty` `ON DELETE RESTRICT`: a sheet cannot hold a value
+the table does not know, and a row cannot go while a sheet uses it. That is
+why `bin/sync_catalog` upserts `difficulties` and prunes unused rows, where it
+replaces the other four wholesale, and why it writes them before the sheets. FKs
 on the song→sheet→sub-table chain are `ON DELETE CASCADE`: drop a song → its
 sheets + sub-rows vanish — **and so does the chart text hanging off those
 sheets**, since `charts.sheet_id` cascades too. No code path deletes from

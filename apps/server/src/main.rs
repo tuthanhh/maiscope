@@ -6,6 +6,8 @@ mod rate_limit;
 mod routes;
 mod state;
 mod types;
+#[cfg(test)]
+mod test_support;
 
 use std::sync::Arc;
 

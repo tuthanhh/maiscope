@@ -74,6 +74,7 @@ mod tests {
     /// Insert a sheet, and optionally a chart row for it. `content: None` is the
     /// blob-only case — a chart row that exists but holds no inline simai.
     async fn seed_sheet(pool: &sqlx::PgPool, sheet_expr: &str, content: Option<&str>) {
+        crate::test_support::seed_standard_difficulties(pool).await;
         sqlx::query!(
             "INSERT INTO songs (song_id, title, source_index)
              VALUES ('example', 'Example Song', 0)

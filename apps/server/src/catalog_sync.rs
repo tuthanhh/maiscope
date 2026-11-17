@@ -274,9 +274,10 @@ async fn lookup_digests(conn: &mut PgConnection) -> Result<Vec<String>, sqlx::Er
     (0..LOOKUP_TABLES.len()).map(|i| row.try_get(i)).collect()
 }
 
-/// Ordered lookup tables carry no rows anything else references, and their
-/// `ordinal` is positional, so replacing them wholesale is both safe and simpler
-/// than diffing. This is the one place a DELETE is allowed.
+/// Four of the ordered lookup tables carry no rows anything else references,
+/// and their `ordinal` is positional, so replacing them wholesale is both safe
+/// and simpler than diffing. `difficulties` is the exception: sheets reference
+/// it, so it is upserted and pruned. This is the one place a DELETE is allowed.
 async fn replace_lookups(conn: &mut PgConnection, data: &RawData) -> Result<(), sqlx::Error> {
     let ordinals = |n: usize| (0..n as i32).collect::<Vec<i32>>();
 
@@ -380,15 +381,22 @@ async fn replace_lookups(conn: &mut PgConnection, data: &RawData) -> Result<(), 
         stored.iter().map(String::as_str).chain(in_payload),
     );
 
-    sqlx::query("DELETE FROM difficulties")
-        .execute(&mut *conn)
-        .await?;
+    // `sheets.difficulty` references this table ON DELETE RESTRICT, so it is
+    // upserted rather than replaced, and only rows no sheet uses are pruned.
+    // `difficulties` already holds every value a sheet holds, so the prune
+    // can never hit the restriction. These rows are written before the sheets
+    // that reference them; reordering that fails the batch on the key.
+    let keys: Vec<&str> = difficulties.iter().map(|d| d.difficulty).collect();
     sqlx::query(
         "INSERT INTO difficulties (difficulty, name, code, color, icon_url, icon_height, ordinal) \
          SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], \
-                              $6::int[], $7::int[])",
+                              $6::int[], $7::int[]) \
+         ON CONFLICT (difficulty) DO UPDATE SET \
+           name = EXCLUDED.name, code = EXCLUDED.code, color = EXCLUDED.color, \
+           icon_url = EXCLUDED.icon_url, icon_height = EXCLUDED.icon_height, \
+           ordinal = EXCLUDED.ordinal",
     )
-    .bind(difficulties.iter().map(|d| d.difficulty).collect::<Vec<_>>())
+    .bind(&keys)
     .bind(difficulties.iter().map(|d| d.name).collect::<Vec<_>>())
     .bind(difficulties.iter().map(|d| d.code).collect::<Vec<_>>())
     .bind(difficulties.iter().map(|d| d.color).collect::<Vec<_>>())
@@ -397,6 +405,10 @@ async fn replace_lookups(conn: &mut PgConnection, data: &RawData) -> Result<(), 
     .bind(ordinals(difficulties.len()))
     .execute(&mut *conn)
     .await?;
+    sqlx::query("DELETE FROM difficulties WHERE difficulty <> ALL($1)")
+        .bind(&keys)
+        .execute(&mut *conn)
+        .await?;
 
     sqlx::query("DELETE FROM regions")
         .execute(&mut *conn)
@@ -2051,6 +2063,65 @@ mod tests {
         .await?;
 
         assert_eq!(sheet_difficulties_without_a_row(&pool).await, Vec::<String>::new());
+        Ok(())
+    }
+
+    // ── sheets.difficulty foreign key (catalog-difficulties 02) ──────────────
+
+    #[sqlx::test]
+    async fn a_sheet_cannot_hold_a_difficulty_the_table_does_not_know(
+        pool: PgPool,
+    ) -> sqlx::Result<()> {
+        apply(&pool, &payload(UTAGE_PAYLOAD)).await?;
+
+        let unknown = sqlx::query(
+            "UPDATE sheets SET difficulty = '【無】' WHERE sheet_expr = 'Plain|dx|master'",
+        )
+        .execute(&pool)
+        .await;
+
+        assert!(unknown.is_err(), "an unknown difficulty must be rejected");
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn a_difficulty_in_use_cannot_be_deleted(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(UTAGE_PAYLOAD)).await?;
+
+        let deleted = sqlx::query("DELETE FROM difficulties WHERE difficulty = '【協】'")
+            .execute(&pool)
+            .await;
+
+        assert!(deleted.is_err(), "a difficulty sheets use must not be removable");
+        Ok(())
+    }
+
+    // Upstream dropping a row its sheets still use must not fail the sync:
+    // the value is still held, so it is derived like any unlisted one.
+    #[sqlx::test]
+    async fn an_upstream_row_dropped_while_in_use_becomes_a_derived_row(
+        pool: PgPool,
+    ) -> sqlx::Result<()> {
+        apply(&pool, &payload(UTAGE_PAYLOAD)).await?;
+
+        let without_master = UTAGE_PAYLOAD.replace(
+            r##"{ "difficulty": "master", "name": "MASTER", "color": "#9e45e2" }"##,
+            r##"{ "difficulty": "expert", "name": "EXPERT", "color": "#f64861" }"##,
+        );
+        let stats = apply(&pool, &payload(&without_master)).await?;
+
+        assert!(stats.revision_advanced);
+        let s = |v: &str| v.to_string();
+        assert_eq!(
+            difficulty_rows(&pool).await,
+            vec![
+                (s("basic"), s("BASIC"), s("basic"), 0),
+                (s("expert"), s("EXPERT"), s("expert"), 1),
+                (s("master"), s("master"), s("master"), 2),
+                (s("【J】"), s("【J】"), s("J"), 3),
+                (s("【協】"), s("【協】"), s("協"), 4),
+            ]
+        );
         Ok(())
     }
 }

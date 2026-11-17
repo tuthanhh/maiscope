@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO difficulties (difficulty, name, code, ordinal)\n             VALUES ('basic', 'BASIC', 'basic', 1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "2f985a5b94396496bc99db118231d0561e189678d306d7825be585e43309bf2f"
+}
