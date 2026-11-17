@@ -60,8 +60,8 @@ lets any screen resolve names without the Catalog
 
 ```jsonc
 { "categories":   [{ "category": "POPS＆アニメ" }],
-  "versions":     [{ "version": "maimai でらっくす", "abbr": "でらっくす" }],
-  "types":        [{ "type": "dx", "name": "DX", "abbr": "DX" }],
+  "versions":     [{ "version": "MAGiCAL", "abbr": "MAGiCAL" }],
+  "types":        [{ "type": "dx", "name": "DX（でらっくす）", "abbr": "DX" }],
   "difficulties": [{ "code": "master", "name": "MASTER", "color": "#9e45e2" },
                    { "code": "協", "name": "【協】", "color": null }],
   "regions":      [{ "region": "jp", "name": "日本版" }] }
