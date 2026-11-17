@@ -10,6 +10,11 @@ stopped calling v1).
 **Status:** todo
 
 - [ ] `rm -r apps/server/src/routes/v1/`; `routes/mod.rs` nests `/api` only
+- [ ] The router tests in `routes/mod.rs` that drive `/api/v1` paths are
+      repointed at v2 routes, not deleted — notably
+      `healthcheck_is_exempt_while_the_same_ip_is_throttled_elsewhere`, the
+      only proof the health exemption is wired, which burns its bucket on
+      `/api/v1/sync/manifest`
 - [ ] Queries, types and domain code used only by v1 go with it: sheet search
       and its params, `sheetExpr`-keyed lookups, delta, the v1 wire types. The
       compiler's dead-code warnings are the checklist

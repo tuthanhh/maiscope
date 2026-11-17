@@ -18,7 +18,11 @@ metadata card. Neither needs the snapshot.
       are case-sensitive
 - [ ] `{id}` not a UUID → `400 bad_request` in the contract's JSON shape, not
       axum's plain-text path rejection
-- [ ] Unknown song, or a known song without that sheet → `404 not_found`
+- [ ] Unknown song, or a known song without that sheet → `404 not_found`. That
+      covers an unknown `{type}` (`std`, `dx`, `utage` exist) and an unknown
+      difficulty code: both are validated by the lookup against `sheets` and
+      `difficulties.code`, which is the spec's "checked against
+      `difficulties`" — no closed enum in code to drift from the table
 - [ ] Tests: each route's shape against seeded rows, a UTAGE code through the
       encoded path, a malformed id, and both 404s
 - [ ] Contract: both routes

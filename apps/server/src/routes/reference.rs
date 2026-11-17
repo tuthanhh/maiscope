@@ -20,6 +20,9 @@ pub fn router() -> Router<AppState> {
 // screen resolves names without the Catalog (ADR-0021). They change only with
 // the Catalog, so they share its validator and its caching.
 async fn reference(headers: HeaderMap, State(pool): State<PgPool>) -> Result<Response, AppError> {
+    // Validator before body, deliberately: a sync committing in between leaves
+    // a body newer than its ETag, which costs one extra 200 later. The other
+    // order would pin an old body under a new ETag until the next change.
     let freshness = Freshness::load(&pool).await?;
     if freshness.is_current_for(&headers) {
         return Ok(freshness.not_modified(CATALOG_CACHE_CONTROL));
@@ -115,6 +118,38 @@ mod tests {
         conditional.insert(header::IF_NONE_MATCH, etag);
         let second = reference(conditional, State(pool)).await.unwrap();
         assert_eq!(second.status(), StatusCode::NOT_MODIFIED);
+        // A 304 repeats the validator and the caching it revalidated.
+        assert_eq!(
+            second.headers()[header::ETAG],
+            first.headers()[header::ETAG]
+        );
+        assert_eq!(
+            second.headers()[header::CACHE_CONTROL],
+            CATALOG_CACHE_CONTROL
+        );
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn a_new_catalog_revision_moves_the_reference_etag(pool: PgPool) -> sqlx::Result<()> {
+        seed(&pool).await?;
+        let before = reference(HeaderMap::new(), State(pool.clone()))
+            .await
+            .unwrap();
+        let old_etag = before.headers()[header::ETAG].clone();
+        sqlx::query!("UPDATE catalog_meta SET revision = revision + 1")
+            .execute(&pool)
+            .await?;
+
+        let mut stale = HeaderMap::new();
+        stale.insert(header::IF_NONE_MATCH, old_etag.clone());
+        let after = reference(stale, State(pool)).await.unwrap();
+        assert_eq!(
+            after.status(),
+            StatusCode::OK,
+            "a stale validator gets the body"
+        );
+        assert_ne!(after.headers()[header::ETAG], old_etag);
         Ok(())
     }
 }

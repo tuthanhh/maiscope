@@ -18,7 +18,7 @@ revision-probe sync tier. Auth (§4) is phase 2; §5 is superseded by
 
 Each section carries its implementation status:
 
-- **shipped** — routed in `apps/server/src/routes/` and covered by handler tests
+- **shipped** — routed in `apps/server/src/routes/v1/` (v2: `routes/`) and covered by handler tests
 - **phase 2** — designed, not built; no route exists. See
   [ROADMAP](../ROADMAP.md).
 

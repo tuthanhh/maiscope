@@ -13,8 +13,8 @@ everything that stays. Moving v1 aside makes ticket 07 a single `rm -r`.
 
 **Status:** done
 
-- [x] `routes/v1/mod.rs` exposes one `router()` that `routes/mod.rs` nests at
-      `/api/v1`, with the same rate limiter and the health exemption intact
+- [x] `routes/v1/mod.rs` exposes the v1 routes — as `health_router()` and
+      `limited_router()`, see below — for `routes/mod.rs` to nest at `/api/v1`, with the same rate limiter and the health exemption intact
 - [x] Shared pieces stay outside `v1/`: `caching::Freshness` (the v2 Catalog and
       manifest need it), `AppError`, state, rate limiting
 - [x] Every existing test still passes, unmoved in meaning; the router tests in
@@ -28,3 +28,8 @@ everything that stays. Moving v1 aside makes ticket 07 a single `rm -r`.
 than one router, so the caller still decides what goes behind the limiter
 and the health exemption stays where its router test looks for it. `caching`
 stays in `routes/`, shared with v2. 215 server tests pass unchanged.
+
+**2026-11-17 — review.** Applied: stale paths in the api-rewrite spec,
+`community-charts` 04, ADR-0010 (as a parenthetical, it is a record), the
+contract's status legend and two code comments. Historical plans and closed
+tickets under `docs/work/` keep the paths they were written against.

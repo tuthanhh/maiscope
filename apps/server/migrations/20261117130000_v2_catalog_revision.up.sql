@@ -1,0 +1,12 @@
+-- api-rewrite: the v2 deploy moves the Catalog revision forward once.
+--
+-- Two stale validators end here. Every browser holds a v1-shaped Catalog in
+-- IndexedDB under the revision the manifest reports; without a bump the v2
+-- manifest would report the same number and the client would paint v1 data
+-- into v2 code. And `20261117090000_difficulty_code` added the derived UTAGE
+-- `difficulties` rows without bumping, so the reference tables' ETag never
+-- moved for them.
+--
+-- A no-op before the first sync (no row). The sync compares digests, not
+-- revision values, so a jump it did not make is harmless to it.
+UPDATE catalog_meta SET revision = revision + 1;

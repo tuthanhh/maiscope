@@ -38,3 +38,13 @@ and share its bucket with `/api/v1`, which the router test now shows: once
 the bucket is spent, `/api/reference` is throttled while both healthchecks
 still answer. The test pins the exact JSON, so a stray icon field or a
 `difficulty` key fails it.
+
+**2026-11-17 — review.** Applied: the 304 test checks the repeated `ETag` and
+`Cache-Control`, and a new test shows a revision bump moving the ETag and a
+stale validator getting the body. The handler comments why it loads the
+validator before the body. The review found the reference ETag stale after
+`catalog-difficulties`' UTAGE backfill, which added rows without a revision
+bump; migration `20261117130000` bumps the revision once at the v2 deploy,
+which also stops every client reading its cached v1 Catalog as current.
+Intended, not changed: a `304` revalidation spends a rate-limit token, as the
+Catalog's always has.

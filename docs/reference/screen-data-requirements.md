@@ -183,6 +183,12 @@ The playback surface (canvas, transport, speed sliders, frame-pacing overlay)
 reads engine state only. It is out of scope for the redesign and for this
 document.
 
+**In v2** ([ADR-0026](../adr/0026-v2-api-carries-codes-and-read-fields-only.md)),
+every `songId` above becomes the song's minted `id`, and the visualizer deep
+link is `?song=<id>&type=<type>&difficulty=<code>`. The sheet dialog's
+`searchUrl` belongs to the client's placeholder sheets (`utils/sheet.ts`);
+the server never sends it.
+
 ## Derived fields: where they stand
 
 For each field the client computes today, where it is read and what the
@@ -302,7 +308,7 @@ required by the redesign:
 | `versions[].releaseDate` | Only `abbr` and `version` are used |
 | `types[].iconUrl`, `types[].iconHeight` | The helper exists; no component calls it |
 | `difficulties[].iconUrl`, `difficulties[].iconHeight` | Same |
-| `updateTime` | Read only as the "Catalog not loaded yet" sentinel for the filter panel |
+| `updateTime` | Read only as the "Catalog not loaded yet" sentinel for the filter panel; v2 drops it, and the panel reads the store's loading status instead (`frontend-redesign` 04) |
 
 The design direction may add any of these back, which reopens the payload
 for that field only. Whether the server keeps sending them is a question for

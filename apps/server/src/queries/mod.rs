@@ -1,5 +1,5 @@
-// Split by resource, mirroring routes/. get_chart's and sync's queries stay
-// inline in their routes/*.rs handlers — they were never separate functions
+// Split by resource, mirroring routes/. v1's get_chart and sync queries stay
+// inline in their routes/v1/*.rs handlers — they were never separate functions
 // before this split, and extracting them now would mean rewriting control
 // flow, not moving it (ticket 04's own constraint).
 mod catalog;

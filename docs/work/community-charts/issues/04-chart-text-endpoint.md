@@ -14,7 +14,7 @@ content type would be a trap for `useEngine.ts`, which handles one of them today
 **Plain text, but through `AppError`.** v2 keeps the plain-text error shape on
 both chart endpoints and stops hand-rolling it — see
 [`api-rewrite`](../../api-rewrite/spec.md). The existing handler returns a raw
-`sqlx::Error` string to the client (`routes/charts.rs:51`), which is what
+`sqlx::Error` string to the client (`routes/v1/charts.rs:51`), which is what
 happens when the documented exception to the error *envelope* quietly becomes an
 exception to error *redaction*. Do not copy that handler's error path.
 

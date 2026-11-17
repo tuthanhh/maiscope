@@ -124,7 +124,7 @@ must name a difficulty that exists in that table.
 - **The chart endpoints keep plain-text errors, routed through `AppError`.** The
   original justification stands — the success body is simai for the engine, so a
   JSON error beside it is arguably *less* consistent. What does not stand is the
-  bespoke error path it grew: `routes/charts.rs:51` returns a raw `sqlx::Error`
+  bespoke error path it grew: `routes/v1/charts.rs:51` returns a raw `sqlx::Error`
   string to the client, so the documented exception to the error envelope
   quietly became an exception to error redaction too. `AppError` gains a
   plain-text rendering; the wire format is unchanged, the leak closes by

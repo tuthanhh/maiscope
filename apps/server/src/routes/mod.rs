@@ -140,7 +140,7 @@ pub fn router(state: AppState) -> Router {
                 // Without this the browser hides `X-Total-Count` from JS —
                 // `headers.get()` returns null, no error is raised, and it only
                 // happens cross-origin. A same-origin test cannot catch it, so
-                // `sheets::tests` exercises it through the assembled router.
+                // `v1::sheets::tests` exercises it through the assembled router.
                 .expose_headers([v1::sheets::TOTAL_COUNT_HEADER]),
         )
         .with_state(state)
