@@ -23,6 +23,38 @@ const DEFAULT_DATABASE_MAX_CONNECTIONS: u32 = 4;
 /// Default log directives when `RUST_LOG` is unset.
 const DEFAULT_LOG_FILTER: &str = "info,tower_http=info";
 
+/// Shortest `JWT_SECRET` accepted. HS256's key is as strong as its entropy,
+/// and 32 bytes is SHA-256's own output size (RFC 7518 §3.2 requires at least
+/// that). A short or empty value is a startup error, not a weak deploy.
+const MIN_JWT_SECRET_BYTES: usize = 32;
+
+/// A value that must never reach a log line. `Config` derives `Debug`, so a
+/// plain `String` here would print the secret the first time anyone writes
+/// `?config`.
+#[derive(Clone, PartialEq)]
+pub struct Secret(String);
+
+impl Secret {
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
+}
+
+#[cfg(test)]
+impl Secret {
+    /// For tests elsewhere in the crate, which cannot reach the private field
+    /// and should not need a real environment to build a `Config`.
+    pub fn for_test(value: &str) -> Self {
+        Secret(value.to_string())
+    }
+}
+
+impl fmt::Debug for Secret {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Secret(***)")
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub database_url: String,
@@ -38,6 +70,8 @@ pub struct Config {
     /// can smuggle through, such as `x-forwarded-for` behind a proxy that
     /// appends to it (ADR-0019).
     pub trusted_ip_headers: Vec<String>,
+    /// HS256 key for access JWTs (server-auth-github-oauth 02).
+    pub jwt_secret: Secret,
     /// `tracing_subscriber::EnvFilter` directive string (ticket 05).
     pub log_filter: String,
     pub log_json: bool,
@@ -166,6 +200,19 @@ fn parse_trusted_ip_headers(raw: String) -> Result<Vec<String>, ConfigError> {
         .collect()
 }
 
+fn parse_jwt_secret(raw: String) -> Result<Secret, ConfigError> {
+    if raw.len() < MIN_JWT_SECRET_BYTES {
+        return Err(ConfigError::Invalid {
+            var: "JWT_SECRET",
+            reason: format!(
+                "must be at least {MIN_JWT_SECRET_BYTES} bytes, got {}",
+                raw.len()
+            ),
+        });
+    }
+    Ok(Secret(raw))
+}
+
 fn parse_log_json(raw: Option<String>) -> bool {
     match raw {
         Some(raw) => raw.eq_ignore_ascii_case("true"),
@@ -187,6 +234,7 @@ impl Config {
             parse_cors_origins(optional("CORS_ALLOWED_ORIGINS")?.unwrap_or_default());
         let trusted_ip_headers =
             parse_trusted_ip_headers(optional("TRUSTED_IP_HEADERS")?.unwrap_or_default())?;
+        let jwt_secret = parse_jwt_secret(required("JWT_SECRET")?)?;
 
         Ok(Config {
             database_url,
@@ -194,6 +242,7 @@ impl Config {
             port,
             cors_allowed_origins,
             trusted_ip_headers,
+            jwt_secret,
             log_filter,
             log_json,
         })
@@ -316,6 +365,26 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn parse_jwt_secret_rejects_a_short_or_empty_value() {
+        for raw in ["", "too-short"] {
+            assert!(matches!(
+                parse_jwt_secret(raw.to_string()),
+                Err(ConfigError::Invalid {
+                    var: "JWT_SECRET",
+                    ..
+                })
+            ));
+        }
+        assert!(parse_jwt_secret("k".repeat(MIN_JWT_SECRET_BYTES)).is_ok());
+    }
+
+    #[test]
+    fn secret_debug_never_prints_the_value() {
+        let secret = Secret("hunter2-hunter2-hunter2-hunter2-hunter2".to_string());
+        assert_eq!(format!("{secret:?}"), "Secret(***)");
     }
 
     #[test]

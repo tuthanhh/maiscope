@@ -17,6 +17,7 @@
 docker compose up -d          # Postgres on :5432, from the repo root
 cd apps/server
 cp .env.example .env          # values must match the root docker-compose.yml
+sed -i "s|^JWT_SECRET=$|JWT_SECRET=$(openssl rand -base64 48)|" .env
 sqlx migrate run              # reads migrations/ relative to apps/server
 cargo run --bin sync_catalog  # fetch upstream and apply the diff
 cargo run                     # API on :3000
@@ -25,6 +26,9 @@ cargo run                     # API on :3000
 The database is declared at the repo root because it is shared — sync_catalog,
 the tests and the server all use it. `sqlx` commands stay in `apps/server`,
 which is where `migrations/` and `.env` live.
+
+The server refuses to start without a `JWT_SECRET` of at least 32 bytes; the
+`sed` line fills the empty one `.env.example` ships with a random key.
 
 ## 2. Engine
 

@@ -23,6 +23,17 @@ pub enum AppError {
     BadRequest(String),
     /// `/sync/delta`'s `since` predates the last full reload (contract §3).
     SnapshotRequired,
+    /// No usable credential (contract §4). The message says which of missing,
+    /// expired or invalid, so a client knows whether refreshing can help; it
+    /// never says *why* a token is invalid.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "constructed by AuthUser, first mounted in ticket 04"
+        )
+    )]
+    Unauthorized(&'static str),
     /// Per-IP rate limit tripped (ticket 08). `retry_after_secs` comes from
     /// `tower_governor`'s own wait-time calculation.
     RateLimited {
@@ -55,6 +66,14 @@ impl IntoResponse for AppError {
             AppError::BadRequest(message) => (
                 StatusCode::BAD_REQUEST,
                 Json(json!({ "error": "bad_request", "message": message })),
+            )
+                .into_response(),
+            AppError::Unauthorized(message) => (
+                StatusCode::UNAUTHORIZED,
+                // RFC 6750 §3: a 401 from a bearer-protected resource names the
+                // scheme it wants.
+                [(axum::http::header::WWW_AUTHENTICATE, "Bearer")],
+                Json(json!({ "error": "unauthorized", "message": message })),
             )
                 .into_response(),
             AppError::SnapshotRequired => (
@@ -146,6 +165,23 @@ mod tests {
         assert_eq!(
             body_json(response).await,
             json!({ "error": "bad_request", "message": "bad input" })
+        );
+    }
+
+    #[tokio::test]
+    async fn unauthorized_is_401_with_a_bearer_challenge() {
+        let response = AppError::Unauthorized("token expired").into_response();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            response
+                .headers()
+                .get(axum::http::header::WWW_AUTHENTICATE)
+                .unwrap(),
+            "Bearer"
+        );
+        assert_eq!(
+            body_json(response).await,
+            json!({ "error": "unauthorized", "message": "token expired" })
         );
     }
 

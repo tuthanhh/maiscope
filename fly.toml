@@ -8,6 +8,10 @@
 # DATABASE_URL is NOT here. It is a secret:
 #   flyctl secrets set DATABASE_URL='postgres://...@...neon.tech/maiscope?sslmode=require'
 #
+# So is JWT_SECRET (v2, server-auth-github-oauth 02): at least 32 bytes, and
+# the machine fails at startup without it.
+#   flyctl secrets set JWT_SECRET="$(openssl rand -base64 48)"
+#
 # Neon requires TLS on every connection; `sqlx` gained it via
 # `tls-rustls-ring-webpki`. Omitting `?sslmode=require` fails at connect time.
 

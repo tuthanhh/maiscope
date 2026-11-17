@@ -121,6 +121,7 @@ mod tests {
                 // The router tests key requests by this header, as production
                 // does behind Fly; `oneshot` carries no socket address.
                 trusted_ip_headers: vec!["fly-client-ip".to_string()],
+                jwt_secret: crate::config::Secret::for_test("test-secret-test-secret-test-secret"),
                 log_filter: "off".to_string(),
                 log_json: false,
             }),
