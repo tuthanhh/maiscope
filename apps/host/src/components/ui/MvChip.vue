@@ -1,13 +1,27 @@
 <script setup lang="ts">
-// Toggle chip. Invert = active (fg/bg flip), the recurring active-state trick.
-withDefaults(defineProps<{ active?: boolean }>(), { active: false });
+// design-direction "Chip": a filter toggle or a difficulty selector. Selected
+// is inverse — except a difficulty chip, which underlines in its `--diff`
+// colour, so five selected difficulties never sit as five filled blocks.
+withDefaults(
+  defineProps<{
+    active?: boolean;
+    /** Difficulty form: the difficulty's colour, or null for none (UTAGE). */
+    diff?: string | null;
+  }>(),
+  { active: false, diff: undefined },
+);
 </script>
 
 <template>
   <button
     type="button"
-    class="mv-btn mv-chip"
-    :class="{ 'mv-chip--active': active }"
+    class="mv-chip t-meta"
+    :class="{
+      'mv-chip--active': active,
+      'mv-chip--diff': diff !== undefined,
+    }"
+    :style="diff !== undefined ? { '--diff': diff ?? 'var(--fg)' } : undefined"
+    :aria-pressed="active"
   >
     <slot />
   </button>
@@ -15,20 +29,31 @@ withDefaults(defineProps<{ active?: boolean }>(), { active: false });
 
 <style scoped>
 .mv-chip {
-  font-family: inherit;
-  font-size: 11px;
-  padding: 5px 10px;
-  border-radius: 3px;
-  border: 1px solid var(--mv-bd);
-  background: transparent;
-  color: var(--mv-mut);
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--s-1);
+  height: var(--control-h);
+  padding: 0 var(--s-3);
+  border-radius: var(--r);
+  border: var(--line-w) solid var(--line);
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+  transition:
+    border-color var(--dur),
+    background var(--dur),
+    color var(--dur);
 }
-.mv-chip--active {
-  border-color: var(--mv-fg);
-  background: var(--mv-invbg);
-  color: var(--mv-inv);
+.mv-chip:hover {
+  border-color: var(--line-strong);
+}
+.mv-chip--active:not(.mv-chip--diff) {
+  background: var(--inverse-bg);
+  border-color: transparent;
+  color: var(--inverse-fg);
+}
+.mv-chip--diff.mv-chip--active {
+  text-decoration: underline 2px var(--diff);
+  text-underline-offset: 5px;
 }
 </style>

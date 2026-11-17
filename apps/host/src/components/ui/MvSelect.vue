@@ -8,6 +8,7 @@ defineProps<{
   options: SelectOption[];
   placeholder?: string;
   width?: number;
+  disabled?: boolean;
 }>();
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 
@@ -17,12 +18,12 @@ function onChange(event: Event): void {
 </script>
 
 <template>
-  <div class="mv-select-wrap">
+  <div class="mv-select-wrap" :style="{ width: width != null ? `${width}px` : undefined }">
     <select
       class="mv-select"
       :class="{ 'mv-select--empty': modelValue === '' }"
       :value="modelValue"
-      :style="{ width: width != null ? `${width}px` : undefined }"
+      :disabled="disabled"
       @change="onChange"
     >
       <option value="">{{ placeholder }}</option>
@@ -31,38 +32,38 @@ function onChange(event: Event): void {
       </option>
     </select>
     <span class="mv-select-chevron">
-      <MvIcon name="chevron" :size="13" />
+      <MvIcon name="chevron" :size="14" />
     </span>
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
+@use "./control";
+
 .mv-select-wrap {
   position: relative;
   display: inline-block;
 }
 .mv-select {
-  background: var(--mv-panel);
-  border: 1px solid var(--mv-bd);
-  border-radius: 3px;
-  color: var(--mv-fg);
-  font-family: var(--mv-mono);
-  font-size: 12px;
-  padding: 7px 26px 7px 9px;
-  box-sizing: border-box;
+  @include control.control;
+  width: 100%;
+  padding-right: calc(var(--control-px) + 14px + var(--s-1));
+  appearance: none;
+  -webkit-appearance: none;
 }
 .mv-select--empty {
-  color: var(--mv-mut);
+  color: var(--fg-muted);
 }
 .mv-select-chevron {
   position: absolute;
-  right: 8px;
-  top: 9px;
+  right: var(--control-px);
+  top: 50%;
+  transform: translateY(-50%);
   pointer-events: none;
-  color: var(--mv-mut);
+  color: var(--fg-muted);
 }
-/* Native option list can't inherit the dark canvas reliably; keep readable. */
 .mv-select option {
-  color: #111;
+  color: var(--fg);
+  background: var(--bg);
 }
 </style>

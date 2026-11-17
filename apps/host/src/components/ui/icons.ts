@@ -31,6 +31,14 @@ const icons = {
   prev: '<path d="M19 5v14L9 12z" /><rect x="5" y="5" width="2" height="14" />',
   next: '<path d="M5 5v14l10-7z" /><rect x="17" y="5" width="2" height="14" />',
   restart: '<path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5" />',
+  chevronLeft: '<path d="M15 6l-6 6 6 6" />',
+  chevronRight: '<path d="M9 6l6 6-6 6" />',
+  pen: '<path d="M4 20l4-1 11-11-3-3L5 16z" />',
+  share: '<path d="M12 4v11" /><path d="M7 9l5-5 5 5" /><path d="M5 14v6h14v-6" />',
+  shuffle: '<path d="M4 7h4l8 10h4" /><path d="M4 17h4l2.5-3" /><path d="M13.5 10L16 7h4" /><path d="M18 5l2 2-2 2" /><path d="M18 15l2 2-2 2" />',
+  user: '<circle cx="12" cy="8" r="4" /><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" />',
+  songs: '<rect x="4" y="4" width="7" height="7" /><rect x="13" y="4" width="7" height="7" /><rect x="4" y="13" width="7" height="7" /><rect x="13" y="13" width="7" height="7" />',
+  community: '<circle cx="9" cy="9" r="3" /><circle cx="17" cy="10" r="2.5" /><path d="M3 20c.8-3.5 3.2-5 6-5s5.2 1.5 6 5" /><path d="M15 15.5c2.6-.6 5 .8 6 4.5" />',
 } as const;
 
 export type IconName = keyof typeof icons;

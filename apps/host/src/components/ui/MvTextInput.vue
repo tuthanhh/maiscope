@@ -1,5 +1,16 @@
 <script setup lang="ts">
-defineProps<{ modelValue: string; placeholder?: string; width?: number }>();
+import MvIcon from "./MvIcon.vue";
+import type { IconName } from "./icons";
+
+defineProps<{
+  modelValue: string;
+  placeholder?: string;
+  width?: number;
+  /** A leading icon in `--fg-muted`, e.g. search. */
+  icon?: IconName;
+  invalid?: boolean;
+  disabled?: boolean;
+}>();
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 
 function onInput(event: Event): void {
@@ -8,24 +19,40 @@ function onInput(event: Event): void {
 </script>
 
 <template>
-  <input
-    class="mv-input"
-    :value="modelValue"
-    :placeholder="placeholder"
-    :style="{ width: width != null ? `${width}px` : undefined }"
-    @input="onInput"
-  />
+  <div class="mv-input-wrap" :style="{ width: width != null ? `${width}px` : undefined }">
+    <span v-if="icon" class="mv-input-icon"><MvIcon :name="icon" :size="15" /></span>
+    <input
+      class="mv-input"
+      :class="{ 'mv-input--icon': icon }"
+      :value="modelValue"
+      :placeholder="placeholder"
+      :aria-invalid="invalid || undefined"
+      :disabled="disabled"
+      @input="onInput"
+    />
+  </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
+@use "./control";
+
+.mv-input-wrap {
+  position: relative;
+  display: inline-block;
+}
 .mv-input {
-  background: var(--mv-panel);
-  border: 1px solid var(--mv-bd);
-  border-radius: 3px;
-  color: var(--mv-fg);
-  font-family: var(--mv-mono);
-  font-size: 12px;
-  padding: 7px 9px;
-  box-sizing: border-box;
+  @include control.control;
+  width: 100%;
+}
+.mv-input--icon {
+  padding-left: calc(var(--control-px) + 15px + var(--s-2));
+}
+.mv-input-icon {
+  position: absolute;
+  left: var(--control-px);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--fg-muted);
+  pointer-events: none;
 }
 </style>
