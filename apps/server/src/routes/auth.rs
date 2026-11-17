@@ -1021,4 +1021,67 @@ mod session_tests {
         assert_eq!(login.as_deref(), Some("bob"));
         Ok(())
     }
+
+    #[sqlx::test]
+    async fn a_refresh_racing_a_deletion_cannot_outlive_it(pool: PgPool) -> sqlx::Result<()> {
+        let user = signed_in(&pool, 42, "racing").await;
+
+        // The deletion runs up to its commit and holds there, its `DELETE`
+        // holding the session row.
+        let mut deletion = pool.begin().await?;
+        queries::tombstone_user(&mut deletion, user).await?;
+        let racer = {
+            let pool = pool.clone();
+            tokio::spawn(async move { refresh_with(&pool, "racing").await })
+        };
+        let mut waiting = 0;
+        for _ in 0..200 {
+            waiting = sqlx::query_scalar!(
+                r#"SELECT count(*) AS "n!" FROM pg_stat_activity
+                   WHERE datname = current_database() AND wait_event_type = 'Lock'"#
+            )
+            .fetch_one(&pool)
+            .await?;
+            if waiting == 1 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert_eq!(waiting, 1, "the refresh must be blocked on the deletion");
+        deletion.commit().await?;
+
+        assert_eq!(status(racer.await.unwrap()), StatusCode::UNAUTHORIZED);
+        let sessions = sqlx::query_scalar!(
+            r#"SELECT count(*) AS "n!" FROM user_sessions WHERE user_id = $1"#,
+            user
+        )
+        .fetch_one(&pool)
+        .await?;
+        assert_eq!(sessions, 0);
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn a_repeat_deletion_changes_nothing(pool: PgPool) -> sqlx::Result<()> {
+        let user = signed_in(&pool, 42, "t").await;
+        delete(&pool, user).await;
+        let before = sqlx::query!(
+            "SELECT deleted_at, updated_at FROM users WHERE id = $1",
+            user
+        )
+        .fetch_one(&pool)
+        .await?;
+
+        delete(&pool, user).await;
+
+        let after = sqlx::query!(
+            "SELECT deleted_at, updated_at FROM users WHERE id = $1",
+            user
+        )
+        .fetch_one(&pool)
+        .await?;
+        assert_eq!(before.deleted_at, after.deleted_at);
+        assert_eq!(before.updated_at, after.updated_at);
+        Ok(())
+    }
 }

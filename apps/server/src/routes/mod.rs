@@ -440,4 +440,39 @@ mod tests {
                 .contains_key("access-control-allow-origin")
         );
     }
+
+    // Deletion through the real stack: the extractor refuses an anonymous
+    // caller, and a browser's preflight for DELETE passes.
+    #[sqlx::test]
+    async fn delete_me_is_mounted_behind_auth_and_preflights(pool: PgPool) {
+        let origin = "https://maiscope.pages.dev";
+        let mut state = test_state(pool);
+        Arc::make_mut(&mut state.config).cors_allowed_origins = vec![origin.to_string()];
+        let app = router(state);
+
+        let anonymous = Request::builder()
+            .method("DELETE")
+            .uri("/api/auth/me")
+            .header("fly-client-ip", "203.0.113.98")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(anonymous).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        let preflight = Request::builder()
+            .method("OPTIONS")
+            .uri("/api/auth/me")
+            .header("fly-client-ip", "203.0.113.98")
+            .header("origin", origin)
+            .header("access-control-request-method", "DELETE")
+            .header("access-control-request-headers", "authorization")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.oneshot(preflight).await.unwrap();
+        let methods = response.headers()["access-control-allow-methods"]
+            .to_str()
+            .unwrap()
+            .to_ascii_lowercase();
+        assert!(methods.contains("delete"), "{methods}");
+    }
 }

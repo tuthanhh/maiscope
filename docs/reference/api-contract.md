@@ -343,11 +343,14 @@ the JWT.
 `WWW-Authenticate` challenge (RFC 6750 §3.1): bare `Bearer` and the message
 `missing bearer token` when no credential was sent; `Bearer
 error="invalid_token"` when one was refused, with the message `token expired`
-(refresh and retry), `invalid token`, `invalid refresh token` or
-`account deleted` (sign in again).
+(refresh and retry; if the refresh is refused too, sign in again),
+`invalid token`, `invalid refresh token` or `account deleted` (sign in
+again).
 - `DELETE /api/auth/me` → `204`, identity removed from the caller's account
-  (see below). Acts on the token's user only. Idempotent: deleting a deleted
-  account is `204` again. `401` without a valid token.
+  (see below). Acts on the token's user only. Repeating it while the token
+  still verifies is `204` and changes nothing; once that token expires there
+  is no way to obtain another for a deleted account, so it is `401`. `401`
+  without a valid token.
 
 **Every `/api/auth/*` response carries `Cache-Control: no-store`** — tokens
 and personal data are not for a browser cache or anything between (RFC 6749

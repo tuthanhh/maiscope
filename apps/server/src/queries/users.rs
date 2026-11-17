@@ -124,8 +124,9 @@ pub async fn fetch_active_user(
 /// Turns an account into a tombstone (server-auth-github-oauth 06): identity
 /// and privileges cleared, every session revoked, the row and `github_id`
 /// kept so uploads stay attributed and a later sign-in finds it. Idempotent:
-/// a second call rewrites the same tombstone and keeps the first
-/// `deleted_at`.
+/// on a row that is already a tombstone, nothing changes — not `deleted_at`,
+/// not `updated_at`. A missing id is also a no-op; only a token for a row
+/// that never existed reaches one.
 pub async fn tombstone_user(conn: &mut PgConnection, id: Uuid) -> Result<(), sqlx::Error> {
     sqlx::query!(
         "UPDATE users
@@ -133,7 +134,7 @@ pub async fn tombstone_user(conn: &mut PgConnection, id: Uuid) -> Result<(), sql
                 login = NULL,
                 avatar_url = NULL,
                 role = 'user',
-                updated_at = now()
+                updated_at = CASE WHEN deleted_at IS NULL THEN now() ELSE updated_at END
           WHERE id = $1",
         id
     )

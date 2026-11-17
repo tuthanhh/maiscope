@@ -9,7 +9,7 @@ Decided 2026-09-16 — reasoning and the two rejected alternatives are in issue
 
 **Blocked by:** 02 — needs the `AuthUser` extractor; 01 for `deleted_at`.
 
-**Status:** done
+**Status:** done (two items carried)
 
 - [x] `DELETE /api/auth/me`, `user+`, acting on `AuthUser.id` — never on an id
       taken from the path or body
@@ -53,3 +53,17 @@ outlive it: if the deletion commits first, the refresh's `UPDATE` sees the
 tombstone or finds its session gone; if the refresh commits first, the
 deletion's `DELETE` waits for the rotated row and removes it. Either way the
 only survivor is a JWT of at most 15 minutes, which is the accepted lag.
+
+**2026-11-17 — review.** Applied: a repeat deletion is a true no-op
+(`updated_at` no longer moves); the contract says the repeat is `204` only
+while the token verifies; a test forces a refresh to wait on a deletion's
+open transaction and finds it refused with no session left; the assembled
+router refuses an anonymous `DELETE` and preflights it.
+
+Accepted, under the existing 15-minute decision: a JWT issued before a
+deletion still verifies after the user signs in again, so within that
+window it can delete the reactivated account a second time. Closing it means
+a per-user "identity since" timestamp that `AuthUser` or each destructive
+handler compares the token's `iat` against — a database read the spec chose
+not to take for every request. Same person in the ordinary case; a stolen
+JWT could delete the account anyway before the first deletion.

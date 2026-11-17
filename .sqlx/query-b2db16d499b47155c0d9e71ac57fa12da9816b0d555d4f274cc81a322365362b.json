@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE users\n            SET deleted_at = COALESCE(deleted_at, now()),\n                login = NULL,\n                avatar_url = NULL,\n                role = 'user',\n                updated_at = CASE WHEN deleted_at IS NULL THEN now() ELSE updated_at END\n          WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b2db16d499b47155c0d9e71ac57fa12da9816b0d555d4f274cc81a322365362b"
+}
