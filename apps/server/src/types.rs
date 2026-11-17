@@ -364,3 +364,141 @@ pub struct ReferenceRegion {
     pub region: String,
     pub name: String,
 }
+
+/// A row of `songs` with the fields the v2 payload carries. Positional for
+/// `query_as!`: the field order matches `queries::official`'s SELECT.
+pub struct OfficialSongRow {
+    pub id: sqlx::types::Uuid,
+    pub category: Option<String>,
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub bpm: Option<f64>,
+    pub image_name: Option<String>,
+    pub version: Option<String>,
+    pub release_date: Option<String>,
+    pub is_locked: Option<bool>,
+    pub comment: Option<String>,
+}
+
+/// A row of `sheets` with its aggregates, `difficulty` already the code.
+pub struct OfficialSheetRow {
+    pub song_id: sqlx::types::Uuid,
+    pub r#type: Option<String>,
+    pub difficulty: Option<String>,
+    pub level: Option<String>,
+    pub level_value: Option<f64>,
+    pub internal_level: Option<String>,
+    pub internal_level_value: Option<f64>,
+    pub note_designer: Option<String>,
+    pub has_chart: bool,
+    pub note_counts: Option<sqlx::types::Json<BTreeMap<String, Option<i64>>>>,
+    pub regions: Option<sqlx::types::Json<BTreeMap<String, bool>>>,
+    pub region_overrides: Option<sqlx::types::Json<BTreeMap<String, RegionOverride>>>,
+}
+
+/// A song's own fields, as every v2 payload carries them. `id` is the UUID,
+/// hyphenated. Absent fields are omitted rather than `null`, as in v1: the
+/// Catalog is 3MB and the client keys optional rows on presence.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OfficialSongFields {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub artist: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bpm: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub release_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_locked: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
+}
+
+/// A sheet's own fields. `difficulty` is `difficulties.code` (ADR-0026).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OfficialSheetFields {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub r#type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub difficulty: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub level: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub level_value: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub internal_level: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub internal_level_value: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note_designer: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note_counts: Option<BTreeMap<String, Option<i64>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub regions: Option<BTreeMap<String, bool>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub region_overrides: Option<BTreeMap<String, RegionOverride>>,
+    /// Always present: whether the chart endpoint has text for this sheet.
+    pub has_chart: bool,
+}
+
+/// A song with its sheets: an element of the Catalog's `songs`, and the whole
+/// of `GET /api/songs/{id}`.
+#[derive(Debug, Serialize)]
+pub struct OfficialSong {
+    #[serde(flatten)]
+    pub fields: OfficialSongFields,
+    pub sheets: Vec<OfficialSheetFields>,
+}
+
+/// `GET /api/catalog`: the songs, and the reference tables beside them.
+#[derive(Debug, Serialize)]
+pub struct OfficialCatalog {
+    pub songs: Vec<OfficialSong>,
+    #[serde(flatten)]
+    pub reference: Reference,
+}
+
+impl From<OfficialSongRow> for OfficialSongFields {
+    fn from(row: OfficialSongRow) -> Self {
+        OfficialSongFields {
+            id: row.id.to_string(),
+            category: row.category,
+            title: row.title,
+            artist: row.artist,
+            bpm: row.bpm,
+            image_name: row.image_name,
+            version: row.version,
+            release_date: row.release_date,
+            is_locked: row.is_locked,
+            comment: row.comment,
+        }
+    }
+}
+
+impl From<OfficialSheetRow> for OfficialSheetFields {
+    fn from(row: OfficialSheetRow) -> Self {
+        OfficialSheetFields {
+            r#type: row.r#type,
+            difficulty: row.difficulty,
+            level: row.level,
+            level_value: row.level_value,
+            internal_level: row.internal_level,
+            internal_level_value: row.internal_level_value,
+            note_designer: row.note_designer,
+            note_counts: row.note_counts.map(|j| j.0),
+            regions: row.regions.map(|j| j.0),
+            region_overrides: row.region_overrides.map(|j| j.0),
+            has_chart: row.has_chart,
+        }
+    }
+}

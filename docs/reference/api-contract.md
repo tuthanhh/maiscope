@@ -71,6 +71,36 @@ lets any screen resolve names without the Catalog
 they share its `ETag` (`304` on `If-None-Match`) and its
 `Cache-Control: public, max-age=3600`.
 
+### `GET /api/catalog`
+
+The whole official library — the snapshot browse filters in memory — with the
+five reference arrays of `GET /api/reference` beside `songs`:
+
+```jsonc
+{ "songs": [{
+    "id": "0195f3c2-…",            // the song's UUID; the only song key
+    "category": "POPS＆アニメ", "title": "…", "artist": "…", "bpm": 150,
+    "imageName": "….png", "version": "MAGiCAL", "releaseDate": "2024-01-02",
+    "isLocked": false, "comment": "…",
+    "sheets": [{
+      "type": "dx", "difficulty": "master",   // difficulties.code; UTAGE: "協"
+      "level": "13+", "levelValue": 13.7,
+      "internalLevel": "13.8", "internalLevelValue": 13.8,
+      "noteDesigner": "…",
+      "noteCounts": { "total": 900, "tap": 500, … },
+      "regions": { "jp": true, "intl": false },
+      "regionOverrides": { "intl": { "level": "13", "levelValue": 13.0 } },
+      "hasChart": true }] }],
+  "categories": […], "versions": […], "types": […],
+  "difficulties": […], "regions": […] }
+```
+
+Songs and sheets are in upstream order. Absent fields are omitted, not `null`;
+`hasChart` is always present. Not sent: `songId`, `isNew`, `isSpecial`,
+`updateTime`, and every field the client derives (`imageUrl`, …). No
+`?region=` parameter: region filtering is the client's. `ETag`, `304` and
+`Cache-Control: public, max-age=3600` as v1's Catalog.
+
 ---
 
 ## 1. Catalog — replaces static `data.json`  *(shipped)*

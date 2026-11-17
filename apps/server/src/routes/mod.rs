@@ -1,5 +1,6 @@
 mod auth;
 mod caching;
+mod catalog;
 mod health;
 mod reference;
 mod v1;
@@ -83,7 +84,10 @@ pub fn router(state: AppState) -> Router {
         .merge(auth::github_router().layer(github_limit_layer))
         .merge(auth::session_router().layer(limit_layer.clone()))
         .layer(axum::middleware::map_response(auth::no_store));
-    let reads = Router::new().merge(reference::router()).layer(limit_layer);
+    let reads = Router::new()
+        .merge(reference::router())
+        .merge(catalog::router())
+        .layer(limit_layer);
     let api = Router::new()
         .merge(health::router())
         .merge(reads)

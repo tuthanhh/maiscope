@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO sheets (song_id_fk, sheet_expr, type, difficulty, level, level_value,\n                                 internal_level, internal_level_value, note_designer,\n                                 is_special, source_index)\n             VALUES ($1, 'upstream-key|dx|master', 'dx', 'master', '13+', 13.7, '13.8', 13.8,\n                     'designer', true, 0)\n             RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "9f1a465a3339902dd44a041221c43f06d6af33384c23db2e4008ca9891a50b3a"
+}
