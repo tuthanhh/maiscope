@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"n!\" FROM user_sessions s\n               JOIN users u ON u.id = s.user_id WHERE u.github_id = 42",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "n!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "d6c708d76732966cfb27f0736bc8fa1353f09b9fe30c1ee1b275b712a49a6863"
+}

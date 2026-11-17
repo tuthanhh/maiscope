@@ -31,34 +31,56 @@ one-time exchange code (a new store and endpoint for the same result).
 
 **Contract deviation, stated up front:** the callback returns
 `{ "token", "refreshToken", "user" }`, not the `{ "token", "user" }` the contract
-currently documents. The contract's shape implies a cookie-based session, which
+documented when this ticket was written. The contract's shape implies a cookie-based session, which
 does not fit a client that cannot rely on an ambient cookie jar. `refreshToken` is
 an additive field. Ticket 05 updates the contract to match in the same feature.
 
 **Blocked by:** 02 (needs `issue_jwt`, `generate_refresh_token`, `hash_refresh_token`)
 
-**Status:** todo
+**Status:** done
 
-- [ ] `UserRow` added to `types.rs`, `Serialize`, `#[serde(rename_all = "camelCase")]`,
-      with `id` serialised as a string per the contract
-- [ ] `GET /api/auth/github/login?state=` redirects (302) to GitHub's authorize
+- [x] `UserRow` (the DB row) and `User` (the response, `Serialize`,
+      `#[serde(rename_all = "camelCase")]`, `id` as a string per the contract)
+      added to `types.rs`
+- [x] `GET /api/auth/github/login?state=` redirects (302) to GitHub's authorize
       URL with the configured client id, `GITHUB_REDIRECT_URL` and the given
       `state`; a missing or malformed `state` is `400`, never a redirect without
       one
-- [ ] `GET /api/auth/github/callback?code=` exchanges the code for a GitHub
+- [x] `GET /api/auth/github/callback?code=` exchanges the code for a GitHub
       access token and fetches the profile; the OAuth crate is handed the
       server's reqwest 0.13 (it is built without its own client)
-- [ ] User upserted by `github_id`: insert on first login, update `login` and
+- [x] User upserted by `github_id`: insert on first login, update `login` and
       `avatar_url` on subsequent ones. `role` is never overwritten by a login.
-- [ ] **A tombstoned account reactivates.** If the matched row has `deleted_at`
+- [x] **A tombstoned account reactivates.** If the matched row has `deleted_at`
       set, clear it and repopulate `login` and `avatar_url` from the profile.
       This is the only path that reactivates — refresh does not (issue 04).
       `role` is still not overwritten, and after a deletion it is `user`
       (issue 01's comments)
-- [ ] Every `UPDATE` sets `updated_at = now()`
-- [ ] Refresh token generated, hashed, and stored as a **new** `user_sessions`
+- [x] Every `UPDATE` sets `updated_at = now()`
+- [x] Refresh token generated, hashed, and stored as a **new** `user_sessions`
       row with `expires_at` now + 30 days; the user's other sessions are left
       alone, apart from pruning their expired rows
-- [ ] Response body: `{ "token": "<jwt>", "refreshToken": "<opaque>", "user": { ... } }`
-- [ ] Failure paths return the contract error shape, never a raw OAuth error
-- [ ] Client secret never logged, never returned
+- [x] Response body: `{ "token": "<jwt>", "refreshToken": "<opaque>", "user": { ... } }`
+- [x] Failure paths return the contract error shape, never a raw OAuth error
+- [x] Client secret never logged, never returned
+
+## Comments
+
+**2026-11-17 — built.** Notes a later reader needs:
+
+- **Refused code versus refused server.** GitHub answers both a bad code and
+  a bad client secret with a 200 whose body is `{"error": …}`. Only
+  `bad_verification_code` (or a spec `invalid_grant`) is the caller's fault
+  and a `400`; anything else — `incorrect_client_credentials`,
+  `redirect_uri_mismatch`, an unreachable GitHub — is a `502`, logged as an
+  error. The first version blamed the caller for all of them; a smoke test
+  with placeholder credentials caught it.
+- **No outbound redirects.** The shared `reqwest::Client` follows none, so a
+  token endpoint that redirects cannot replay the client secret elsewhere.
+- **Tested without the network.** `Config.github` carries GitHub's base URLs
+  (constants in production), so the tests run the whole exchange against a
+  local stand-in that also asserts the secret travels in the body and the
+  redirect URL is repeated.
+- **New required config:** `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`,
+  `GITHUB_REDIRECT_URL`. `fly.toml` carries the production redirect and a
+  commented-out client id to fill in once the OAuth app exists.

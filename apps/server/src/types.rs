@@ -277,3 +277,32 @@ impl SheetRow {
         }
     }
 }
+
+/// Raw row from `users`, as login returns it. `login` is non-null here: only a
+/// tombstone has none, and login is what ends a tombstone.
+#[derive(sqlx::FromRow)]
+pub struct UserRow {
+    pub id: sqlx::types::Uuid,
+    pub login: String,
+    pub avatar_url: Option<String>,
+    pub role: String,
+}
+
+/// A user as contract §4 shows one. `id` is the UUID as a string.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct User {
+    pub id: String,
+    pub login: String,
+    pub avatar_url: Option<String>,
+    pub role: crate::auth::Role,
+}
+
+/// `GET /auth/github/callback` response: a session for this device.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionResponse {
+    pub token: String,
+    pub refresh_token: String,
+    pub user: User,
+}

@@ -8,9 +8,10 @@
 # DATABASE_URL is NOT here. It is a secret:
 #   flyctl secrets set DATABASE_URL='postgres://...@...neon.tech/maiscope?sslmode=require'
 #
-# So is JWT_SECRET (v2, server-auth-github-oauth 02): at least 32 bytes, and
-# the machine fails at startup without it. Set it in the Fly dashboard
-# (Secrets) from `openssl rand -base64 48`; flyctl is not used locally.
+# So are JWT_SECRET (v2, server-auth-github-oauth 02) and GITHUB_CLIENT_SECRET
+# (03); the machine fails at startup without either. Set them in the Fly
+# dashboard (Secrets); flyctl is not used locally. JWT_SECRET is at least 32
+# bytes, from `openssl rand -base64 48`.
 #
 # Neon requires TLS on every connection; `sqlx` gained it via
 # `tls-rustls-ring-webpki`. Omitting `?sslmode=require` fails at connect time.
@@ -56,6 +57,14 @@ CORS_ALLOWED_ORIGINS = "https://maiscope.pages.dev,http://localhost:1420"
 # to, so its first value is whatever the client wrote. Unset locally, where
 # the socket address is the client.
 TRUSTED_IP_HEADERS = "fly-client-ip"
+
+# The production GitHub OAuth app (server-auth-github-oauth 03). The client id
+# is public by design; its secret is a Fly secret, above. The redirect is the
+# frontend's callback route, and must equal the app's registered callback URL
+# exactly. Fill in the id once the app exists on GitHub; the machine refuses
+# to start while it is unset.
+# GITHUB_CLIENT_ID = ""
+GITHUB_REDIRECT_URL = "https://maiscope.pages.dev/auth/callback"
 
 [http_service]
 internal_port = 3000

@@ -26,6 +26,10 @@ use crate::state::AppState;
 /// How long an access JWT is honoured. Short because nothing can revoke one.
 pub const ACCESS_TOKEN_TTL: Duration = Duration::from_secs(15 * 60);
 
+/// How long a refresh token lives from issue or last rotation. Rotation makes a
+/// stolen token single-use; this bounds one that is never used.
+pub const REFRESH_TOKEN_TTL_DAYS: i32 = 30;
+
 /// `users.role`. A closed set: a token carrying any other value fails to
 /// decode and is rejected, rather than reaching a handler as an unknown role.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -34,6 +38,19 @@ pub enum Role {
     User,
     Moderator,
     Admin,
+}
+
+impl Role {
+    /// Reads `users.role`, whose `CHECK` admits exactly these three. `None`
+    /// means the constraint and this enum have drifted apart.
+    pub fn from_db(role: &str) -> Option<Role> {
+        match role {
+            "user" => Some(Role::User),
+            "moderator" => Some(Role::Moderator),
+            "admin" => Some(Role::Admin),
+            _ => None,
+        }
+    }
 }
 
 /// The JWT payload. `sub` is the `users.id` UUID in its hyphenated form: RFC
@@ -173,15 +190,11 @@ fn bearer_token(parts: &Parts) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
-
     use axum::http::Request;
     use axum::response::IntoResponse;
     use sqlx::postgres::PgPoolOptions;
 
-    use crate::config::{Config, Secret};
-
-    const SECRET: &str = "test-secret-test-secret-test-secret";
+    const SECRET: &str = crate::test_support::JWT_SECRET;
 
     fn user_id() -> Uuid {
         Uuid::parse_str("01a1e99a-d0f6-7e05-9534-21d2526b0462").unwrap()
@@ -312,21 +325,12 @@ mod tests {
     // The extractor is tested by calling it directly, like the handlers are.
     // The pool is lazy and never connects: `AuthUser` reads no database.
     fn state() -> AppState {
-        AppState {
-            pool: PgPoolOptions::new()
+        crate::test_support::state(
+            PgPoolOptions::new()
                 .connect_lazy("postgres://unused")
                 .unwrap(),
-            config: Arc::new(Config {
-                database_url: "postgres://unused".to_string(),
-                database_max_connections: 1,
-                port: 0,
-                cors_allowed_origins: vec![],
-                trusted_ip_headers: vec![],
-                jwt_secret: Secret::for_test(SECRET),
-                log_filter: "off".to_string(),
-                log_json: false,
-            }),
-        }
+            crate::test_support::config(),
+        )
     }
 
     async fn extract(authorization: Option<&str>) -> Result<AuthUser, AppError> {

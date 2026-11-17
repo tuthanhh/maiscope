@@ -284,8 +284,9 @@ If `since` is too old to diff, respond `409` with
 
 ## 4. Auth — GitHub OAuth, roles user/moderator/admin  *(phase 2)*
 
-**Not implemented.** No auth route is mounted; the design below is the plan of
-record for `docs/work/server-auth-github-oauth/`. Required to gate §5.
+**Partly implemented** on the v2 branch: the two GitHub routes are mounted;
+refresh, `me` and deletion are still the plan of record in
+`docs/work/server-auth-github-oauth/`. Required to gate §5.
 
 Paths are shown under `/api`, without a version segment — auth is built on the
 v2 branch, which retires `/api/v1` entirely
@@ -293,13 +294,33 @@ v2 branch, which retires `/api/v1` entirely
 
 v1 has no accounts and holds no PII. v2 ends that deliberately rather than by
 accident: the stored set is `github_id`, `login`, `avatar_url`, `role`, a
-refresh-token **hash**, and timestamps. **No email address**, and adding one
+refresh-token **hash** per signed-in device, and timestamps. **No email address**, and adding one
 later is a decision about privacy obligations rather than a schema convenience.
 
-- `GET /api/auth/github/login` → `302` to GitHub OAuth.
+**Sign-in flow.** GitHub sends the browser back to the frontend, not to this
+API: a JSON body returned to a navigation on the API's origin is unreadable
+by the SPA on another domain.
+
+1. The SPA generates a random `state`, keeps it in `sessionStorage`, and
+   navigates to `GET /api/auth/github/login?state=<state>`.
+2. The API answers `302` to GitHub's consent page, carrying that `state` and
+   the frontend's `/auth/callback` as `redirect_uri`. No scopes are requested.
+3. GitHub sends the browser to `/auth/callback?code=…&state=…` on the
+   frontend, which compares `state` with its stored copy and stops on a
+   mismatch. That check is the login-CSRF defence; the API keeps no OAuth
+   state.
+4. The SPA calls `GET /api/auth/github/callback?code=…`.
+
+- `GET /api/auth/github/login?state=…` → `302` to GitHub. `state` must be
+  16–128 characters from `A–Z a–z 0–9 - . _ ~`; otherwise `400 bad_request`.
 - `GET /api/auth/github/callback?code=...` → exchanges the code and returns
-  `{ "token": "<jwt>", "refreshToken": "<opaque>", "user": { ... } }`.
-  Re-authenticating a deleted account **reactivates** it (see below).
+  `{ "token": "<jwt>", "refreshToken": "<opaque>", "user": { ... } }`, the
+  user shaped as in `GET /api/auth/me` below. Each call opens a new session:
+  the caller's other devices stay signed in. Re-authenticating a deleted
+  account **reactivates** it (see below), as `user`.
+  `400 bad_request` for a missing code or one GitHub refuses (bad, expired or
+  already used); `502 upstream_error` when GitHub cannot be reached or answers
+  unexpectedly. A failed callback writes nothing.
 - `POST /api/auth/refresh` → `{ "refreshToken": "<opaque>" }` in, a new JWT *and*
   a new refresh token out. Refresh tokens rotate on every use and expire 30 days
   after issue; a token past its expiry is rejected even if its hash matches.
@@ -388,9 +409,9 @@ Status enum: `pending | approved | rejected | merged`.
 - **Errors** (non-2xx): `{ "error": "snake_case_code", "message": "human text" }`.
   Codes in use: `database_error`, `internal_error` (both `500`, both with an
   opaque message — the real cause is logged server-side, never returned),
-  `not_found`, `snapshot_required` (§3), `rate_limited`. `bad_request` exists
-  as an `AppError` variant but no shipped endpoint returns it — every query
-  param today either parses or is optional.
+  `not_found`, `snapshot_required` (§3), `rate_limited`, and on the v2 branch
+  `bad_request` and `upstream_error` (`502`, opaque, for a failing GitHub —
+  §4).
   Exception: `GET /sheets/{songId}/chart` returns plain-text errors (§2).
 - **Pagination**: `?page` (1-based) + `?pageSize` (default 22, max 100). The
   total is returned as an **`X-Total-Count` response header**
@@ -411,8 +432,8 @@ Status enum: `pending | approved | rejected | merged`.
   `production-v2`'s *Accepted, not solved*).
 - **CORS**: allowlist built from `CORS_ALLOWED_ORIGINS` (`Config`, `server-restructure`
   issue 06) — no origin configured means no origin allowed, not a permissive
-  fallback. `.env.example` still names the retired Tauri dev origin (`:1420`);
-  Vite serves on `:5173`, so a local frontend needs that set explicitly.
+  fallback. `.env.example` names the Vite dev origin, `http://localhost:1420`;
+  `apps/host/vite.config.ts` pins that port because it is allowlisted.
   Egress control, not a security control: `curl` ignores CORS entirely, so
   it doesn't gate access to public read-only data — the real cap on abuse is
   `server-restructure` issue 08's rate limiting. There is no native proxy

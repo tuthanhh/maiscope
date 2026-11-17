@@ -19,7 +19,6 @@ pub enum AppError {
         key: String,
     },
 
-    #[allow(dead_code)]
     BadRequest(String),
     /// `/sync/delta`'s `since` predates the last full reload (contract §3).
     SnapshotRequired,
@@ -48,6 +47,10 @@ pub enum AppError {
     RateLimited {
         retry_after_secs: u64,
     },
+    /// A service this server depends on (GitHub) failed or answered in a way
+    /// it should not have. The `&'static str` names which call, for the log;
+    /// the client gets an opaque body, since the detail is not theirs to act on.
+    BadGateway(&'static str),
     /// A server-side failure that isn't a database error — currently only the
     /// rate limiter's unreachable key-extraction arm. The `&'static str` names
     /// the origin for the log line; the client never sees it.
@@ -100,6 +103,16 @@ impl IntoResponse for AppError {
                 Json(json!({ "error": "snapshot_required" })),
             )
                 .into_response(),
+            AppError::BadGateway(context) => {
+                tracing::error!(context, "upstream call failed");
+                (
+                    StatusCode::BAD_GATEWAY,
+                    Json(
+                        json!({ "error": "upstream_error", "message": "upstream service failed" }),
+                    ),
+                )
+                    .into_response()
+            }
             AppError::Internal(context) => {
                 tracing::error!(context, "internal error");
                 (
@@ -160,6 +173,16 @@ mod tests {
         assert_eq!(
             body_json(response).await,
             json!({ "error": "internal_error", "message": "internal error" })
+        );
+    }
+
+    #[tokio::test]
+    async fn bad_gateway_hides_which_upstream_failed() {
+        let response = AppError::BadGateway("github token exchange").into_response();
+        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+        assert_eq!(
+            body_json(response).await,
+            json!({ "error": "upstream_error", "message": "upstream service failed" })
         );
     }
 

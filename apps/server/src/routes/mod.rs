@@ -1,3 +1,4 @@
+mod auth;
 mod caching;
 mod catalog;
 mod charts;
@@ -64,13 +65,18 @@ pub fn router(state: AppState) -> Router {
         .merge(songs::router())
         .merge(sheets::router())
         .merge(charts::router())
-        .layer(limit_layer);
+        .layer(limit_layer.clone());
+
+    // v2 routes live under `/api` with no version segment; the catalog joins
+    // them in api-rewrite. Same limiter, so one IP has one bucket across both.
+    let api = Router::new().merge(auth::router()).layer(limit_layer);
 
     Router::new()
         .nest(
             "/api/v1",
             Router::new().merge(health::router()).merge(limited),
         )
+        .nest("/api", api)
         // Both default to DEBUG; DEFAULT_LOG_FILTER (config.rs) is
         // "info,tower_http=info", so both need bumping to INFO or they're
         // silently filtered out. make_span_with's level gates the span
@@ -108,24 +114,12 @@ mod tests {
     use std::sync::Arc;
     use tower::ServiceExt;
 
-    use crate::config::Config;
-
     fn test_state(pool: PgPool) -> AppState {
-        AppState {
-            pool,
-            config: Arc::new(Config {
-                database_url: "postgres://test".to_string(),
-                database_max_connections: 1,
-                port: 0,
-                cors_allowed_origins: vec![],
-                // The router tests key requests by this header, as production
-                // does behind Fly; `oneshot` carries no socket address.
-                trusted_ip_headers: vec!["fly-client-ip".to_string()],
-                jwt_secret: crate::config::Secret::for_test("test-secret-test-secret-test-secret"),
-                log_filter: "off".to_string(),
-                log_json: false,
-            }),
-        }
+        // The router tests key requests by this header, as production does
+        // behind Fly; `oneshot` carries no socket address.
+        let mut config = crate::test_support::config();
+        config.trusted_ip_headers = vec!["fly-client-ip".to_string()];
+        crate::test_support::state(pool, config)
     }
 
     fn get_from(path: &str, ip: &str) -> Request<Body> {

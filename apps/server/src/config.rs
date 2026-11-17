@@ -29,6 +29,27 @@ const DEFAULT_LOG_FILTER: &str = "info,tower_http=info";
 /// value (`openssl rand -base64 48`), never choose it.
 const MIN_JWT_SECRET_BYTES: usize = 32;
 
+/// GitHub's OAuth and REST hosts. Constants, not environment: only tests
+/// point them elsewhere, at a local stand-in, by building `Config` directly.
+const GITHUB_OAUTH_BASE: &str = "https://github.com";
+const GITHUB_API_BASE: &str = "https://api.github.com";
+
+/// The OAuth app this server signs users in through
+/// (server-auth-github-oauth 03).
+#[derive(Debug, Clone)]
+pub struct GitHubConfig {
+    pub client_id: String,
+    pub client_secret: Secret,
+    /// The frontend's callback route, which GitHub sends the browser to. It
+    /// must equal the OAuth app's registered callback URL, and it is sent
+    /// again with the code exchange, where GitHub compares it.
+    pub redirect_url: String,
+    /// Origin of `/login/oauth/authorize` and `/login/oauth/access_token`.
+    pub oauth_base: String,
+    /// Origin of the REST API (`/user`).
+    pub api_base: String,
+}
+
 /// A value that must never reach a log line. `Config` derives `Debug`, so a
 /// plain `String` here would print the secret the first time anyone writes
 /// `?config`.
@@ -75,6 +96,7 @@ pub struct Config {
     pub trusted_ip_headers: Vec<String>,
     /// HS256 key for access JWTs (server-auth-github-oauth 02).
     pub jwt_secret: Secret,
+    pub github: GitHubConfig,
     /// `tracing_subscriber::EnvFilter` directive string (ticket 05).
     pub log_filter: String,
     pub log_json: bool,
@@ -216,6 +238,18 @@ fn parse_jwt_secret(raw: String) -> Result<Secret, ConfigError> {
     Ok(Secret(raw))
 }
 
+/// An absolute `http(s)` URL. Checked at startup because GitHub rejects a
+/// mismatched redirect only at login time, as a page the user sees.
+fn parse_redirect_url(raw: String) -> Result<String, ConfigError> {
+    match reqwest::Url::parse(&raw) {
+        Ok(url) if matches!(url.scheme(), "http" | "https") => Ok(raw),
+        _ => Err(ConfigError::Invalid {
+            var: "GITHUB_REDIRECT_URL",
+            reason: format!("{raw:?} is not an absolute http(s) URL"),
+        }),
+    }
+}
+
 fn parse_log_json(raw: Option<String>) -> bool {
     match raw {
         Some(raw) => raw.eq_ignore_ascii_case("true"),
@@ -238,6 +272,13 @@ impl Config {
         let trusted_ip_headers =
             parse_trusted_ip_headers(optional("TRUSTED_IP_HEADERS")?.unwrap_or_default())?;
         let jwt_secret = parse_jwt_secret(required("JWT_SECRET")?)?;
+        let github = GitHubConfig {
+            client_id: required("GITHUB_CLIENT_ID")?,
+            client_secret: Secret(required("GITHUB_CLIENT_SECRET")?),
+            redirect_url: parse_redirect_url(required("GITHUB_REDIRECT_URL")?)?,
+            oauth_base: GITHUB_OAUTH_BASE.to_string(),
+            api_base: GITHUB_API_BASE.to_string(),
+        };
 
         Ok(Config {
             database_url,
@@ -246,6 +287,7 @@ impl Config {
             cors_allowed_origins,
             trusted_ip_headers,
             jwt_secret,
+            github,
             log_filter,
             log_json,
         })
@@ -398,10 +440,33 @@ mod tests {
             cors_allowed_origins: vec![],
             trusted_ip_headers: vec![],
             jwt_secret: secret,
+            github: GitHubConfig {
+                client_id: String::new(),
+                client_secret: Secret::for_test("hunter2-client-secret"),
+                redirect_url: String::new(),
+                oauth_base: String::new(),
+                api_base: String::new(),
+            },
             log_filter: String::new(),
             log_json: false,
         };
         assert!(!format!("{config:?}").contains("hunter2"));
+    }
+
+    #[test]
+    fn parse_redirect_url_wants_an_absolute_http_url() {
+        assert!(parse_redirect_url("http://localhost:1420/auth/callback".to_string()).is_ok());
+        for raw in [
+            "/auth/callback",
+            "localhost:1420",
+            "javascript:alert(1)",
+            "",
+        ] {
+            assert!(
+                parse_redirect_url(raw.to_string()).is_err(),
+                "{raw:?} was accepted"
+            );
+        }
     }
 
     #[test]

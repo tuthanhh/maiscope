@@ -5,6 +5,7 @@
 mod catalog;
 mod sheets;
 mod songs;
+mod users;
 
 pub use catalog::{
     fetch_categories, fetch_difficulties, fetch_regions, fetch_types, fetch_update_time,
@@ -14,3 +15,4 @@ pub use sheets::{
     SheetSearchParams, fetch_all_sheets, fetch_sheet_by_expr, fetch_sheets_for_song, search_sheets,
 };
 pub use songs::{fetch_all_songs, fetch_song_by_song_id};
+pub use users::{start_session, upsert_github_user};

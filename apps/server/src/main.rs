@@ -54,6 +54,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let state = AppState {
         pool,
         config: Arc::new(config),
+        http: state::http_client(),
     };
 
     // AppState::clone is cheap (PgPool and Arc<Config> both just bump a
