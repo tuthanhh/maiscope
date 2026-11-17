@@ -2,7 +2,7 @@
 //!
 //! Turns a `[...]` simai duration bracket into a [`Duration`].
 
-use crate::systems::component::Duration;
+use crate::types::Duration;
 
 /// Parse a duration bracket string into a `Duration`.
 ///

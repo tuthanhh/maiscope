@@ -20,17 +20,47 @@ not have to know that `&lv_4=` pairs with `&inote_4=`.
 
 **Blocked by:** 01 — extract `crates/simai`.
 
-**Status:** todo
+**Status:** done (2026-11-17)
 
-- [ ] `simai::maidata::parse(text) -> Result<Maidata, ParseError>` returning
+- [x] `simai::maidata::parse(text) -> Result<Maidata, ParseError>` returning
       song fields (`title`, `artist`, `wholebpm`, `genre`, `version`) plus a
       `Vec` of difficulty entries (slot, `lv`, `des`, `inote`)
-- [ ] Unknown `&key=` pairs are preserved, not dropped — the format has keys this
+- [x] Unknown `&key=` pairs are preserved, not dropped — the format has keys this
       app does not read (`&cabinet=`, `&chartconverter=`, `&shortid=`) and
       discarding them silently loses contributor data
-- [ ] An empty or whitespace-only `inote_N` is absent, not an empty chart
+- [x] An empty or whitespace-only `inote_N` is absent, not an empty chart
       (`seed_songs.rs:187` already does this)
-- [ ] `bin/seed_songs.rs` calls it and keeps its existing behaviour, including
+- [x] `bin/seed_songs.rs` calls it and keeps its existing behaviour, including
       the `--allow-unmatched` exit codes
-- [ ] Tests cover: a real multi-difficulty file, a file with gaps in the slot
+- [x] Tests cover: a real multi-difficulty file, a file with gaps in the slot
       numbering, CRLF line endings, and a missing `&title=`
+
+## Comments
+
+**2026-11-17: done.** `simai::maidata::parse(text) -> Result<Maidata,
+MaidataError>`. The error is `MaidataError`, not `ParseError`, so it cannot be
+confused with the chart parser's `simai::ParseError`; its one case is
+`MissingTitle`. The slot table became `maidata::standard_difficulty(slot)`, with
+`maidata::UTAGE_SLOT` for slot 7.
+
+Details that keep the seeder's behaviour exact:
+
+- `inote` is kept as written, lines joined by `\n`, so chart hashes match
+  what earlier seeds stored. Scalar fields are trimmed.
+- Unknown keys land in `other` untrimmed and in file order, repeats
+  included. A known key that repeats keeps its last value, as before.
+- A leading byte-order mark is stripped here now, so the seeder's own
+  BOM handling and its test moved into the library.
+- A folder is UTAGE when slot 7 has a level or a chart (`Maidata::utage`).
+  A bare `&des_7=` is not enough, as before. One edge differs: a blank
+  `&inote_7=` with no `&lv_7=` used to be skipped silently and now takes
+  the standard path, where it is reported. No sample file has that shape.
+- Slot keys must be plain numbers: `&lv_07=` is an unknown key, kept in
+  `other`, where the old code simply never read it.
+
+The test fixtures copy a real file's shape (BOM, mixed CRLF and LF, extra
+keys) with hand-written chart bodies; real chart text is not committed.
+Checked on dev: a full reseed wrote nothing (7065 already up to date) with
+every report count unchanged, and without `--allow-unmatched` it still
+exits 1. `apps/server` now depends on `simai` without the `bevy` feature;
+ticket 03 verifies the tree.

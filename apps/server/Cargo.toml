@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+# The chart parser, WITHOUT its `bevy` feature: the server never links Bevy.
+simai = { path = "../../crates/simai" }
 axum = "0.8.9"
 tokio = {workspace = true}
 serde = {workspace = true}

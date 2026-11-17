@@ -19,8 +19,8 @@ use crate::upstream::{
     RawData, RawOverride, RawSheet, RawSong, parse_date, parse_update_time, sheet_expr,
 };
 use sqlx::Row as _;
-use sqlx::types::{Json, Uuid};
 use sqlx::types::chrono::{DateTime, NaiveDate, Utc};
+use sqlx::types::{Json, Uuid};
 use sqlx::{PgConnection, PgPool};
 use std::collections::{BTreeMap, HashMap};
 
@@ -403,7 +403,12 @@ async fn replace_lookups(conn: &mut PgConnection, data: &RawData) -> Result<(), 
     .bind(difficulties.iter().map(|d| d.code).collect::<Vec<_>>())
     .bind(difficulties.iter().map(|d| d.color).collect::<Vec<_>>())
     .bind(difficulties.iter().map(|d| d.icon_url).collect::<Vec<_>>())
-    .bind(difficulties.iter().map(|d| d.icon_height).collect::<Vec<_>>())
+    .bind(
+        difficulties
+            .iter()
+            .map(|d| d.icon_height)
+            .collect::<Vec<_>>(),
+    )
     .bind(ordinals(difficulties.len()))
     .execute(&mut *conn)
     .await?;
@@ -2010,7 +2015,10 @@ mod tests {
     ) -> sqlx::Result<()> {
         apply(&pool, &payload(UTAGE_PAYLOAD)).await?;
 
-        assert_eq!(sheet_difficulties_without_a_row(&pool).await, Vec::<String>::new());
+        assert_eq!(
+            sheet_difficulties_without_a_row(&pool).await,
+            Vec::<String>::new()
+        );
         Ok(())
     }
 
@@ -2062,12 +2070,17 @@ mod tests {
 
         apply(
             &pool,
-            &payload(r#"{ "songs": [{ "songId": "Plain", "title": "Plain",
-                          "sheets": [{ "type": "dx", "difficulty": "master" }] }] }"#),
+            &payload(
+                r#"{ "songs": [{ "songId": "Plain", "title": "Plain",
+                          "sheets": [{ "type": "dx", "difficulty": "master" }] }] }"#,
+            ),
         )
         .await?;
 
-        assert_eq!(sheet_difficulties_without_a_row(&pool).await, Vec::<String>::new());
+        assert_eq!(
+            sheet_difficulties_without_a_row(&pool).await,
+            Vec::<String>::new()
+        );
         Ok(())
     }
 
@@ -2097,7 +2110,10 @@ mod tests {
             .execute(&pool)
             .await;
 
-        assert!(deleted.is_err(), "a difficulty sheets use must not be removable");
+        assert!(
+            deleted.is_err(),
+            "a difficulty sheets use must not be removable"
+        );
         Ok(())
     }
 

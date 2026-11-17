@@ -3,7 +3,7 @@
 
 use super::error::ParseError;
 use super::note::parse_note;
-use crate::systems::component::{ChartEvent, Note};
+use crate::types::{ChartEvent, Note};
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -176,7 +176,7 @@ fn reject_duplicate(already_set: bool, marker: Marker) -> Result<(), String> {
 mod tests {
     use super::super::testutil::{delayed, plain, simple};
     use super::*;
-    use crate::systems::component::NoteKind;
+    use crate::types::NoteKind;
 
     /// Parse a whole chart, panicking if it was rejected.
     fn events(chart: &str) -> Vec<ChartEvent> {

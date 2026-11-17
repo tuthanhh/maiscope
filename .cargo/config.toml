@@ -3,5 +3,5 @@
 # then fails the next local build instead of surfacing on a PR.
 #
 # Not forced, so an explicit env var still wins:
-#   SQLX_OFFLINE=false cargo sqlx prepare --workspace -- --all-targets
+#   SQLX_OFFLINE=false cargo sqlx prepare --workspace -- -p server --all-targets
 SQLX_OFFLINE = "true"

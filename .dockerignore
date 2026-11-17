@@ -6,6 +6,7 @@
 #   .cargo/    sets SQLX_OFFLINE=true for the workspace
 #   engine/    a workspace member, so cargo parses its manifest and infers its
 #              lib target even though `-p server` never compiles it
+#   crates/    `simai`, the chart parser the server links
 
 # Build output
 target/
@@ -17,6 +18,8 @@ apps/host/
 # Large data the server build never reads
 songs/
 engine/assets/
+# Real charts kept for a local parser sweep; gitignored, never shipped
+crates/simai/tests/fixtures/local/
 
 # Repo furniture
 .git/

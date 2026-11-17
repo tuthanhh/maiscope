@@ -2465,7 +2465,7 @@ dependencies = [
  "bevy_kira_audio",
  "bevy_prototype_lyon",
  "once_cell",
- "regex",
+ "simai",
  "wasm-bindgen",
 ]
 
@@ -5218,6 +5218,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "simai",
  "sqlx",
  "tokio",
  "tower",
@@ -5290,6 +5291,14 @@ checksum = "c4db69cba1110affc0e9f7bcd48bbf87b3f4fc7c61fc9155afd4c469eb3d6c1b"
 dependencies = [
  "errno",
  "libc",
+]
+
+[[package]]
+name = "simai"
+version = "0.1.0"
+dependencies = [
+ "bevy_ecs",
+ "regex",
 ]
 
 [[package]]

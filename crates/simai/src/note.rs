@@ -3,7 +3,7 @@
 
 use super::duration::parse_duration_bracket;
 use super::slide::parse_slide_note;
-use crate::systems::component::{Duration, Note, NoteKind};
+use crate::types::{Duration, Note, NoteKind};
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -307,7 +307,7 @@ mod tests {
     // tests that already exist.
     #[allow(unused_imports)]
     use super::super::testutil::{parse, parse_err, parse_one, plain, simple};
-    use crate::systems::component::{Duration, NoteKind};
+    use crate::types::{Duration, NoteKind};
 
     #[test]
     fn bare_digit_is_a_tap() {

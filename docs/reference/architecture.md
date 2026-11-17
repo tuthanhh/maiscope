@@ -9,11 +9,19 @@ this document describes the result.
 apps/host/     Vue 3 + Vite web app — song browser and visualizer page
 apps/server/   Rust/Axum + Postgres — chart catalog and per-sheet chart API
 engine/        Bevy ECS chart renderer, compiled to wasm32-unknown-unknown
+crates/simai/  simai chart and maidata.txt parser; no Bevy, no I/O
 ```
 
-One Cargo workspace (`apps/server`, `engine`) plus a pnpm-managed frontend
-under `apps/host`. There is no shared-types crate: the server emits raw fields
-the client reshapes, and a snapshot test guards the wire contract instead
+One Cargo workspace (`apps/server`, `crates/simai`, `engine`) plus a
+pnpm-managed frontend under `apps/host`. `simai` is shared by the engine,
+which parses chart text in the browser, and the server, which reads
+`maidata.txt` when seeding and will validate uploads. Only the engine turns
+on its `bevy` feature, so the server never links Bevy
+([ADR-0014](../adr/0014-simai-parser-as-its-own-crate.md)); building the
+crates together with `--workspace` would undo that.
+
+There is no shared-types crate: the server emits raw fields the client
+reshapes, and a snapshot test guards the wire contract instead
 ([ADR-0018](../adr/0018-no-shared-types-crate.md)).
 
 ## Data flow
@@ -27,7 +35,7 @@ visualizer page
    │  load_chart(text) via wasm-bindgen
    ▼
 engine (Bevy, wasm)
-   parses simai → spawns notes → renders on a wall-clock-driven chart clock
+   parses simai (via crates/simai) → spawns notes → renders on a wall-clock-driven chart clock
 ```
 
 ## Cross-tier identity

@@ -1,0 +1,15 @@
+[package]
+name = "simai"
+version = "0.1.0"
+edition = "2024"
+description = "simai chart parser, free of Bevy so the server can link it"
+
+[dependencies]
+regex = "1.12.3"
+# Only for `#[derive(Component)]` on `NoteKind`, which `engine` needs. Never
+# enable this from `apps/server`: and never build the workspace as a whole,
+# since Cargo unifies features across crates built together (ADR-0014).
+bevy_ecs = { version = "0.18.1", optional = true }
+
+[features]
+bevy = ["dep:bevy_ecs"]

@@ -1,7 +1,7 @@
 //! Slide-note parsing: shape patterns, chained segments, and star chains.
 
 use super::duration::parse_duration_bracket;
-use crate::systems::component::{Duration, Note, NoteKind, SlideSegment, SlideShape};
+use crate::types::{Duration, Note, NoteKind, SlideSegment, SlideShape};
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -380,7 +380,7 @@ mod tests {
     // tests that already exist.
     #[allow(unused_imports)]
     use super::super::testutil::{parse, parse_err, parse_one, plain, seg, simple};
-    use crate::systems::component::{NoteKind, SlideShape};
+    use crate::types::{NoteKind, SlideShape};
 
     /// Shorthand for the overwhelmingly common case: one slide note, one
     /// segment, no modifiers, not shared-duration.

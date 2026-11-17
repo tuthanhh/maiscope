@@ -52,7 +52,7 @@ Across the 1928 local `maidata.txt` files, **56 use the tap-star `$`** that
 `parser-defects` 03 does not accept — and **19 of those are ordinary non-UTAGE
 charts**, so that defect is not a UTAGE nicety but a rejection rate on normal
 content. It is a *floor*, not the rate: it counts one known defect, and nobody
-has run `parse_chart` over the whole corpus (`engine/tests/corpus.rs` sweeps
+has run `parse_chart` over the whole corpus (`crates/simai/tests/corpus.rs` sweeps
 nine hand-written fixtures plus a gitignored `local/` that takes chart bodies,
 not `maidata.txt`).
 

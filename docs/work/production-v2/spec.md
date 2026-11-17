@@ -177,7 +177,7 @@ What does not:
   before the parser gated uploads.
 
   2.9% is a *floor*, not the rate: it counts one known defect, and nobody has
-  run `parse_chart` over the whole corpus — `engine/tests/corpus.rs` sweeps nine
+  run `parse_chart` over the whole corpus — `crates/simai/tests/corpus.rs` sweeps nine
   hand-written fixtures plus a gitignored `local/` that takes chart bodies, not
   `maidata.txt`. Gating `community-charts` 02 on a measured pass rate was
   considered and **rejected**: the endpoint ships as designed and defects are
