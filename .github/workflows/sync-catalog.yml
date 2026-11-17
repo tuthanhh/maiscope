@@ -34,6 +34,11 @@ jobs:
         with:
           shared-key: native
 
+      # Every run writes its insert/update/vanish counts to the job summary
+      # (bin/sync_catalog appends to $GITHUB_STEP_SUMMARY itself). Exit 3 is
+      # the rename alarm: the sync committed, but a song vanished and a song
+      # appeared in one run, so the run fails to get a person to look. It
+      # trips once per rename; the next run passes. See sync-rename-alarm.
       - name: Run the sync
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

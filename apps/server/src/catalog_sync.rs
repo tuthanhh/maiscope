@@ -45,9 +45,62 @@ pub struct SyncStats {
     pub revision: i64,
     /// Whether `catalog_meta.revision` was advanced to [`Self::revision`].
     pub revision_advanced: bool,
+    /// The `song_id`s behind `songs_vanished` and `songs_inserted`, sorted,
+    /// so a report can name the candidate pairing of a rename.
+    pub songs_vanished_ids: Vec<String>,
+    pub songs_inserted_ids: Vec<String>,
 }
 
 impl SyncStats {
+    /// One run both lost a song and gained one: what an upstream title
+    /// correction looks like, since `song_id` is the title. It is only a
+    /// signature. A genuine removal beside a genuine addition trips it too,
+    /// and nothing here pairs, merges or repoints anything (`api-rewrite`
+    /// rejected rematching). A vanished song is logged once, so a rename
+    /// trips this on exactly one run.
+    pub fn rename_signature(&self) -> bool {
+        self.songs_vanished > 0 && self.songs_inserted > 0
+    }
+
+    /// The run's counts as a GitHub job-summary block, naming the songs
+    /// when the rename signature trips.
+    pub fn summary_markdown(&self) -> String {
+        let mut out = format!(
+            "### Catalog sync: revision {} ({})\n\n\
+             | | inserted | updated | vanished (new) | vanished (all time) |\n\
+             |---|---|---|---|---|\n\
+             | songs | {} | {} | {} | {} |\n\
+             | sheets | {} | {} | {} | {} |\n",
+            self.revision,
+            if self.revision_advanced {
+                "advanced"
+            } else {
+                "nothing changed"
+            },
+            self.songs_inserted,
+            self.songs_updated,
+            self.songs_vanished,
+            self.songs_vanished_total,
+            self.sheets_inserted,
+            self.sheets_updated,
+            self.sheets_vanished,
+            self.sheets_vanished_total,
+        );
+        if self.rename_signature() {
+            out.push_str(
+                "\n**Rename signature:** a song vanished and a song appeared in one run. \
+                 The run committed; check by hand whether these are one song renamed.\n\n",
+            );
+            for id in &self.songs_vanished_ids {
+                out.push_str(&format!("- vanished: `{id}`\n"));
+            }
+            for id in &self.songs_inserted_ids {
+                out.push_str(&format!("- appeared: `{id}`\n"));
+            }
+        }
+        out
+    }
+
     /// Did this run change anything a client could observe? Drives the
     /// conditional `catalog_meta.revision` write-back — see [`apply`].
     fn changed_anything(&self) -> bool {
@@ -110,13 +163,15 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
     // entire catalog every time.
     let songs = dedupe_songs(data, &mut stats);
     let changed_songs = upsert_songs(&mut tx, &songs, revision).await?;
-    for inserted in changed_songs.values() {
+    for (song_id, inserted) in &changed_songs {
         if *inserted {
             stats.songs_inserted += 1;
+            stats.songs_inserted_ids.push(song_id.clone());
         } else {
             stats.songs_updated += 1;
         }
     }
+    stats.songs_inserted_ids.sort();
 
     // The upsert's suppressed DO UPDATE returns no row, so the ids of unchanged
     // songs are not in `changed_songs`. Reading the whole map back costs one
@@ -190,19 +245,20 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
     // chart text. Rows already logged are not logged again: the deletion tables
     // are keyed (song_id, revision), so ON CONFLICT DO NOTHING would still write
     // a second entry under a new revision.
-    stats.songs_vanished = sqlx::query_scalar::<_, i32>(
+    stats.songs_vanished_ids = sqlx::query_scalar::<_, String>(
         "INSERT INTO deleted_songs (song_id, revision) \
          SELECT s.song_id, $2 FROM songs s \
          WHERE s.song_id IS NOT NULL \
            AND s.song_id <> ALL($1) \
            AND NOT EXISTS (SELECT 1 FROM deleted_songs d WHERE d.song_id = s.song_id) \
-         RETURNING 1",
+         RETURNING song_id",
     )
     .bind(&song_ids)
     .bind(revision)
     .fetch_all(&mut *tx)
-    .await?
-    .len() as i64;
+    .await?;
+    stats.songs_vanished_ids.sort();
+    stats.songs_vanished = stats.songs_vanished_ids.len() as i64;
 
     stats.sheets_vanished = sqlx::query_scalar::<_, i32>(
         "INSERT INTO deleted_sheets (sheet_expr, revision) \
@@ -2266,5 +2322,106 @@ mod tests {
         apply(&pool, &payload(ID_SONGS)).await?;
         assert_eq!(ids_by_song_id(&pool).await, before);
         Ok(())
+    }
+
+    // ── rename alarm (sync-rename-alarm) ─────────────────────────────────────
+
+    fn songs_payload(ids: &[&str]) -> RawData {
+        let songs: Vec<String> = ids
+            .iter()
+            .map(|id| format!(r#"{{ "songId": "{id}", "title": "{id}", "sheets": [] }}"#))
+            .collect();
+        payload(&format!(r#"{{ "songs": [{}] }}"#, songs.join(",")))
+    }
+
+    // A title correction upstream reaches the sync as one song vanishing and
+    // another appearing in the same run. The run still commits: the alarm is
+    // a report, not a rollback.
+    #[sqlx::test]
+    async fn a_song_lost_and_a_song_gained_in_one_run_is_the_rename_signature(
+        pool: PgPool,
+    ) -> sqlx::Result<()> {
+        apply(&pool, &songs_payload(&["Kept", "Old Title"])).await?;
+
+        let stats = apply(&pool, &songs_payload(&["Kept", "New Title"])).await?;
+
+        assert!(stats.rename_signature());
+        assert_eq!(stats.songs_vanished_ids, ["Old Title"]);
+        assert_eq!(stats.songs_inserted_ids, ["New Title"]);
+        let committed: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM songs WHERE song_id = 'New Title'")
+                .fetch_one(&pool)
+                .await?;
+        assert_eq!(committed, 1);
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn only_gaining_or_only_losing_songs_is_not_the_signature(
+        pool: PgPool,
+    ) -> sqlx::Result<()> {
+        apply(&pool, &songs_payload(&["A"])).await?;
+
+        let gained = apply(&pool, &songs_payload(&["A", "B"])).await?;
+        assert!(!gained.rename_signature());
+
+        let lost = apply(&pool, &songs_payload(&["A"])).await?;
+        assert_eq!(lost.songs_vanished_ids, ["B"]);
+        assert!(!lost.rename_signature());
+        Ok(())
+    }
+
+    // The vanished song is logged once, so the run after a rename does not
+    // trip again. That is why the alarm needs no "acknowledged" override.
+    #[sqlx::test]
+    async fn the_alarm_trips_once_per_rename_not_on_every_later_run(
+        pool: PgPool,
+    ) -> sqlx::Result<()> {
+        apply(&pool, &songs_payload(&["Old Title"])).await?;
+        assert!(
+            apply(&pool, &songs_payload(&["New Title"]))
+                .await?
+                .rename_signature()
+        );
+
+        let next = apply(&pool, &songs_payload(&["New Title"])).await?;
+
+        assert!(!next.rename_signature());
+        Ok(())
+    }
+
+    #[test]
+    fn the_summary_reports_every_count_and_names_a_rename() {
+        let stats = SyncStats {
+            songs_inserted: 1,
+            songs_updated: 2,
+            songs_vanished: 1,
+            songs_vanished_total: 4,
+            sheets_inserted: 5,
+            sheets_updated: 6,
+            sheets_vanished: 0,
+            sheets_vanished_total: 3,
+            revision: 9,
+            revision_advanced: true,
+            songs_vanished_ids: vec!["Old Title".into()],
+            songs_inserted_ids: vec!["New Title".into()],
+            ..SyncStats::default()
+        };
+
+        assert_eq!(
+            stats.summary_markdown(),
+            "### Catalog sync: revision 9 (advanced)\n\
+             \n\
+             | | inserted | updated | vanished (new) | vanished (all time) |\n\
+             |---|---|---|---|---|\n\
+             | songs | 1 | 2 | 1 | 4 |\n\
+             | sheets | 5 | 6 | 0 | 3 |\n\
+             \n\
+             **Rename signature:** a song vanished and a song appeared in one run. \
+             The run committed; check by hand whether these are one song renamed.\n\
+             \n\
+             - vanished: `Old Title`\n\
+             - appeared: `New Title`\n"
+        );
     }
 }
