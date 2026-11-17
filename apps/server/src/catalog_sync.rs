@@ -19,7 +19,7 @@ use crate::upstream::{
     RawData, RawOverride, RawSheet, RawSong, parse_date, parse_update_time, sheet_expr,
 };
 use sqlx::Row as _;
-use sqlx::types::Json;
+use sqlx::types::{Json, Uuid};
 use sqlx::types::chrono::{DateTime, NaiveDate, Utc};
 use sqlx::{PgConnection, PgPool};
 use std::collections::{BTreeMap, HashMap};
@@ -126,7 +126,7 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
         .iter()
         .map(|(_, s)| s.song_id.clone().unwrap())
         .collect();
-    let song_pks: HashMap<String, i64> =
+    let song_pks: HashMap<String, Uuid> =
         sqlx::query_as("SELECT song_id, id FROM songs WHERE song_id = ANY($1)")
             .bind(&song_ids)
             .fetch_all(&mut *tx)
@@ -578,7 +578,7 @@ async fn upsert_songs(
 /// One payload sheet resolved against its parent song's primary key.
 struct SheetRow<'a> {
     expr: String,
-    song_pk: i64,
+    song_pk: Uuid,
     /// The sheet's index within its own song — `sheets.source_index`.
     source_index: i32,
     raw: &'a RawSheet,
@@ -591,7 +591,7 @@ struct SheetRow<'a> {
 /// later one.
 fn dedupe_sheets<'a>(
     songs: &[(usize, &'a RawSong)],
-    song_pks: &HashMap<String, i64>,
+    song_pks: &HashMap<String, Uuid>,
 ) -> Vec<SheetRow<'a>> {
     let mut deduped: Vec<SheetRow<'a>> = Vec::new();
     let mut at: HashMap<String, usize> = HashMap::new();
@@ -630,7 +630,7 @@ async fn upsert_sheets(
     revision: i64,
 ) -> Result<HashMap<String, bool>, sqlx::Error> {
     let n = sheets.len();
-    let mut song_id_fk: Vec<i64> = Vec::with_capacity(n);
+    let mut song_id_fk: Vec<Uuid> = Vec::with_capacity(n);
     let mut expr: Vec<String> = Vec::with_capacity(n);
     let mut ty: Vec<Option<String>> = Vec::with_capacity(n);
     let mut difficulty: Vec<Option<String>> = Vec::with_capacity(n);
@@ -664,7 +664,7 @@ async fn upsert_sheets(
          SELECT t.song_id_fk, t.sheet_expr, t.type, t.difficulty, t.level, t.level_value, \
                 t.internal_level, t.internal_level_value, t.note_designer, t.is_special, \
                 t.source_index, $12::bigint \
-         FROM unnest($1::bigint[], $2::text[], $3::text[], $4::text[], $5::text[], \
+         FROM unnest($1::uuid[], $2::text[], $3::text[], $4::text[], $5::text[], \
                      $6::double precision[], $7::text[], $8::double precision[], \
                      $9::text[], $10::bool[], $11::int[]) \
               AS t(song_id_fk, sheet_expr, type, difficulty, level, level_value, \

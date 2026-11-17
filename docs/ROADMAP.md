@@ -63,7 +63,7 @@ Unscheduled.
 | [production-v2](work/production-v2/spec.md) — umbrella | planned | v2.0 |
 | ├ [frontend-redesign](work/frontend-redesign/spec.md) | active | v2.0 |
 | ├ [catalog-difficulties](work/catalog-difficulties/spec.md) | active | v2.0 |
-| ├ [song-public-id](work/song-public-id/spec.md) | planned | v2.0 |
+| ├ [song-public-id](work/song-public-id/spec.md) | active | v2.0 |
 | ├ [parser-crate-extraction](work/parser-crate-extraction/spec.md) | planned | v2.0 |
 | ├ [sync-rename-alarm](work/sync-rename-alarm/spec.md) | planned | v2.0 |
 | ├ [server-auth-github-oauth](work/server-auth-github-oauth/spec.md) | planned | v2.0 |

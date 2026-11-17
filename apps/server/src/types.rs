@@ -208,7 +208,7 @@ pub struct SheetSearchResponse {
 /// fetch_all_songs — sqlx::query_as! maps positionally.
 #[derive(sqlx::FromRow)]
 pub struct SongRow {
-    pub id: i64,
+    pub id: sqlx::types::Uuid,
     pub song_id: Option<String>,
     pub category: Option<String>,
     pub title: Option<String>,
@@ -244,7 +244,7 @@ impl SongRow {
 /// regions/region_overrides aggregates. Field order MUST match the SELECT
 /// list in queries.rs — sqlx::query_as! maps positionally.
 pub struct SheetRow {
-    pub song_id_fk: i64,
+    pub song_id_fk: sqlx::types::Uuid,
     pub r#type: Option<String>,
     pub difficulty: Option<String>,
     pub level: Option<String>,

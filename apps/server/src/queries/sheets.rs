@@ -1,3 +1,4 @@
+use sqlx::types::Uuid;
 use sqlx::PgPool;
 use std::collections::HashMap;
 
@@ -259,7 +260,7 @@ pub async fn search_sheets(
 /// `query_as!`'s positional matching) is what keeps this correct.
 #[derive(sqlx::FromRow)]
 struct SearchRow {
-    id: i64,
+    id: Uuid,
     song_id: Option<String>,
     category: Option<String>,
     title: Option<String>,
@@ -271,7 +272,7 @@ struct SearchRow {
     is_new: Option<bool>,
     is_locked: Option<bool>,
     comment: Option<String>,
-    song_id_fk: i64,
+    song_id_fk: Uuid,
     r#type: Option<String>,
     difficulty: Option<String>,
     level: Option<String>,
@@ -353,7 +354,7 @@ type RegionOverridesJson =
 pub async fn fetch_all_sheets(
     pool: &PgPool,
     region: Option<&str>,
-) -> Result<HashMap<i64, Vec<crate::types::SheetRow>>, sqlx::Error> {
+) -> Result<HashMap<Uuid, Vec<crate::types::SheetRow>>, sqlx::Error> {
     let rows = sqlx::query_as!(
         crate::types::SheetRow,
         r#"SELECT
@@ -391,7 +392,7 @@ pub async fn fetch_all_sheets(
     .fetch_all(pool)
     .await?;
 
-    let mut grouped: HashMap<i64, Vec<crate::types::SheetRow>> = HashMap::new();
+    let mut grouped: HashMap<Uuid, Vec<crate::types::SheetRow>> = HashMap::new();
     for row in rows {
         grouped.entry(row.song_id_fk).or_default().push(row);
     }
@@ -400,7 +401,7 @@ pub async fn fetch_all_sheets(
 
 pub async fn fetch_sheets_for_song(
     pool: &PgPool,
-    song_pk: i64,
+    song_pk: Uuid,
 ) -> Result<Vec<crate::types::SheetRow>, sqlx::Error> {
     sqlx::query_as!(
         crate::types::SheetRow,
@@ -440,9 +441,9 @@ pub async fn fetch_sheets_for_song(
 mod tests {
     use super::*;
 
-    async fn seed_song_with_two_sheets(pool: &PgPool) -> (i64, i64, i64) {
+    async fn seed_song_with_two_sheets(pool: &PgPool) -> (Uuid, i64, i64) {
         crate::test_support::seed_standard_difficulties(pool).await;
-        let song_pk: i64 = sqlx::query_scalar!(
+        let song_pk: Uuid = sqlx::query_scalar!(
             "INSERT INTO songs (song_id, source_index) VALUES ($1, $2) RETURNING id",
             "maimai_song",
             0

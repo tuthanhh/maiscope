@@ -8,27 +8,27 @@ identifier. See the spec for the reversal and what it costs.
 
 **Blocked by:** None.
 
-**Status:** todo
+**Status:** done (2026-11-17)
 
-- [ ] The format is **UUID v7 in a native `uuid` column**, rendered canonical
+- [x] The format is **UUID v7 in a native `uuid` column**, rendered canonical
       hyphenated in URLs. Add the `uuid` crate with its `v7` and `serde`
       features; sqlx already builds with its `uuid` feature
       (`apps/server/Cargo.toml:12`)
-- [ ] Migration mints a UUID per existing song, rewrites `sheets.song_id_fk` to
+- [x] Migration mints a UUID per existing song, rewrites `sheets.song_id_fk` to
       match, then swaps the primary key and drops the bigserial — one
       transaction, so there is no window in which the FK points at nothing.
       `sheets.song_id_fk` is the **only** column referencing `songs(id)`
       (`20260624091738_canonical.up.sql:90`); `sheets`, `charts` and the
       `sheet_*` tables keep their bigserial keys
-- [ ] Every `sqlx::query!` call site binding a song id changes type — `.sqlx/`
+- [x] Every `sqlx::query!` call site binding a song id changes type — `.sqlx/`
       must be regenerated and `cargo build` is the check that none were missed
-- [ ] Backfill is idempotent: re-running must not re-mint an existing id, or
+- [x] Backfill is idempotent: re-running must not re-mint an existing id, or
       every URL in existence changes
-- [ ] A down migration exists and is tested — this is the one change here that
+- [x] A down migration exists and is tested — this is the one change here that
       is painful to reverse by hand, and now it moves a primary key
-- [ ] `.sqlx/` regenerated; `schema.md` documents the key and why it is not
+- [x] `.sqlx/` regenerated; `schema.md` documents the key and why it is not
       `song_id`
-- [ ] A test asserting a re-insert path reuses an existing song's id by matching
+- [x] A test asserting a re-insert path reuses an existing song's id by matching
       on `song_id`. The primary key is identity-bearing now, so "re-inserting a
       song mints a new id" is no longer a harmless storage detail — it is every
       URL for that song changing
@@ -62,3 +62,21 @@ question of which one a given function takes. The cost is real and named in the
 spec: the primary key is now identity-bearing, so a re-insert must reuse the
 existing id rather than mint a fresh one.
 
+
+**2026-11-17: done.** Minted in Postgres, not Rust: the column default is
+`uuidv7()`, built in from Postgres 18. Neon already ran 18; dev and CI
+moved up from 17 in a commit of their own, which also closes that version
+gap. The `uuid` crate was **not** added: the server only reads and binds
+ids, and sqlx's re-exported `Uuid` covers that. It comes in when something
+mints or serializes an id in Rust, which is `api-rewrite`'s business.
+
+The default is what makes ticket 02 mostly free: the sync never names `id`,
+so a new song is minted one and an existing song keeps its own. The
+re-insert test covers that path here.
+
+Measured on dev (1879 songs, 7481 sheets, 7065 charts): every song got a
+distinct v7, and the song, sheet and chart links hashed identically before
+and after the migration. The down migration renumbers songs in upstream
+order, since the old integers are gone; a test runs it down and up again
+with sheets and charts still attached. No `/api/v1` response changes: song
+keys never reached a payload, and the catalog snapshot test still passes.

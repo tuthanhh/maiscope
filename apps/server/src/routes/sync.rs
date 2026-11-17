@@ -90,7 +90,7 @@ async fn sync_delta(
     // A song counts as "changed" if it changed itself OR any of its sheets
     // did — a sheet-only edit (e.g. a future targeted contribution-approve)
     // must still surface the song, since the response nests sheets under it.
-    let changed_song_ids: Vec<i64> = sqlx::query_scalar!(
+    let changed_song_ids: Vec<sqlx::types::Uuid> = sqlx::query_scalar!(
         r#"SELECT DISTINCT so.id AS "id!" FROM songs so
            LEFT JOIN sheets s ON s.song_id_fk = so.id
            WHERE so.revision > $1 OR s.revision > $1"#,
