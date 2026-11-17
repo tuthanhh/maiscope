@@ -1,6 +1,6 @@
 # Spec — Frontend redesign
 
-**Status:** planned
+**Status:** active
 **Milestone:** v2.0
 **Parent:** [`production-v2`](../production-v2/spec.md)
 

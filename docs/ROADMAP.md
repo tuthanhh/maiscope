@@ -61,7 +61,7 @@ Unscheduled.
 | ├ [test-foundation](work/test-foundation/spec.md) | shipped | v1.0 |
 | └ [api-pagination-header](work/api-pagination-header/spec.md) | shipped | v1.0 |
 | [production-v2](work/production-v2/spec.md) — umbrella | planned | v2.0 |
-| ├ [frontend-redesign](work/frontend-redesign/spec.md) | planned | v2.0 |
+| ├ [frontend-redesign](work/frontend-redesign/spec.md) | active | v2.0 |
 | ├ [catalog-difficulties](work/catalog-difficulties/spec.md) | planned | v2.0 |
 | ├ [song-public-id](work/song-public-id/spec.md) | planned | v2.0 |
 | ├ [parser-crate-extraction](work/parser-crate-extraction/spec.md) | planned | v2.0 |
