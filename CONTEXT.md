@@ -42,3 +42,21 @@ One of categories, versions, types, difficulties, regions: an ordered list
 the client resolves codes against for display.
 
 - **Avoid:** "lookup" (the act), "enum".
+
+### Song modal
+
+The information view for a Catalog Song: opened over the grid, addressable
+by URL, one difficulty shown at a time. There is no song page.
+
+### Chart page
+
+The page that plays one Chart: the visualizer's playback surface plus the
+chart's title block, actions, description and chart text panel.
+
+- **Avoid:** "visualizer page" in design documents; "visualizer" names the
+  engine surface inside it.
+
+### Designer line
+
+The third line of a Community card: the chart's note designer from the file,
+falling back to the uploader. The one visual tell between the libraries.

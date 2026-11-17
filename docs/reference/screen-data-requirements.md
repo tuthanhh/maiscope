@@ -219,8 +219,8 @@ it and fetches one thing everywhere else
 |---|---|---|
 | Any screen, at boot | **Reference tables** | Five small ordered lists, fetched on their own before any screen renders, so names resolve without the snapshot |
 | Browse | **Snapshot** | The filter panel is built from aggregates over every sheet (designer counts, distinct levels), and filtering runs in memory. No server search exists |
-| Song detail | **One song** with its sheets | A shared link to a song must not cost the snapshot. The dialog opened from here works from that song's sheets |
-| Sheet dialog | The song it was opened from | Siblings come from the song in hand, whether that song came from the snapshot or a per-song fetch |
+| Song modal, opened by URL | **One song** with its sheets | A shared link to a song must not cost the snapshot. The [design direction](design-direction.md) removes the song page; the modal is the shareable surface and this fetch serves it |
+| Song modal, opened from the grid | The song in hand | Siblings come from the snapshot already loaded |
 | Visualizer, Catalog chart | **One sheet** with its song fields, plus the chart text | Entered by `?sheet=<id>` |
 | Visualizer, community chart | **One community chart** with its song fields, plus the chart text | Entered by `?communityChart=<id>`; the card variant follows the parameter. Two explicit parameters were chosen over one server-disambiguated id because nothing enforces that ids never collide across the two libraries |
 | Community browse | **Page** | Paginated from the first ticket; never part of the Catalog |
@@ -268,6 +268,7 @@ the tickets were silent.
 | Element | Field |
 |---|---|
 | File picker | One `maidata.txt`; the server parses the header |
+| Title, artist | Parsed from the file, shown editable; sent as overrides when changed |
 | Official-song chooser | Searches the snapshot by title in memory; links by the song's minted id |
 | Success | The new song's id, to navigate to its detail |
 | Rejection | Which difficulty (`inote_N`), the token index, the token text, and the cause. Four fields; the ticket forbids flattening them to one message |
