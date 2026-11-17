@@ -9,8 +9,9 @@
 //!
 //! Rows upstream no longer lists are hidden: a song or sheet with a standing
 //! tombstone in `deleted_songs` / `deleted_sheets` is not served (ADR-0026).
-//! The sync clears the tombstone when the row returns. A vanished song's
-//! sheets vanish with it, so the sheet filter alone covers the sheet routes.
+//! The sync clears the tombstone when the row returns. A sheet is also hidden
+//! when its song is, so a found sheet always has a visible song without
+//! relying on the sync tombstoning both.
 
 use sqlx::PgConnection;
 use sqlx::types::Uuid;
@@ -80,6 +81,10 @@ pub async fn fetch_official_sheets(
            WHERE ($1::uuid IS NULL OR s.song_id_fk = $1)
              AND ($2::text IS NULL OR (s.type = $2 AND d.code = $3))
              AND NOT EXISTS (SELECT 1 FROM deleted_sheets t WHERE t.sheet_expr = s.sheet_expr)
+             AND NOT EXISTS (
+                 SELECT 1 FROM songs so JOIN deleted_songs d ON d.song_id = so.song_id
+                 WHERE so.id = s.song_id_fk
+             )
            ORDER BY s.song_id_fk, s.source_index"#,
         song_id,
         r#type,

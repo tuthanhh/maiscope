@@ -563,6 +563,19 @@ mod tests {
             .unwrap();
         assert!(bytes.is_empty(), "v1 misses stay as they were on master");
 
+        // A preflight never reaches the 405 fallback: the outer CORS layer
+        // answers every OPTIONS itself.
+        let preflight = Request::builder()
+            .method("OPTIONS")
+            .uri("/api/reference")
+            .header("fly-client-ip", "203.0.113.100")
+            .header("origin", "https://elsewhere.example")
+            .header("access-control-request-method", "GET")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(preflight).await.unwrap();
+        assert_ne!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+
         let post = Request::builder()
             .method("POST")
             .uri("/api/reference")

@@ -54,6 +54,8 @@ pub struct SyncStats {
     /// so a report can name the candidate pairing of a rename.
     pub songs_vanished_ids: Vec<String>,
     pub songs_inserted_ids: Vec<String>,
+    /// The `song_id`s behind `songs_returned`, sorted.
+    pub songs_returned_ids: Vec<String>,
 }
 
 impl SyncStats {
@@ -63,8 +65,12 @@ impl SyncStats {
     /// and nothing here pairs, merges or repoints anything (`api-rewrite`
     /// rejected rematching). A vanished song is logged once, so a rename
     /// trips this on exactly one run.
+    ///
+    /// A song "appears" by being inserted or by returning: a title corrected
+    /// back to one upstream used before brings its old `song_id` back rather
+    /// than inserting a new one.
     pub fn rename_signature(&self) -> bool {
-        self.songs_vanished > 0 && self.songs_inserted > 0
+        self.songs_vanished > 0 && (self.songs_inserted > 0 || self.songs_returned > 0)
     }
 
     /// The run's counts as a GitHub job-summary block, naming the songs
@@ -103,6 +109,9 @@ impl SyncStats {
             }
             for id in &self.songs_inserted_ids {
                 out.push_str(&format!("- appeared: `{id}`\n"));
+            }
+            for id in &self.songs_returned_ids {
+                out.push_str(&format!("- returned: `{id}`\n"));
             }
         }
         out
@@ -252,16 +261,34 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
     // Rows upstream lists again after vanishing: their tombstones go, so the
     // v2 reads (which hide tombstoned rows, ADR-0026) serve them again, and the
     // return counts as a change so clients refetch.
-    stats.songs_returned = sqlx::query("DELETE FROM deleted_songs WHERE song_id = ANY($1)")
-        .bind(&song_ids)
+    stats.songs_returned_ids = sqlx::query_scalar::<_, String>(
+        "DELETE FROM deleted_songs WHERE song_id = ANY($1) RETURNING song_id",
+    )
+    .bind(&song_ids)
+    .fetch_all(&mut *tx)
+    .await?;
+    stats.songs_returned_ids.sort();
+    stats.songs_returned = stats.songs_returned_ids.len() as i64;
+    let returned_sheets = sqlx::query_scalar::<_, String>(
+        "DELETE FROM deleted_sheets WHERE sheet_expr = ANY($1) RETURNING sheet_expr",
+    )
+    .bind(&sheet_exprs)
+    .fetch_all(&mut *tx)
+    .await?;
+    stats.sheets_returned = returned_sheets.len() as i64;
+    // A returned row unchanged since it left keeps its old `revision`, and
+    // v1's `/sync/delta` would then announce neither the row nor a tombstone
+    // to a client that saw it go. Stamping it re-announces it.
+    sqlx::query("UPDATE songs SET revision = $1, updated_at = now() WHERE song_id = ANY($2)")
+        .bind(revision)
+        .bind(&stats.songs_returned_ids)
         .execute(&mut *tx)
-        .await?
-        .rows_affected() as i64;
-    stats.sheets_returned = sqlx::query("DELETE FROM deleted_sheets WHERE sheet_expr = ANY($1)")
-        .bind(&sheet_exprs)
+        .await?;
+    sqlx::query("UPDATE sheets SET revision = $1, updated_at = now() WHERE sheet_expr = ANY($2)")
+        .bind(revision)
+        .bind(&returned_sheets)
         .execute(&mut *tx)
-        .await?
-        .rows_affected() as i64;
+        .await?;
 
     // Rows the database holds that upstream no longer lists. They are logged
     // and left in place — deleting a sheet would cascade to its chart text —
@@ -1552,6 +1579,13 @@ mod tests {
             "a return is a change clients must see"
         );
 
+        // Stamped with this run's revision, so v1's delta re-announces it.
+        let stamped: i64 =
+            sqlx::query_scalar("SELECT revision FROM songs WHERE song_id = 'Example'")
+                .fetch_one(&pool)
+                .await?;
+        assert_eq!(stamped, back.revision);
+
         // And it can vanish again, logged afresh.
         let again = apply(&pool, &payload(r#"{ "songs": [] }"#)).await?;
         assert_eq!(again.songs_vanished, 1);
@@ -2441,6 +2475,19 @@ mod tests {
 
         assert!(!next.rename_signature());
         Ok(())
+    }
+
+    #[test]
+    fn a_song_returning_while_another_vanishes_is_a_rename_signature() {
+        let stats = SyncStats {
+            songs_vanished: 1,
+            songs_returned: 1,
+            songs_vanished_ids: vec!["New Title".into()],
+            songs_returned_ids: vec!["Old Title".into()],
+            ..SyncStats::default()
+        };
+        assert!(stats.rename_signature());
+        assert!(stats.summary_markdown().contains("- returned: `Old Title`"));
     }
 
     #[test]

@@ -36,8 +36,9 @@ bookmarks keyed by "the minted sheet id", while sheets have no minted id —
 5. **Rows upstream no longer lists are not served.** A song or sheet with a
    standing tombstone in `deleted_songs` / `deleted_sheets` is absent from the
    Catalog and answers `404` at its address. The sync clears a tombstone when
-   its row returns upstream and counts the return as a change, so the
-   revision moves and clients refetch. (Decided after the review of tickets
+   its row returns upstream, stamps the row with the run's revision, and
+   counts the return as a change, so the revision moves and clients refetch;
+   a return beside a vanish trips the rename alarm like an insert does. (Decided after the review of tickets
    01–06, which found that dropping delta left no way to say a row was gone.)
 
 ## Rejected alternatives
