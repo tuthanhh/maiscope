@@ -193,7 +193,7 @@ next client does with it.
 | `songNo` | Nothing | **Gone** | Never rendered. It encodes Catalog position, which the server already holds as `source_index`; a list that wants newest-first asks for that order |
 | `imageUrl` | Browse, song detail, dialog, visualizer | **Client, one helper** | Needs the asset host, which is client configuration (`GAME.dataSourceUrl`) and would otherwise be a server deploy to change. Today the derivation exists twice (Catalog and visualizer); it moves into one function every entry path calls |
 | `imageUrlM` | Nothing | **Gone** | The medium cover is never requested |
-| `sheetExpr` | Browse list keys; bookmark re-resolution; the dialog's visualizer link; the per-sheet fetch | **Gone as identity** | Title-derived, and the composite is never displayed. Every use is "a stable key for this sheet", which the minted sheet id provides. The last composite use is the deep-link query string, which the new visualizer entry replaces |
+| `sheetExpr` | Browse list keys; bookmark re-resolution; the dialog's visualizer link; the per-sheet fetch | **Gone as identity** | Title-derived, and the composite is never displayed. Every use is "a stable key for this sheet", which the minted song id plus type and difficulty code provides ([ADR-0026](../adr/0026-v2-api-carries-codes-and-read-fields-only.md)); no sheet id is minted |
 | `notePercents` | Nothing | **Gone** | Never rendered. Recomputable from `noteCounts` in one line if a screen ever wants it |
 | `$canonicalSheet` and the prototype chain | Browse (filter, map back to canonical), bookmarks (identity check), dialog (bookmark guard) | **Gone; explicit `song` reference** | Exists so a sheet can show its song's title without a join, and so a region-override object can be swapped in and swapped back. The Catalog keeps nesting `songs[].sheets[]` on the wire (compact: 1.8k songs, 7.3k sheets); the client builds its flat sheet list with `sheet.song` pointing at the Song object. Region overrides stay a map on the sheet; the filter reads the override's values instead of swapping objects. Shipping the Catalog flat, song fields repeated per sheet, was rejected as a roughly fourfold growth of song fields on the wire for no screen that needs it |
 
@@ -221,14 +221,14 @@ it and fetches one thing everywhere else
 | Browse | **Snapshot** | The filter panel is built from aggregates over every sheet (designer counts, distinct levels), and filtering runs in memory. No server search exists |
 | Song modal, opened by URL | **One song** with its sheets | A shared link to a song must not cost the snapshot. The [design direction](design-direction.md) removes the song page; the modal is the shareable surface and this fetch serves it |
 | Song modal, opened from the grid | The song in hand | Siblings come from the snapshot already loaded |
-| Visualizer, Catalog chart | **One sheet** with its song fields, plus the chart text | Entered by `?sheet=<id>` |
+| Visualizer, Catalog chart | **One sheet** with its song fields, plus the chart text | Entered by the song's id, the sheet's type and its difficulty code ([ADR-0026](../adr/0026-v2-api-carries-codes-and-read-fields-only.md)) |
 | Visualizer, community chart | **One community chart** with its song fields, plus the chart text | Entered by `?communityChart=<id>`; the card variant follows the parameter. Two explicit parameters were chosen over one server-disambiguated id because nothing enforces that ids never collide across the two libraries |
 | Community browse | **Page** | Paginated from the first ticket; never part of the Catalog |
 | Community detail | **One community song** with its charts | No chart text |
 | Upload chooser | **Snapshot** | Searches official titles in memory. An uploader is logged in and few; the snapshot is cached after first use. A title-only search endpoint for this one picker was rejected as a second filter path |
 | Reports queue | **Page** | Moderator list, paginated, filtered by resolved |
 
-**Bookmarks persist per browser**, keyed by the minted sheet id, so they
+**Bookmarks persist per browser**, keyed by song id, type and difficulty code, so they
 survive a reload and a Catalog refresh. Per-account bookmarks on the server
 are a later addition that keeps the same client key.
 

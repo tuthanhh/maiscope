@@ -1,6 +1,6 @@
 # Spec — API rewrite
 
-**Status:** planned
+**Status:** active
 **Milestone:** v2.0
 **Parent:** [`production-v2`](../production-v2/spec.md)
 
@@ -139,15 +139,38 @@ must name a difficulty that exists in that table.
   in paths, and it is `songs.id` itself rather than a second column beside a
   bigserial. See [`song-public-id`](../song-public-id/spec.md) issue 01.
 
-## Open questions
+## Settled 2026-11-17
 
-- **Payload: raw versus derived.** Blocked on the frontend's data requirements —
-  "should the server send what the client renders?" has no answer until the
-  client is specified. Today's answer is knowable; a redesigned frontend's is not.
-  This is the only one left, and it is blocked on purpose:
-  [`frontend-redesign`](../frontend-redesign/spec.md) issue 01 is item 1 of the
-  build order precisely so this can be answered from a written list rather than
-  from the API someone already had in mind.
+The payload question was blocked on the frontend's data requirements; with
+[`screen-data-requirements.md`](../../reference/screen-data-requirements.md)
+written, the maintainer picked from options. Recorded in
+[ADR-0026](../../adr/0026-v2-api-carries-codes-and-read-fields-only.md):
+
+- **Raw, not derived, and only what a screen reads.** The client derives
+  `imageUrl`; `songNo`, `imageUrlM`, `notePercents` and `sheetExpr` disappear.
+  Fields no screen reads are not sent, `songId` included.
+- **A sheet is its song id, type and difficulty code.** No sheet id is minted;
+  the data-requirements document's `?sheet=<id>` is corrected to match.
+- **Difficulty travels as its `code`**, in payloads as in URLs.
+- **`/sync/delta` is dropped**, as `/sheets/search` was by ADR-0021. The
+  manifest shrinks to its `revision`.
+- **The five reference tables** are `GET /api/reference` and also ride inside
+  the Catalog, per ADR-0021.
+
+## Tickets
+
+| # | Ticket | Note |
+|---|---|---|
+| 01 | [v1 routes move under `routes/v1/`](issues/01-v1-routes-move-aside.md) | Mechanical; makes room |
+| 02 | [Health and reference tables](issues/02-health-and-reference.md) | First `/api` read routes |
+| 03 | [The Catalog](issues/03-catalog.md) | The snapshot, reshaped |
+| 04 | [One song, one sheet](issues/04-song-and-sheet.md) | The addressed reads |
+| 05 | [Chart text](issues/05-chart-text.md) | Plain-text errors through `AppError` |
+| 06 | [Sync manifest](issues/06-sync-manifest.md) | Revision probe only |
+| 07 | [Delete `/api/v1`](issues/07-delete-v1.md) | Last; blocked on the frontend cutover |
+
+Each ticket updates `api-contract.md` for the routes it adds. Until 07, the
+contract describes both trees.
 
 ## Blocked by
 
