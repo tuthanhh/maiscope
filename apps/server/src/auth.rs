@@ -110,6 +110,12 @@ pub fn verify_jwt(secret: &str, token: &str) -> Result<AuthUser, TokenError> {
         _ => TokenError::Invalid,
     })?;
 
+    // jsonwebtoken still accepts a token in the second where `now == exp`;
+    // RFC 7519 §4.1.4 says from `exp` on it MUST NOT be.
+    if data.claims.exp <= unix_now() {
+        return Err(TokenError::Expired);
+    }
+
     let id = Uuid::parse_str(&data.claims.sub).map_err(|_| TokenError::Invalid)?;
     Ok(AuthUser {
         id,
@@ -148,8 +154,8 @@ impl FromRequestParts<AppState> for AuthUser {
     ) -> Result<Self, Self::Rejection> {
         let token = bearer_token(parts).ok_or(AppError::Unauthorized("missing bearer token"))?;
         verify_jwt(state.config.jwt_secret.expose(), token).map_err(|e| match e {
-            TokenError::Expired => AppError::Unauthorized("token expired"),
-            TokenError::Invalid => AppError::Unauthorized("invalid token"),
+            TokenError::Expired => AppError::InvalidToken("token expired"),
+            TokenError::Invalid => AppError::InvalidToken("invalid token"),
         })
     }
 }
@@ -214,6 +220,47 @@ mod tests {
     }
 
     #[test]
+    fn a_token_at_its_exact_expiry_is_expired() {
+        let issued = unix_now() - ACCESS_TOKEN_TTL.as_secs();
+        let token = issue_jwt_at(SECRET, user_id(), Role::User, issued).unwrap();
+        assert_eq!(verify_jwt(SECRET, &token), Err(TokenError::Expired));
+    }
+
+    #[test]
+    fn another_hmac_algorithm_under_the_right_secret_is_invalid() {
+        // The case the algorithm pin exists for: a correctly keyed signature,
+        // but not the algorithm this server issues.
+        let claims = Claims {
+            sub: user_id().to_string(),
+            role: Role::Admin,
+            iat: unix_now(),
+            exp: unix_now() + 60,
+        };
+        for algorithm in [Algorithm::HS384, Algorithm::HS512] {
+            let token = jsonwebtoken::encode(
+                &Header::new(algorithm),
+                &claims,
+                &EncodingKey::from_secret(SECRET.as_bytes()),
+            )
+            .unwrap();
+            assert_eq!(verify_jwt(SECRET, &token), Err(TokenError::Invalid));
+        }
+    }
+
+    #[test]
+    fn a_token_without_exp_or_sub_is_invalid() {
+        let key = EncodingKey::from_secret(SECRET.as_bytes());
+        let now = unix_now();
+        for claims in [
+            serde_json::json!({ "sub": user_id().to_string(), "role": "user", "iat": now }),
+            serde_json::json!({ "role": "user", "iat": now, "exp": now + 60 }),
+        ] {
+            let token = jsonwebtoken::encode(&Header::default(), &claims, &key).unwrap();
+            assert_eq!(verify_jwt(SECRET, &token), Err(TokenError::Invalid));
+        }
+    }
+
+    #[test]
     fn a_token_signed_with_another_secret_is_invalid() {
         let token = issue_jwt_at(
             "another-secret-another-secret-another",
@@ -252,7 +299,7 @@ mod tests {
     }
 
     #[test]
-    fn refresh_tokens_are_random_and_their_hash_is_stable() {
+    fn refresh_tokens_differ_per_call_and_hash_deterministically() {
         let a = generate_refresh_token();
         let b = generate_refresh_token();
         assert_eq!(a.len(), 64);
@@ -291,20 +338,25 @@ mod tests {
         AuthUser::from_request_parts(&mut parts, &state()).await
     }
 
-    async fn rejection_message(result: Result<AuthUser, AppError>) -> String {
+    /// The 401's message, and its challenge header.
+    async fn rejection(result: Result<AuthUser, AppError>) -> (String, String) {
         let response = result.unwrap_err().into_response();
         assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
+        let challenge = response.headers()[axum::http::header::WWW_AUTHENTICATE]
+            .to_str()
+            .unwrap()
+            .to_string();
         let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap();
         let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-        body["message"].as_str().unwrap().to_string()
+        (body["message"].as_str().unwrap().to_string(), challenge)
     }
 
     #[tokio::test]
-    async fn the_extractor_accepts_a_valid_bearer_token_in_any_case() {
+    async fn the_extractor_accepts_the_bearer_scheme_in_any_case() {
         let token = issue_jwt_at(SECRET, user_id(), Role::User, unix_now()).unwrap();
-        for scheme in ["Bearer", "bearer"] {
+        for scheme in ["Bearer", "bearer", "BEARER"] {
             let user = extract(Some(&format!("{scheme} {token}"))).await.unwrap();
             assert_eq!(user.id, user_id());
         }
@@ -312,28 +364,26 @@ mod tests {
 
     #[tokio::test]
     async fn the_extractor_rejects_missing_expired_and_invalid_tokens() {
+        // RFC 6750 §3.1: no credential gets a bare challenge; a bad one gets
+        // `error="invalid_token"`.
+        let missing = ("missing bearer token".to_string(), "Bearer".to_string());
+        assert_eq!(rejection(extract(None).await).await, missing);
         assert_eq!(
-            rejection_message(extract(None).await).await,
-            "missing bearer token"
+            rejection(extract(Some("Basic dXNlcjpwYXNz")).await).await,
+            missing
         );
-        assert_eq!(
-            rejection_message(extract(Some("Basic dXNlcjpwYXNz")).await).await,
-            "missing bearer token"
-        );
-        assert_eq!(
-            rejection_message(extract(Some("Bearer ")).await).await,
-            "missing bearer token"
-        );
+        assert_eq!(rejection(extract(Some("Bearer ")).await).await, missing);
 
+        let invalid = r#"Bearer error="invalid_token""#.to_string();
         let issued = unix_now() - ACCESS_TOKEN_TTL.as_secs() - 1;
         let expired = issue_jwt_at(SECRET, user_id(), Role::User, issued).unwrap();
         assert_eq!(
-            rejection_message(extract(Some(&format!("Bearer {expired}"))).await).await,
-            "token expired"
+            rejection(extract(Some(&format!("Bearer {expired}"))).await).await,
+            ("token expired".to_string(), invalid.clone())
         );
         assert_eq!(
-            rejection_message(extract(Some("Bearer not.a.jwt")).await).await,
-            "invalid token"
+            rejection(extract(Some("Bearer not.a.jwt")).await).await,
+            ("invalid token".to_string(), invalid)
         );
     }
 }

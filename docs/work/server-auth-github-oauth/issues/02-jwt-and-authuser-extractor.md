@@ -30,9 +30,10 @@ load-bearing beyond this feature.
 - [x] `pub struct AuthUser { pub id: Uuid, pub role: Role }` implementing
       `FromRequestParts<AppState>`
 - [x] `AuthUser` rejects with `401` on a missing, malformed, invalid, or expired token
-      — `AppError::Unauthorized`, with `WWW-Authenticate: Bearer`
+      — `AppError::Unauthorized` (no credential, `WWW-Authenticate: Bearer`) or
+      `AppError::InvalidToken` (refused, `Bearer error="invalid_token"`)
 - [x] `JWT_SECRET` is a required `Config` field, at least 32 bytes, held in a
-      `Secret` whose `Debug` prints `***`
+      `Secret` whose `Debug` prints `Secret(***)`
 - [x] `mod auth;` declared in `main.rs`
 - [x] Unit tests: a round-tripped JWT verifies; a tampered one does not; an expired
       one is rejected
@@ -59,3 +60,11 @@ load-bearing beyond this feature.
 **Deploy prerequisite:** production needs a `JWT_SECRET` Fly secret before
 the v2 branch deploys, or the machine fails at startup with
 `JWT_SECRET is not set`.
+
+**2026-11-17 — review.** Applied: a token is expired from the second of its
+`exp`, not one second after (jsonwebtoken's own check is `exp < now`);
+tests now pin the algorithm (HS384/HS512 under the right secret are refused)
+and the required claims; a refused token's challenge carries
+`error="invalid_token"` per RFC 6750 §3.1; `Secret` lost `PartialEq`. The
+32-byte floor is documented as catching an empty or truncated value, not a
+weak one.

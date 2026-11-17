@@ -23,9 +23,7 @@ pub enum AppError {
     BadRequest(String),
     /// `/sync/delta`'s `since` predates the last full reload (contract §3).
     SnapshotRequired,
-    /// No usable credential (contract §4). The message says which of missing,
-    /// expired or invalid, so a client knows whether refreshing can help; it
-    /// never says *why* a token is invalid.
+    /// No credential presented (contract §4).
     #[cfg_attr(
         not(test),
         expect(
@@ -34,6 +32,17 @@ pub enum AppError {
         )
     )]
     Unauthorized(&'static str),
+    /// A credential presented and refused. The message says expired or
+    /// invalid, so a client knows whether refreshing can help; it never says
+    /// *why* a token is invalid.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "constructed by AuthUser, first mounted in ticket 04"
+        )
+    )]
+    InvalidToken(&'static str),
     /// Per-IP rate limit tripped (ticket 08). `retry_after_secs` comes from
     /// `tower_governor`'s own wait-time calculation.
     RateLimited {
@@ -68,11 +77,21 @@ impl IntoResponse for AppError {
                 Json(json!({ "error": "bad_request", "message": message })),
             )
                 .into_response(),
+            // RFC 6750 §3.1: a request with no credential gets the bare
+            // scheme; one whose token was refused also gets
+            // `error="invalid_token"`. The body is the same shape for both.
             AppError::Unauthorized(message) => (
                 StatusCode::UNAUTHORIZED,
-                // RFC 6750 §3: a 401 from a bearer-protected resource names the
-                // scheme it wants.
                 [(axum::http::header::WWW_AUTHENTICATE, "Bearer")],
+                Json(json!({ "error": "unauthorized", "message": message })),
+            )
+                .into_response(),
+            AppError::InvalidToken(message) => (
+                StatusCode::UNAUTHORIZED,
+                [(
+                    axum::http::header::WWW_AUTHENTICATE,
+                    r#"Bearer error="invalid_token""#,
+                )],
                 Json(json!({ "error": "unauthorized", "message": message })),
             )
                 .into_response(),
@@ -170,7 +189,7 @@ mod tests {
 
     #[tokio::test]
     async fn unauthorized_is_401_with_a_bearer_challenge() {
-        let response = AppError::Unauthorized("token expired").into_response();
+        let response = AppError::Unauthorized("missing bearer token").into_response();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         assert_eq!(
             response
@@ -178,6 +197,23 @@ mod tests {
                 .get(axum::http::header::WWW_AUTHENTICATE)
                 .unwrap(),
             "Bearer"
+        );
+        assert_eq!(
+            body_json(response).await,
+            json!({ "error": "unauthorized", "message": "missing bearer token" })
+        );
+    }
+
+    #[tokio::test]
+    async fn invalid_token_names_the_error_in_its_challenge() {
+        let response = AppError::InvalidToken("token expired").into_response();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            response
+                .headers()
+                .get(axum::http::header::WWW_AUTHENTICATE)
+                .unwrap(),
+            r#"Bearer error="invalid_token""#
         );
         assert_eq!(
             body_json(response).await,

@@ -35,7 +35,9 @@ visible as an unexpected logout.
       `GET` only, so every authenticated cross-origin call fails preflight
 - [ ] Response: `{ "token": "<jwt>", "refreshToken": "<opaque>" }`
 - [ ] `GET /auth/me` uses the `AuthUser` extractor and returns
-      `{ id, login, avatarUrl, role }`
+      `{ id, login, avatarUrl, role }`. It reads the `users` row (the JWT
+      carries neither `login` nor `avatarUrl`), so unlike other `AuthUser`
+      routes it sees a deletion at once: a tombstoned row is `401`
 - [ ] `GET /auth/me` without a token, or with an expired one, returns `401`
 - [ ] Both routes registered under `/api` — the version segment is retired in
       v2 ([`api-rewrite`](../../api-rewrite/spec.md)), and this feature builds on

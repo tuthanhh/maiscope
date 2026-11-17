@@ -23,15 +23,18 @@ const DEFAULT_DATABASE_MAX_CONNECTIONS: u32 = 4;
 /// Default log directives when `RUST_LOG` is unset.
 const DEFAULT_LOG_FILTER: &str = "info,tower_http=info";
 
-/// Shortest `JWT_SECRET` accepted. HS256's key is as strong as its entropy,
-/// and 32 bytes is SHA-256's own output size (RFC 7518 §3.2 requires at least
-/// that). A short or empty value is a startup error, not a weak deploy.
+/// Shortest `JWT_SECRET` accepted: RFC 7518 §3.2 requires an HS256 key of at
+/// least SHA-256's output size. This catches an empty or truncated value; it
+/// cannot measure entropy, so a 32-character passphrase passes. Generate the
+/// value (`openssl rand -base64 48`), never choose it.
 const MIN_JWT_SECRET_BYTES: usize = 32;
 
 /// A value that must never reach a log line. `Config` derives `Debug`, so a
 /// plain `String` here would print the secret the first time anyone writes
 /// `?config`.
-#[derive(Clone, PartialEq)]
+/// No `PartialEq`: comparing secrets with `==` is not constant-time, and
+/// nothing should compare them at all.
+#[derive(Clone)]
 pub struct Secret(String);
 
 impl Secret {
@@ -385,6 +388,20 @@ mod tests {
     fn secret_debug_never_prints_the_value() {
         let secret = Secret("hunter2-hunter2-hunter2-hunter2-hunter2".to_string());
         assert_eq!(format!("{secret:?}"), "Secret(***)");
+
+        // And through the struct that holds it, which is what a log line
+        // would format.
+        let config = Config {
+            database_url: String::new(),
+            database_max_connections: 1,
+            port: 0,
+            cors_allowed_origins: vec![],
+            trusted_ip_headers: vec![],
+            jwt_secret: secret,
+            log_filter: String::new(),
+            log_json: false,
+        };
+        assert!(!format!("{config:?}").contains("hunter2"));
     }
 
     #[test]
