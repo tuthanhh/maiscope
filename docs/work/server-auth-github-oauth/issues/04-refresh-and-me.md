@@ -26,6 +26,13 @@ visible as an unexpected logout.
       OAuth callback (issue 03), never through refresh
 - [ ] On success: issue a new JWT **and** a new refresh token, replacing the stored
       hash and setting `refresh_token_expires_at` to **now + 30 days** (rotation)
+- [ ] Rotation is one conditional `UPDATE … WHERE refresh_token_hash = $old AND
+      deleted_at IS NULL AND refresh_token_expires_at > now() RETURNING …`, so of
+      two concurrent refreshes with one token exactly one succeeds; it sets
+      `updated_at = now()`
+- [ ] CORS admits the auth routes: `POST` and `DELETE` beside `GET`, and the
+      `Authorization` and `Content-Type` request headers. Today the layer allows
+      `GET` only, so every authenticated cross-origin call fails preflight
 - [ ] Response: `{ "token": "<jwt>", "refreshToken": "<opaque>" }`
 - [ ] `GET /auth/me` uses the `AuthUser` extractor and returns
       `{ id, login, avatarUrl, role }`

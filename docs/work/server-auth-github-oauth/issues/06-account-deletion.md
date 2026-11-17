@@ -14,7 +14,9 @@ Decided 2026-09-16 — reasoning and the two rejected alternatives are in issue
 - [ ] `DELETE /api/auth/me`, `user+`, acting on `AuthUser.id` — never on an id
       taken from the path or body
 - [ ] Sets `deleted_at`, nulls `login` and `avatar_url`, nulls
-      `refresh_token_hash` and `refresh_token_expires_at`
+      `refresh_token_hash` and `refresh_token_expires_at`, resets `role` to
+      `user`, sets `updated_at` (`users_tombstone_shape` rejects a partial
+      tombstone)
 - [ ] **Does not clear `github_id`.** Without it, a re-login mints a second
       account and the tombstone is unreachable
 - [ ] Does not touch `community_songs`, `community_charts` or

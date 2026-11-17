@@ -169,7 +169,9 @@ Append-only history — every applied revision adds a row (`chart_id`,
 ## Account tables (built)
 
 Not part of `Data`: nothing here reaches `/catalog`, and no catalog table
-references it. Migration `20261117120000_users`.
+references it. Migration `20261117120000_users`. The handlers that write it
+(login, refresh, deletion) are `server-auth-github-oauth` tickets 03, 04 and
+06; the constraints below hold regardless of which path writes.
 
 ### `users`
 One row per GitHub identity that has ever signed in (`server-auth-github-oauth`,
@@ -178,16 +180,21 @@ contract §4). Stores no email and no password.
   `sub` and what community uploads will be attributed to.
 - `github_id BIGINT UNIQUE NOT NULL` — GitHub's numeric user id, the login's
   match key. Never cleared, not even by deletion.
-- `login`, `avatar_url` — GitHub profile fields, refreshed on each login.
-  Nullable: a deleted account has both nulled.
+- `login`, `avatar_url` — GitHub profile fields, written on each login.
+  Nullable only for a deleted account: `users_tombstone_shape` requires a
+  `login` while `deleted_at` is null.
 - `role` — `user | moderator | admin`, enforced by a `CHECK`, default `user`.
-- `refresh_token_hash` — SHA-256 of the current refresh token, never the token
-  itself, so a leaked row is not a working credential.
-  `refresh_token_expires_at` bounds a stolen token that is never used.
+- `refresh_token_hash UNIQUE` — SHA-256 of the current refresh token, never
+  the token itself, so a leaked row is not a working credential. A refresh
+  presents only the token, so the hash is the lookup key.
+  `refresh_token_expires_at` bounds a stolen token that is never used;
+  `users_refresh_token_has_expiry` keeps the two both set or both null.
 - `deleted_at` — set by account deletion, which is a tombstone, not a row
-  removal: `login`, `avatar_url` and the refresh token are nulled and the row
-  stays, keeping uploads attributed. Signing in again with the same GitHub
-  account reactivates it.
+  removal: `login`, `avatar_url` and the refresh token are nulled, `role`
+  drops to `user`, and the row stays, keeping uploads attributed.
+  `users_tombstone_shape` enforces that shape. Signing in again with the same
+  GitHub account reactivates the row, without its former role.
+- `updated_at` — no trigger; every `UPDATE` sets it, as on `sheets`.
 
 ## Relationships
 

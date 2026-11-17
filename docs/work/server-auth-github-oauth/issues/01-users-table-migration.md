@@ -16,8 +16,8 @@ credentials.
 **Status:** done
 
 - [x] `apps/server/migrations/20261117120000_users.up.sql` creates `users`:
-      `id UUID PK DEFAULT uuidv7()`, `github_id BIGINT UNIQUE NOT NULL`, `login TEXT NOT NULL`,
-      `avatar_url TEXT`, `role TEXT NOT NULL DEFAULT 'user'`, `refresh_token_hash TEXT`,
+      `id UUID PK DEFAULT uuidv7()`, `github_id BIGINT UNIQUE NOT NULL`, `login TEXT`,
+      `avatar_url TEXT`, `role TEXT NOT NULL DEFAULT 'user'`, `refresh_token_hash TEXT UNIQUE`,
       `refresh_token_expires_at TIMESTAMPTZ`, `deleted_at TIMESTAMPTZ`,
       `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`, `updated_at` likewise
 - [x] Matching `.down.sql` drops the table
@@ -88,3 +88,12 @@ the token cannot live in a cookie.
   carries RUSTSEC-2023-0071, which an HS256-only server never reaches.
   `oauth2` is built without default features, dropping its bundled reqwest
   0.12: ticket 03 hands it the server's own reqwest 0.13.
+
+**2026-11-17 — branch review.** Applied: `refresh_token_hash` is `UNIQUE`
+(refresh looks a user up by it alone, so it needs the index and may match one
+row at most); `users_refresh_token_has_expiry` keeps hash and expiry paired;
+`users_tombstone_shape` requires a `login` on an active row and an empty,
+`user`-role row on a tombstone. Decided by the maintainer: **deletion resets
+`role` to `user`**, so reactivation restores the account but not its
+privileges, which an admin re-grants by hand. `updated_at` stays
+trigger-free; tickets 03, 04 and 06 set it in their `UPDATE`s.
