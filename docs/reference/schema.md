@@ -169,9 +169,9 @@ Append-only history — every applied revision adds a row (`chart_id`,
 ## Account tables (built)
 
 Not part of `Data`: nothing here reaches `/catalog`, and no catalog table
-references these. Migration `20261117120000_users`. The handlers that write
-them (login, refresh, deletion) are `server-auth-github-oauth` tickets 03, 04
-and 06; the constraints below hold regardless of which path writes.
+references these. Migration `20261117120000_users`; written only by
+`routes/auth.rs` (sign-in, refresh, deletion) through `queries/users.rs`. The
+constraints below hold regardless of which path writes.
 
 ### `users`
 One row per GitHub identity that has ever signed in (contract §4). Stores no

@@ -65,7 +65,8 @@ revision-probe design is working and is not what is broken.
    to song ids, and to any identifier community charts acquire.
 
    The mint is **UUID v7 in a native `uuid` column, canonical hyphenated in
-   URLs**, and it **is the primary key** — `songs.id`, `users.id`, `community_songs.id`,
+   URLs**, and it **is the primary key** — `songs.id`, `users.id`,
+   `user_sessions.id`, `community_songs.id`,
    `community_charts.id`. One scheme across both libraries, and one id per row
    rather than a bigserial with a `public_id` beside it. Two ids for one row is
    two things to keep in step, two things to pick the wrong one of in a query,
@@ -199,6 +200,21 @@ What does not:
   `github_id`, `login`, `avatar_url`, `role`, a refresh-token *hash*, and no
   email — and deletion is settled by cross-cutting rule 6. What is not settled
   is whether that set obliges a privacy policy anywhere it has users.
+
+## Before the first v2 deploy
+
+The branch merges and deploys as one. These are not code, so no test catches
+them; the machine refuses to start without the first three, which surfaces as
+a crash loop while the previous release keeps serving.
+
+- [ ] Create the production GitHub OAuth app with the callback
+      `https://maiscope.pages.dev/auth/callback`; put its client id in
+      `fly.toml` (`GITHUB_CLIENT_ID`, commented out until then)
+- [ ] Set `GITHUB_CLIENT_SECRET` and `JWT_SECRET` as Fly secrets in the
+      dashboard (`openssl rand -base64 48` for the latter)
+- [ ] The frontend's `/auth/callback` route exists and fails closed on
+      `state` (`frontend-redesign` 05)
+- [ ] `backup-database.yml` before `deploy.yml`, per ADR-0024
 
 ## Accepted, not solved
 

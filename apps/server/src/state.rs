@@ -1,9 +1,6 @@
-//! Router state (ticket 03). Bundles the pool with `Config` so future
-//! additions (an HTTP client, a cache) don't mean editing every handler
-//! signature again.
-//!
-//! `http` is the one outbound client, for GitHub (server-auth-github-oauth
-//! 03). `reqwest::Client` is an `Arc` inside, so cloning the state shares its
+//! Router state (ticket 03). Bundles the pool with `Config`, and since
+//! server-auth-github-oauth 03 the one outbound client, `http`, for GitHub —
+//! additions land here rather than in every handler signature. `reqwest::Client` is an `Arc` inside, so cloning the state shares its
 //! connection pool rather than opening a new one.
 
 use std::sync::Arc;

@@ -85,10 +85,14 @@ pub fn router(state: AppState) -> Router {
     // v2 routes live under `/api` with no version segment; the catalog joins
     // them in api-rewrite. Refresh and me share the catalog's bucket, so one
     // IP has one budget for ordinary traffic.
-    let api = Router::new()
+    //
+    // `no_store` wraps the auth routes only, not the `/api` nest: the catalog
+    // is cacheable and will move in beside them.
+    let auth_routes = Router::new()
         .merge(auth::github_router().layer(github_limit_layer))
         .merge(auth::session_router().layer(limit_layer))
         .layer(axum::middleware::map_response(auth::no_store));
+    let api = Router::new().merge(auth_routes);
 
     Router::new()
         .nest(

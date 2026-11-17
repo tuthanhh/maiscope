@@ -151,6 +151,21 @@ fn optional(var: &'static str) -> Result<Option<String>, ConfigError> {
     }
 }
 
+/// A required variable that must also hold something. Fly substitutes an
+/// empty string for a secret that was never set (`bin/migrate.rs`), and
+/// `.env.example` ships these blank, so absence alone is not the failure to
+/// catch.
+fn required_non_empty(var: &'static str) -> Result<String, ConfigError> {
+    let value = required(var)?;
+    if value.trim().is_empty() {
+        return Err(ConfigError::Invalid {
+            var,
+            reason: "is empty".to_string(),
+        });
+    }
+    Ok(value)
+}
+
 /// `None` (unset) defaults to [`DEFAULT_PORT`]; anything present must parse.
 fn parse_port(raw: Option<String>) -> Result<u16, ConfigError> {
     match raw {
@@ -273,8 +288,8 @@ impl Config {
             parse_trusted_ip_headers(optional("TRUSTED_IP_HEADERS")?.unwrap_or_default())?;
         let jwt_secret = parse_jwt_secret(required("JWT_SECRET")?)?;
         let github = GitHubConfig {
-            client_id: required("GITHUB_CLIENT_ID")?,
-            client_secret: Secret(required("GITHUB_CLIENT_SECRET")?),
+            client_id: required_non_empty("GITHUB_CLIENT_ID")?,
+            client_secret: Secret(required_non_empty("GITHUB_CLIENT_SECRET")?),
             redirect_url: parse_redirect_url(required("GITHUB_REDIRECT_URL")?)?,
             oauth_base: GITHUB_OAUTH_BASE.to_string(),
             api_base: GITHUB_API_BASE.to_string(),
@@ -487,6 +502,21 @@ mod tests {
         let _guard = ENV_LOCK.lock().unwrap();
         unsafe { std::env::set_var(TEST_VAR, "value") };
         assert_eq!(required(TEST_VAR).as_deref(), Ok("value"));
+        unsafe { std::env::remove_var(TEST_VAR) };
+    }
+
+    #[test]
+    fn required_non_empty_refuses_a_blank_value() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        for blank in ["", "   "] {
+            unsafe { std::env::set_var(TEST_VAR, blank) };
+            assert!(matches!(
+                required_non_empty(TEST_VAR),
+                Err(ConfigError::Invalid { .. })
+            ));
+        }
+        unsafe { std::env::set_var(TEST_VAR, "id") };
+        assert_eq!(required_non_empty(TEST_VAR).as_deref(), Ok("id"));
         unsafe { std::env::remove_var(TEST_VAR) };
     }
 

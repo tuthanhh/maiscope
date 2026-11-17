@@ -37,9 +37,11 @@ pub enum AppError {
     /// it should not have. The `&'static str` names which call, for the log;
     /// the client gets an opaque body, since the detail is not theirs to act on.
     BadGateway(&'static str),
-    /// A server-side failure that isn't a database error — currently only the
-    /// rate limiter's unreachable key-extraction arm. The `&'static str` names
-    /// the origin for the log line; the client never sees it.
+    /// A server-side failure that isn't a database error or an upstream one: a
+    /// state the code believes unreachable (the rate limiter's key-extraction
+    /// arm, a `users.role` outside the enum, a JWT that will not encode). The
+    /// `&'static str` names the origin for the log line; the client never
+    /// sees it.
     Internal(&'static str),
 }
 

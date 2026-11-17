@@ -13,7 +13,7 @@
 # of magnitude for code the image never runs.
 #
 # The build is hermetic: no database is reachable during `docker build`, and the
-# 64 compile-time `sqlx::query!` macros type-check against the committed `.sqlx/`
+# compile-time `sqlx::query!` macros type-check against the committed `.sqlx/`
 # cache instead (ticket 01).
 #
 # RUST_VERSION and DEBIAN_RELEASE must name the same Debian release. Builder and

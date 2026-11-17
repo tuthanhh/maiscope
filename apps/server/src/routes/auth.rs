@@ -204,9 +204,7 @@ async fn github_callback(
     .await?;
     // Everything that can still fail happens before the commit, so a failure
     // rolls the session back rather than leaving one the client never got.
-    let role = Role::from_db(&user.role).ok_or(AppError::Internal("users.role out of range"))?;
-    let token = auth::issue_jwt(state.config.jwt_secret.expose(), user.id, role)
-        .map_err(|_| AppError::Internal("jwt encoding"))?;
+    let token = access_token(&state, user.id, role_from_db(&user.role)?)?;
     tx.commit().await?;
 
     Ok(Json(SessionResponse {
@@ -293,9 +291,7 @@ async fn refresh(State(state): State<AppState>, body: Bytes) -> Result<Json<Toke
     .ok_or(AppError::InvalidToken("invalid refresh token"))?;
 
     // As in the callback: the old token dies only if the new pair is ready.
-    let role = Role::from_db(&role).ok_or(AppError::Internal("users.role out of range"))?;
-    let token = auth::issue_jwt(state.config.jwt_secret.expose(), user_id, role)
-        .map_err(|_| AppError::Internal("jwt encoding"))?;
+    let token = access_token(&state, user_id, role_from_db(&role)?)?;
     tx.commit().await?;
     Ok(Json(TokenPair {
         token,
@@ -329,10 +325,25 @@ async fn delete_me(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// `users.role` as the enum. The column's `CHECK` makes a miss unreachable,
+/// so one is a 500 and a log line, never a guessed role.
+fn role_from_db(role: &str) -> Result<Role, AppError> {
+    Role::from_db(role).ok_or(AppError::Internal("users.role out of range"))
+}
+
+fn access_token(
+    state: &AppState,
+    user_id: sqlx::types::Uuid,
+    role: Role,
+) -> Result<String, AppError> {
+    auth::issue_jwt(state.config.jwt_secret.expose(), user_id, role)
+        .map_err(|_| AppError::Internal("jwt encoding"))
+}
+
 fn user_from_row(row: UserRow) -> Result<User, AppError> {
     Ok(User {
         id: row.id.to_string(),
-        role: Role::from_db(&row.role).ok_or(AppError::Internal("users.role out of range"))?,
+        role: role_from_db(&row.role)?,
         login: row.login,
         avatar_url: row.avatar_url,
     })
@@ -745,6 +756,25 @@ mod session_tests {
         .unwrap();
     }
 
+    /// Polls until `n` backends in this test's database are waiting on a lock,
+    /// for up to two seconds. Counting the whole database is safe because
+    /// `#[sqlx::test]` gives every test its own.
+    async fn lock_waiters_reach(pool: &PgPool, n: i64) -> sqlx::Result<bool> {
+        for _ in 0..200 {
+            let waiting = sqlx::query_scalar!(
+                r#"SELECT count(*) AS "n!" FROM pg_stat_activity
+                   WHERE datname = current_database() AND wait_event_type = 'Lock'"#
+            )
+            .fetch_one(pool)
+            .await?;
+            if waiting == n {
+                return Ok(true);
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        Ok(false)
+    }
+
     async fn refresh_with(pool: &PgPool, token: &str) -> Result<TokenPair, AppError> {
         let body = serde_json::json!({ "refreshToken": token }).to_string();
         refresh(
@@ -825,20 +855,10 @@ mod session_tests {
             })
             .collect();
 
-        let mut waiting = 0;
-        for _ in 0..200 {
-            waiting = sqlx::query_scalar!(
-                r#"SELECT count(*) AS "n!" FROM pg_stat_activity
-                   WHERE datname = current_database() AND wait_event_type = 'Lock'"#
-            )
-            .fetch_one(&pool)
-            .await?;
-            if waiting == 2 {
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        }
-        assert_eq!(waiting, 2, "both refreshes must be blocked on the row");
+        assert!(
+            lock_waiters_reach(&pool, 2).await?,
+            "both refreshes must be blocked on the row"
+        );
         holder.commit().await?;
 
         let mut outcomes = Vec::new();
@@ -1034,20 +1054,10 @@ mod session_tests {
             let pool = pool.clone();
             tokio::spawn(async move { refresh_with(&pool, "racing").await })
         };
-        let mut waiting = 0;
-        for _ in 0..200 {
-            waiting = sqlx::query_scalar!(
-                r#"SELECT count(*) AS "n!" FROM pg_stat_activity
-                   WHERE datname = current_database() AND wait_event_type = 'Lock'"#
-            )
-            .fetch_one(&pool)
-            .await?;
-            if waiting == 1 {
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        }
-        assert_eq!(waiting, 1, "the refresh must be blocked on the deletion");
+        assert!(
+            lock_waiters_reach(&pool, 1).await?,
+            "the refresh must be blocked on the deletion"
+        );
         deletion.commit().await?;
 
         assert_eq!(status(racer.await.unwrap()), StatusCode::UNAUTHORIZED);
