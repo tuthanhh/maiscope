@@ -17,6 +17,7 @@
 mod chart;
 mod duration;
 mod error;
+pub mod maidata;
 mod note;
 mod slide;
 #[cfg(test)]

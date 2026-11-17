@@ -47,18 +47,18 @@ use std::error::Error;
 use std::path::{Path, PathBuf};
 
 use server::chart_revision::{ChartToApply, apply_chart_revisions};
+use simai::maidata::{self, Maidata, MaidataError};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::types::Uuid;
 use unicode_normalization::UnicodeNormalization;
 
-/// maidata inote slot -> this app's difficulty code (mirrors sheets.difficulty).
-const SLOT_DIFFICULTIES: &[(&str, &str)] = &[
-    ("2", "basic"),
-    ("3", "advanced"),
-    ("4", "expert"),
-    ("5", "master"),
-    ("6", "remaster"),
-];
+/// The standard slots of a parsed file, each with the catalog difficulty
+/// code it seeds (`maidata::standard_difficulty`), in slot order.
+fn standard_slots(m: &Maidata) -> impl Iterator<Item = (&'static str, &maidata::Difficulty)> {
+    m.difficulties
+        .iter()
+        .filter_map(|d| maidata::standard_difficulty(d.slot).map(|code| (code, d)))
+}
 
 /// The looser second-pass key: NFKC folds full-width punctuation onto ASCII
 /// (`～` → `~`, `（` → `(`, `＆` → `&`), case is folded, and runs of
@@ -287,17 +287,23 @@ struct UtageClaim<'a> {
 
 /// A slot-7 folder's claim and its chart text, or `None` when the folder has
 /// no slot-7 chart to seed.
-fn utage_claim<'a>(
-    kv: &'a HashMap<String, String>,
-    dir_name: &'a str,
-) -> Option<(UtageClaim<'a>, &'a String)> {
-    let inote = kv.get("inote_7").filter(|t| !t.trim().is_empty())?;
+fn utage_claim<'a>(m: &'a Maidata, dir_name: &'a str) -> Option<(UtageClaim<'a>, &'a String)> {
+    let slot = utage_slot(m)?;
+    let inote = slot.inote.as_ref()?;
     let claim = UtageClaim {
-        title: kv.get("title").map_or("", |t| t.trim()),
+        title: &m.title,
         dir_name,
-        tag: kv.get("lv_7").map_or("", String::as_str),
+        tag: slot.lv.as_deref().unwrap_or(""),
     };
     Some((claim, inote))
+}
+
+/// Slot 7, when the file has a UTAGE level or chart there. A bare `&des_7=`
+/// does not make a folder UTAGE.
+fn utage_slot(m: &Maidata) -> Option<&maidata::Difficulty> {
+    m.difficulties
+        .iter()
+        .find(|d| d.slot == 7 && (d.lv.is_some() || d.inote.is_some()))
 }
 
 #[derive(Debug, PartialEq)]
@@ -430,37 +436,6 @@ fn exit_code(unmatched_titles: usize, unmatched_difficulties: usize, allow_unmat
     }
 }
 
-/// Parse `&key=value` blocks. A value runs from its `&key=` line until the
-/// next `&key=` line or EOF (inote bodies span many lines with no `&` prefix
-/// of their own).
-fn parse_maidata(text: &str) -> HashMap<String, String> {
-    // A byte-order mark would sit in front of the first `&` and hide that key.
-    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
-    let mut out = HashMap::new();
-    let mut current_key: Option<String> = None;
-    let mut buf: Vec<&str> = Vec::new();
-
-    for line in text.lines() {
-        if let Some(rest) = line.strip_prefix('&')
-            && let Some((key, first_value_line)) = rest.split_once('=')
-        {
-            if let Some(prev_key) = current_key.take() {
-                out.insert(prev_key, buf.join("\n"));
-            }
-            current_key = Some(key.to_string());
-            buf = vec![first_value_line];
-            continue;
-        }
-        if current_key.is_some() {
-            buf.push(line);
-        }
-    }
-    if let Some(prev_key) = current_key {
-        out.insert(prev_key, buf.join("\n"));
-    }
-    out
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     dotenvy::dotenv().ok();
@@ -581,17 +556,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let Ok(text) = std::fs::read_to_string(&maidata_path) else {
             continue; // no maidata.txt in this directory — not a song folder
         };
-        let kv = parse_maidata(&text);
-        let Some(title) = kv.get("title").map(|s| s.trim()) else {
-            eprintln!("warning: {dir_name}: no &title= in maidata.txt, skipping");
-            skipped_songs += 1;
-            continue;
+        let m = match maidata::parse(&text) {
+            Ok(m) => m,
+            Err(MaidataError::MissingTitle) => {
+                eprintln!("warning: {dir_name}: no &title= in maidata.txt, skipping");
+                skipped_songs += 1;
+                continue;
+            }
         };
+        let title = m.title.as_str();
 
         // Slot 7 is UTAGE. No sample folder mixes it with slots 2-6, so the
         // folder is done once its UTAGE chart is resolved.
-        if kv.contains_key("lv_7") || kv.contains_key("inote_7") {
-            let Some((claim, inote)) = utage_claim(&kv, &dir_name) else {
+        if utage_slot(&m).is_some() {
+            let Some((claim, inote)) = utage_claim(&m, &dir_name) else {
                 continue; // a level with no chart: nothing to seed
             };
             let tag = claim.tag;
@@ -623,12 +601,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let claim = Claim {
             title,
             dir_name: &dir_name,
-            levels: SLOT_DIFFICULTIES
-                .iter()
-                .filter_map(|(slot, difficulty)| {
-                    kv.get(&format!("lv_{slot}"))
-                        .map(|lv| (*difficulty, lv.trim().to_string()))
-                })
+            levels: standard_slots(&m)
+                .filter_map(|(code, d)| d.lv.clone().map(|lv| (code, lv)))
                 .collect(),
         };
         let (song_id, chart_type) = match resolve(&claim, &catalog) {
@@ -662,21 +636,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .get(&(song_id, chart_type))
             .expect("resolve only returns (song, type) pairs that have sheets");
 
-        for (slot, difficulty) in SLOT_DIFFICULTIES {
-            let Some(inote) = kv.get(&format!("inote_{slot}")) else {
-                continue;
+        for (difficulty, slot) in standard_slots(&m) {
+            let Some(inote) = &slot.inote else {
+                continue; // a level without a chart, or a blank one
             };
-            if inote.trim().is_empty() {
-                continue;
-            }
 
             let Some(SheetRef {
                 id: sheet_id,
                 sheet_expr,
                 ..
-            }) = sheets.get(*difficulty)
+            }) = sheets.get(difficulty)
             else {
-                if *difficulty != "master" && *difficulty != "remaster" {
+                if difficulty != "master" && difficulty != "remaster" {
                     eprintln!(
                         "warning: {dir_name}: maidata has '{difficulty}' but no matching sheet in the catalog"
                     );
@@ -987,8 +958,8 @@ mod tests {
 
     /// Parse a real header and resolve it the way the run does.
     fn resolve_file(maidata: &str, dir: &str) -> UtageResolution {
-        let kv = parse_maidata(maidata);
-        let (claim, _) = utage_claim(&kv, dir).expect("a slot-7 chart");
+        let m = maidata::parse(maidata).unwrap();
+        let (claim, _) = utage_claim(&m, dir).expect("a slot-7 chart");
         resolve_utage(&claim, &utage_index())
     }
 
@@ -1029,8 +1000,8 @@ mod tests {
 
     #[test]
     fn a_folder_without_a_slot_7_chart_makes_no_claim() {
-        let kv = parse_maidata("&title=[宴] X\n&lv_7=X\n&inote_7=\n");
-        assert!(utage_claim(&kv, "[X] X").is_none());
+        let m = maidata::parse("&title=[宴] X\n&lv_7=X\n&inote_7=\n").unwrap();
+        assert!(utage_claim(&m, "[X] X").is_none());
     }
 
     // Two catalog charts carry 協 for "Love You", one under each title form,
@@ -1092,15 +1063,5 @@ mod tests {
 
         assert_eq!(unique.iter().map(|c| c.sheet_expr.as_str()).collect::<Vec<_>>(), ["a"]);
         assert_eq!(colliding, [r#"["B1", "B2"] all resolve to b"#]);
-    }
-
-    // 25 sample files, 8 of them UTAGE, open with a UTF-8 byte-order mark.
-    // Read as part of the first line, it hid `&title=` and the folder was
-    // dropped as untitled.
-    #[test]
-    fn a_byte_order_mark_does_not_hide_the_first_key() {
-        let kv = parse_maidata("\u{feff}&title=[宴] 3rd Avenue [12?]\n&lv_7=覚\n");
-        assert_eq!(kv.get("title").map(String::as_str), Some("[宴] 3rd Avenue [12?]"));
-        assert_eq!(kv.get("lv_7").map(String::as_str), Some("覚"));
     }
 }
