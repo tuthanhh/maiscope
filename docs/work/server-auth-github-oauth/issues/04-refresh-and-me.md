@@ -54,7 +54,7 @@ visible as an unexpected logout.
 **2026-11-17 — built.** The rotation is a single `UPDATE … FROM users …
 RETURNING`; under READ COMMITTED a racing second refresh waits on the row
 lock, re-evaluates its `WHERE` against the new hash and matches nothing, so
-no explicit lock is taken (a test races two). Every refusal is the same
+no explicit lock is taken. Every refusal is the same
 `401 invalid refresh token`: unknown, expired, rotated and deleted all leave
 the client one move, and distinguishing them would only inform a thief.
 `/me` returns the row's role, not the JWT's. The `#[expect(dead_code)]`
@@ -88,3 +88,20 @@ already config-driven, so adopting one later needs no code change, and buying
 one now would add infra work to the branch whose length is the milestone's
 largest risk.
 
+
+**2026-11-17 — review.** Applied: the concurrency test now forces the
+overlap — it holds the session row's lock until `pg_stat_activity` shows
+both refreshes waiting on it — so it proves the re-check path rather than
+passing on a serial run, and asserts the loser's 401. The refresh commits
+only after the new JWT is encoded (done with issue 03's review). The
+`deleted_at` guard in the rotation reads `users` as of statement start, so a
+deletion committing mid-statement can let one rotation through; that is
+bounded by issue 06's single-transaction deletion, which removes the rotated
+row, and is documented on `rotate_session`. Router tests now cover
+`POST /api/auth/refresh` and an unlisted origin's preflight.
+
+Not changed, by design: rotation has no reuse detection. If a thief rotates
+first, the owner's next refresh fails — the "unexpected logout" the spec
+names as the signal — and the thief's row lives until it expires or the
+account is deleted. Reuse detection would need the old hashes kept per
+session; the spec accepted the simpler rule.

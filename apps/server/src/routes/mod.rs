@@ -339,13 +339,23 @@ mod tests {
         }
     }
 
-    /// Log output written into memory, for asserting what a request logs.
-    #[derive(Clone, Default)]
-    struct Captured(Arc<std::sync::Mutex<Vec<u8>>>);
+    thread_local! {
+        /// Log output for the current thread, while a test is capturing.
+        static CAPTURED: std::cell::RefCell<Option<Vec<u8>>> =
+            const { std::cell::RefCell::new(None) };
+    }
 
-    impl std::io::Write for Captured {
+    /// Writes into [`CAPTURED`] when the current thread is capturing, and
+    /// nowhere otherwise.
+    struct ThreadCapture;
+
+    impl std::io::Write for ThreadCapture {
         fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-            self.0.lock().unwrap().extend_from_slice(buf);
+            CAPTURED.with_borrow_mut(|captured| {
+                if let Some(captured) = captured {
+                    captured.extend_from_slice(buf);
+                }
+            });
             Ok(buf.len())
         }
         fn flush(&mut self) -> std::io::Result<()> {
@@ -353,24 +363,29 @@ mod tests {
         }
     }
 
-    impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for Captured {
-        type Writer = Captured;
-        fn make_writer(&'a self) -> Self::Writer {
-            self.clone()
-        }
+    /// One *global* subscriber for the whole test binary. A thread-local one
+    /// (`set_default`) is not enough: tests running in parallel without it can
+    /// cache a callsite's interest as "never" and hide the trace span, which
+    /// made a scoped version of this test fail one run in three.
+    fn capture_logs() {
+        static INSTALL: std::sync::Once = std::sync::Once::new();
+        INSTALL.call_once(|| {
+            let subscriber = tracing_subscriber::fmt()
+                .with_writer(|| ThreadCapture)
+                .with_max_level(Level::INFO)
+                .with_ansi(false)
+                .finish();
+            tracing::subscriber::set_global_default(subscriber)
+                .expect("no other test installs a global subscriber");
+        });
+        CAPTURED.set(Some(Vec::new()));
     }
 
     // A code in a log line is a session for whoever reads the logs.
     #[sqlx::test]
     async fn the_request_log_never_carries_the_query_string(pool: PgPool) {
-        let captured = Captured::default();
-        let subscriber = tracing_subscriber::fmt()
-            .with_writer(captured.clone())
-            .with_max_level(Level::INFO)
-            .with_ansi(false)
-            .finish();
-        // Thread-local, and `#[sqlx::test]` runs on one thread.
-        let _guard = tracing::subscriber::set_default(subscriber);
+        // `#[sqlx::test]` runs on one thread, so the request logs here.
+        capture_logs();
 
         router(test_state(pool))
             .oneshot(get_from(
@@ -380,11 +395,49 @@ mod tests {
             .await
             .unwrap();
 
-        let logs = String::from_utf8(captured.0.lock().unwrap().clone()).unwrap();
+        let logs = String::from_utf8(CAPTURED.take().unwrap()).unwrap();
         assert!(
             logs.contains("path=/api/auth/github/callback"),
             "the request was not logged at all: {logs}"
         );
         assert!(!logs.contains("REPLAYABLE-CODE"), "{logs}");
+    }
+
+    // Mounted as POST under `/api`, and answering in the contract's shape: a
+    // route typo or a missing `post()` would 404 or 405 here.
+    #[sqlx::test]
+    async fn auth_refresh_is_mounted_as_post(pool: PgPool) {
+        let request = Request::builder()
+            .method("POST")
+            .uri("/api/auth/refresh")
+            .header("fly-client-ip", "203.0.113.96")
+            .header("content-type", "application/json")
+            .body(Body::from("not json"))
+            .unwrap();
+        let response = router(test_state(pool)).oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    // The allowlist is exact: an origin not on it gets no grant at all.
+    #[sqlx::test]
+    async fn an_unlisted_origin_gets_no_cors_grant(pool: PgPool) {
+        let mut state = test_state(pool);
+        Arc::make_mut(&mut state.config).cors_allowed_origins =
+            vec!["https://maiscope.pages.dev".to_string()];
+        let preflight = Request::builder()
+            .method("OPTIONS")
+            .uri("/api/auth/refresh")
+            .header("fly-client-ip", "203.0.113.97")
+            .header("origin", "https://evil.example")
+            .header("access-control-request-method", "POST")
+            .header("access-control-request-headers", "authorization")
+            .body(Body::empty())
+            .unwrap();
+        let response = router(state).oneshot(preflight).await.unwrap();
+        assert!(
+            !response
+                .headers()
+                .contains_key("access-control-allow-origin")
+        );
     }
 }

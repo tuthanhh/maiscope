@@ -801,19 +801,55 @@ mod session_tests {
     }
 
     #[sqlx::test]
-    async fn two_concurrent_refreshes_with_one_token_yield_one_pair(pool: PgPool) {
+    async fn two_concurrent_refreshes_with_one_token_yield_one_pair(
+        pool: PgPool,
+    ) -> sqlx::Result<()> {
         signed_in(&pool, 42, "contested").await;
 
-        let (a, b) = tokio::join!(
-            refresh_with(&pool, "contested"),
-            refresh_with(&pool, "contested")
-        );
+        // Force the overlap rather than hope for it: hold the session row's
+        // lock, start both refreshes, and release only once Postgres shows
+        // both waiting on it. Then they race for the row for real, and the
+        // loser must take the re-check path.
+        let mut holder = pool.begin().await?;
+        sqlx::query!(
+            "SELECT id FROM user_sessions WHERE refresh_token_hash = $1 FOR UPDATE",
+            auth::hash_refresh_token("contested")
+        )
+        .fetch_one(&mut *holder)
+        .await?;
 
-        assert_eq!(
-            [a.is_ok(), b.is_ok()].iter().filter(|ok| **ok).count(),
-            1,
-            "a refresh token is single-use"
-        );
+        let racers: Vec<_> = (0..2)
+            .map(|_| {
+                let pool = pool.clone();
+                tokio::spawn(async move { refresh_with(&pool, "contested").await })
+            })
+            .collect();
+
+        let mut waiting = 0;
+        for _ in 0..200 {
+            waiting = sqlx::query_scalar!(
+                r#"SELECT count(*) AS "n!" FROM pg_stat_activity
+                   WHERE datname = current_database() AND wait_event_type = 'Lock'"#
+            )
+            .fetch_one(&pool)
+            .await?;
+            if waiting == 2 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert_eq!(waiting, 2, "both refreshes must be blocked on the row");
+        holder.commit().await?;
+
+        let mut outcomes = Vec::new();
+        for racer in racers {
+            outcomes.push(racer.await.unwrap());
+        }
+        let winners = outcomes.iter().filter(|r| r.is_ok()).count();
+        assert_eq!(winners, 1, "a refresh token is single-use");
+        let loser = outcomes.into_iter().find(Result::is_err).unwrap();
+        assert_eq!(status(loser), StatusCode::UNAUTHORIZED);
+        Ok(())
     }
 
     #[sqlx::test]

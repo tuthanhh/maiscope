@@ -71,6 +71,14 @@ pub async fn start_session(
 /// reach the row; the second waits on the first's row lock, re-checks the
 /// `WHERE` against the hash the first wrote, and matches nothing. That is
 /// what makes a refresh token single-use without an explicit lock.
+///
+/// The `deleted_at IS NULL` check is weaker: the re-check covers only the
+/// row being updated, so `users` is read as of the statement's start. A
+/// deletion committing mid-statement can still let one rotation through.
+/// That is bounded by deletion itself, which tombstones the user and deletes
+/// their sessions in one transaction: its `DELETE` waits for the rotated row
+/// and removes it, so the new refresh token is dead on arrival and only a JWT
+/// of at most 15 minutes survives — the lag `AuthUser` accepts anyway.
 pub async fn rotate_session(
     conn: &mut PgConnection,
     old_hash: &str,
