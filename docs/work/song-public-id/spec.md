@@ -71,7 +71,10 @@ Changing how the frontend indexes. That moves with the rewrite.
 
 Every song's primary key is a UUID, a newly synced song gets one automatically,
 no bigserial remains on `songs`, and no URL in the system contains a character
-needing percent-encoding.
+needing percent-encoding. The last part lands with
+[`api-rewrite`](../api-rewrite/spec.md), the first API to serve the id;
+`/api/v1` still addresses songs by `song_id` and is frozen. This feature
+stays `active` until then.
 
 `song_id` remains the sync's conflict key, so this feature does not fix renames —
 it only stops a rename from breaking every URL. Detection of renames is

@@ -11,10 +11,10 @@ identifier. See the spec for the reversal and what it costs.
 **Status:** done (2026-11-17)
 
 - [x] The format is **UUID v7 in a native `uuid` column**, rendered canonical
-      hyphenated in URLs. Add the `uuid` crate with its `v7` and `serde`
-      features; sqlx already builds with its `uuid` feature
-      (`apps/server/Cargo.toml:12`). The crate was not needed yet: see the
-      comment below
+      hyphenated in URLs
+- [ ] ~~Add the `uuid` crate with its `v7` and `serde` features~~ deferred to
+      `api-rewrite`, the first code to mint or serialize an id in Rust; sqlx's
+      re-exported `Uuid` covers reading and binding (see the comment below)
 - [x] Migration mints a UUID per existing song, rewrites `sheets.song_id_fk` to
       match, then swaps the primary key and drops the bigserial — one
       transaction, so there is no window in which the FK points at nothing.

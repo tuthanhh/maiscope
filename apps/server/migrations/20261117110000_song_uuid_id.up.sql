@@ -10,8 +10,11 @@
 -- `id`, so a new song gets one and an existing song keeps its own.
 
 ALTER TABLE songs ADD COLUMN new_id UUID;
--- Only rows without one: re-running this backfill must never re-mint.
-UPDATE songs SET new_id = uuidv7() WHERE new_id IS NULL;
+-- Minted once: sqlx records this migration as applied and never runs it
+-- again, and after it the column default mints only for new rows. A down
+-- migration followed by this one does mint fresh ids; nothing outside the
+-- database holds one yet.
+UPDATE songs SET new_id = uuidv7();
 ALTER TABLE songs ALTER COLUMN new_id SET NOT NULL;
 
 ALTER TABLE sheets ADD COLUMN new_song_id_fk UUID;

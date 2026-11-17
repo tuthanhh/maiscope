@@ -35,6 +35,11 @@ cargo run                          # API on :3000
 cargo run --bin seed_songs         # load chart text, keyed by sheet_expr
 ```
 
+The dev database is Postgres 18, matching Neon; migrations use `uuidv7()`,
+which 17 lacks. Its volume is `maiscope-pgdata-18`. A machine that ran the
+17-era volume starts empty after the switch: run the three commands above
+plus `seed_songs` to rebuild it. Nothing in the old volume is deleted.
+
 `seed_songs` reads `songs/` at the repo root — a gitignored local sample, one
 flat directory per song holding `maidata.txt`. It is absent on a fresh clone.
 Matching resolves each folder to one catalog song *and chart type*: `&title=`
@@ -142,7 +147,9 @@ Tests live per-module next to the code they cover, not centralized in
 (`config.rs`, `error.rs`, `rate_limit.rs`, `bin/seed_songs.rs`). Middleware
 behaviour is tested through an assembled `Router` via `tower::ServiceExt::oneshot`
 (`routes/mod.rs`) — handler tests call handlers directly and never exercise a
-layer.
+layer. The one exception to per-module placement is
+`apps/server/tests/song_id_migration.rs`: it runs a migration down and up
+through the migrator, which no module owns.
 
 `engine/` tests the simai parser. Per-note tests are inline `#[cfg(test)]`
 modules in `systems/parser/` — `parse_note`, `parse_slide_note` and

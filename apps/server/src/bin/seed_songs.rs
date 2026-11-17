@@ -490,7 +490,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // stable between runs.
     let mut catalog = Catalog::default();
     let songs: Vec<(Uuid, String)> =
-        sqlx::query_as("SELECT id, title FROM songs WHERE title IS NOT NULL ORDER BY id")
+        sqlx::query_as("SELECT id, title FROM songs WHERE title IS NOT NULL ORDER BY source_index, song_id")
             .fetch_all(&pool)
             .await?;
     for (id, title) in &songs {
@@ -761,7 +761,7 @@ mod tests {
     use super::*;
 
     /// Song n of the test catalog; the resolver treats the key as opaque.
-    fn s(n: u128) -> Uuid {
+    fn song(n: u128) -> Uuid {
         Uuid::from_u128(n)
     }
 
@@ -803,21 +803,21 @@ mod tests {
     /// DX-only "Halcyon", and two songs sharing the title "Dup".
     fn catalog() -> Catalog {
         let mut c = Catalog::default();
-        c.add_song(s(1), "39");
-        c.add_sheet(s(1), "std", "master", sheet("39|std|master", "12+"));
-        c.add_sheet(s(1), "std", "expert", sheet("39|std|expert", "9"));
-        c.add_sheet(s(1), "dx", "master", sheet("39|dx|master", "13"));
-        c.add_sheet(s(1), "dx", "expert", sheet("39|dx|expert", "9"));
-        c.add_song(s(2), "Halcyon");
-        c.add_sheet(s(2), "dx", "master", sheet("Halcyon|dx|master", "13"));
-        c.add_song(s(3), "Dup");
-        c.add_sheet(s(3), "std", "master", sheet("Dup#3|std|master", "10"));
-        c.add_song(s(4), "Dup");
-        c.add_sheet(s(4), "std", "master", sheet("Dup#4|std|master", "11"));
-        c.add_song(s(5), "Retribution ～ Cycle ～");
-        c.add_sheet(s(5), "dx", "master", sheet("Retribution|dx|master", "14"));
-        c.add_song(s(6), "\u{3000}");
-        c.add_sheet(s(6), "dx", "master", sheet("blank|dx|master", "1"));
+        c.add_song(song(1), "39");
+        c.add_sheet(song(1), "std", "master", sheet("39|std|master", "12+"));
+        c.add_sheet(song(1), "std", "expert", sheet("39|std|expert", "9"));
+        c.add_sheet(song(1), "dx", "master", sheet("39|dx|master", "13"));
+        c.add_sheet(song(1), "dx", "expert", sheet("39|dx|expert", "9"));
+        c.add_song(song(2), "Halcyon");
+        c.add_sheet(song(2), "dx", "master", sheet("Halcyon|dx|master", "13"));
+        c.add_song(song(3), "Dup");
+        c.add_sheet(song(3), "std", "master", sheet("Dup#3|std|master", "10"));
+        c.add_song(song(4), "Dup");
+        c.add_sheet(song(4), "std", "master", sheet("Dup#4|std|master", "11"));
+        c.add_song(song(5), "Retribution ～ Cycle ～");
+        c.add_sheet(song(5), "dx", "master", sheet("Retribution|dx|master", "14"));
+        c.add_song(song(6), "\u{3000}");
+        c.add_sheet(song(6), "dx", "master", sheet("blank|dx|master", "1"));
         c
     }
 
@@ -842,11 +842,11 @@ mod tests {
         let c = catalog();
         assert_eq!(
             resolve(&claim("39 [DX]", "39 [DX]", &[]), &c),
-            matched(s(1), "dx", "title")
+            matched(song(1), "dx", "title")
         );
         assert_eq!(
             resolve(&claim("39 [ST]", "39", &[]), &c),
-            matched(s(1), "std", "title")
+            matched(song(1), "std", "title")
         );
         assert_eq!(split_type_suffix("39 [DX] "), ("39", Some("dx")));
         assert_eq!(split_type_suffix("39"), ("39", None));
@@ -856,7 +856,7 @@ mod tests {
     fn a_single_type_song_needs_no_hint() {
         assert_eq!(
             resolve(&claim("Halcyon", "Halcyon", &[]), &catalog()),
-            matched(s(2), "dx", "title")
+            matched(song(2), "dx", "title")
         );
     }
 
@@ -867,11 +867,11 @@ mod tests {
         let c = catalog();
         assert_eq!(
             resolve(&claim("39", "39", &[("master", "13"), ("expert", "9")]), &c),
-            matched(s(1), "dx", "title")
+            matched(song(1), "dx", "title")
         );
         assert_eq!(
             resolve(&claim("39", "39", &[("master", "12+")]), &c),
-            matched(s(1), "std", "title")
+            matched(song(1), "std", "title")
         );
     }
 
@@ -899,7 +899,7 @@ mod tests {
         let c = catalog();
         assert_eq!(
             resolve(&claim("Dup", "Dup", &[("master", "11")]), &c),
-            matched(s(4), "std", "title")
+            matched(song(4), "std", "title")
         );
     }
 
@@ -909,7 +909,7 @@ mod tests {
         let c = catalog();
         assert_eq!(
             resolve(&claim("Halc", "Halcyon", &[]), &c),
-            matched(s(2), "dx", "dir")
+            matched(song(2), "dx", "dir")
         );
     }
 
@@ -918,11 +918,11 @@ mod tests {
         let c = catalog();
         assert_eq!(
             resolve(&claim("Retribution ~ Cycle ~", "x", &[]), &c),
-            matched(s(5), "dx", "title~")
+            matched(song(5), "dx", "title~")
         );
         assert_eq!(
             resolve(&claim("halcyon", "x", &[]), &c),
-            matched(s(2), "dx", "title~")
+            matched(song(2), "dx", "title~")
         );
         assert_eq!(fold("Ａ  b\tC"), "a b c");
     }
