@@ -349,6 +349,11 @@ error="invalid_token"` when one was refused, with the message `token expired`
   (see below). Acts on the token's user only. Idempotent: deleting a deleted
   account is `204` again. `401` without a valid token.
 
+**Every `/api/auth/*` response carries `Cache-Control: no-store`** — tokens
+and personal data are not for a browser cache or anything between (RFC 6749
+§5.1). The request log records the path only, never the query string: a
+callback's `code` could still be exchanged by anyone reading it.
+
 **Tokens live in client storage, not a cookie.** The frontend and API are on
 different registrable domains (`pages.dev` and `fly.dev` are both Public Suffix
 List entries), so an API-set cookie is third-party and browsers block it. Hence
@@ -443,7 +448,9 @@ Status enum: `pending | approved | rejected | merged`.
   (`server-restructure` issue 08). `429` + `Retry-After` (always at least `1` — the underlying limiter
   reports whole seconds and would otherwise say `0`, i.e. "retry now"), same
   `{ "error": "rate_limited", "message": ... }` shape as every other error.
-  `/healthcheck` is exempt. Phase 2 write endpoints (§5) reuse this same
+  `/healthcheck` is exempt. The two GitHub sign-in routes have their own,
+  tighter bucket (burst 10, then one per 6 s), since each callback is an
+  outbound exchange and a transaction; refresh and `me` share the main one. Phase 2 write endpoints (§5) reuse this same
   limiter: a per-user quota was considered and **deferred**, so the only
   write-specific bound is a 512 KB body limit on the upload route (see
   `production-v2`'s *Accepted, not solved*).

@@ -84,3 +84,24 @@ an additive field. Ticket 05 updates the contract to match in the same feature.
 - **New required config:** `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`,
   `GITHUB_REDIRECT_URL`. `fly.toml` carries the production redirect and a
   commented-out client id to fill in once the OAuth app exists.
+
+**2026-11-17 — review.** Applied:
+
+- **The request log no longer records the query string.** `DefaultMakeSpan`
+  logged the full URI, so every real login wrote a still-exchangeable `code`
+  to the logs; anyone with log access could replay it within its lifetime
+  for the victim's session. The span now records method and path, and a test
+  captures real log output from a callback to prove the code is absent.
+- `Cache-Control: no-store` on every `/api/auth/*` response.
+- The two GitHub routes have their own rate-limit bucket (burst 10, one per
+  6 s), proven through the assembled router along with the health exemption.
+- The JWT is encoded before the commit, here and in refresh, so a late
+  failure rolls the session back instead of stranding it; a test forces the
+  session insert to fail after the upsert and finds no user row.
+- A transport failure logs the reqwest cause, not oauth2's bare "Request
+  failed".
+
+Carried, not fixed here: the SPA's `state` check is the whole login-CSRF
+defence and must fail closed — now a checklist item on `frontend-redesign`
+05. `fly.toml`'s redirect points at a frontend route that does not exist yet;
+intended, since the v2 branch deploys API and frontend together.

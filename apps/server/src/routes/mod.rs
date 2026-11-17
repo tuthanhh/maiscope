@@ -12,7 +12,7 @@ use std::time::Duration;
 use axum::Router;
 use axum::http::{HeaderValue, Method, header};
 use tower_http::cors::CorsLayer;
-use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
+use tower_http::trace::{DefaultOnResponse, TraceLayer};
 use tracing::Level;
 
 use crate::rate_limit;
@@ -35,6 +35,14 @@ const RATE_LIMIT_PERIOD: Duration = Duration::from_secs(1);
 // ever seen. A minute is far longer than the quota takes to refill, so a
 // reaped entry is always one that has genuinely gone idle.
 const RATE_LIMIT_CLEANUP_INTERVAL: Duration = Duration::from_secs(60);
+
+// The GitHub sign-in routes get their own bucket, tighter and separate: each
+// callback is an outbound token exchange (up to 10 s) and a transaction, and a
+// user who has been browsing the catalog should not find sign-in throttled.
+// Ten, then one per 6 s, is several sign-ins' worth for a household or an
+// arcade sharing one address.
+const GITHUB_RATE_LIMIT_BURST_SIZE: u32 = 10;
+const GITHUB_RATE_LIMIT_PERIOD: Duration = Duration::from_secs(6);
 
 pub fn router(state: AppState) -> Router {
     // Unparseable entries are dropped, not a startup error: a CORS
@@ -67,9 +75,20 @@ pub fn router(state: AppState) -> Router {
         .merge(charts::router())
         .layer(limit_layer.clone());
 
+    let (github_limit_layer, github_limiter) = rate_limit::layer(
+        &state.config.trusted_ip_headers,
+        GITHUB_RATE_LIMIT_BURST_SIZE,
+        GITHUB_RATE_LIMIT_PERIOD,
+    );
+    rate_limit::spawn_reaper(github_limiter, RATE_LIMIT_CLEANUP_INTERVAL);
+
     // v2 routes live under `/api` with no version segment; the catalog joins
-    // them in api-rewrite. Same limiter, so one IP has one bucket across both.
-    let api = Router::new().merge(auth::router()).layer(limit_layer);
+    // them in api-rewrite. Refresh and me share the catalog's bucket, so one
+    // IP has one budget for ordinary traffic.
+    let api = Router::new()
+        .merge(auth::github_router().layer(github_limit_layer))
+        .merge(auth::session_router().layer(limit_layer))
+        .layer(axum::middleware::map_response(auth::no_store));
 
     Router::new()
         .nest(
@@ -79,13 +98,24 @@ pub fn router(state: AppState) -> Router {
         .nest("/api", api)
         // Both default to DEBUG; DEFAULT_LOG_FILTER (config.rs) is
         // "info,tower_http=info", so both need bumping to INFO or they're
-        // silently filtered out. make_span_with's level gates the span
-        // itself (which carries method/uri) — get that one wrong and the
-        // on_response event fires with no span context, so method/path
-        // never show up even though status/latency do.
+        // silently filtered out. The span's level gates the span itself —
+        // get that one wrong and the on_response event fires with no span
+        // context, so method/path never show up even though status/latency
+        // do.
+        //
+        // The path, never the URI: `DefaultMakeSpan` records the query
+        // string, and `/api/auth/github/callback?code=…` carries a code this
+        // server can still exchange for a session. Anyone reading the logs
+        // could replay it within its lifetime.
         .layer(
             TraceLayer::new_for_http()
-                .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
+                .make_span_with(|request: &axum::extract::Request| {
+                    tracing::info_span!(
+                        "request",
+                        method = %request.method(),
+                        path = %request.uri().path(),
+                    )
+                })
                 .on_response(DefaultOnResponse::new().level(Level::INFO)),
         )
         .layer(tower_http::compression::CompressionLayer::new())
@@ -265,5 +295,96 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[sqlx::test]
+    async fn sign_in_has_its_own_bucket_and_health_stays_exempt(pool: PgPool) {
+        let app = router(test_state(pool));
+        let ip = "203.0.113.93";
+        let login = "/api/auth/github/login?state=abcdefghijklmnopqrst";
+
+        let mut throttled = false;
+        for _ in 0..GITHUB_RATE_LIMIT_BURST_SIZE + 5 {
+            let response = app.clone().oneshot(get_from(login, ip)).await.unwrap();
+            if response.status() == StatusCode::TOO_MANY_REQUESTS {
+                throttled = true;
+                break;
+            }
+        }
+        assert!(throttled, "the sign-in limiter is not wired");
+
+        // Same IP: the session routes and health answer from other buckets.
+        for (path, expected) in [
+            ("/api/auth/me", StatusCode::UNAUTHORIZED),
+            ("/api/v1/healthcheck", StatusCode::OK),
+        ] {
+            let response = app.clone().oneshot(get_from(path, ip)).await.unwrap();
+            assert_eq!(response.status(), expected, "{path}");
+        }
+    }
+
+    #[sqlx::test]
+    async fn auth_responses_are_never_cached(pool: PgPool) {
+        let app = router(test_state(pool));
+        for path in [
+            "/api/auth/me",
+            "/api/auth/github/login?state=abcdefghijklmnopqrst",
+        ] {
+            let response = app
+                .clone()
+                .oneshot(get_from(path, "203.0.113.94"))
+                .await
+                .unwrap();
+            assert_eq!(response.headers()["cache-control"], "no-store", "{path}");
+        }
+    }
+
+    /// Log output written into memory, for asserting what a request logs.
+    #[derive(Clone, Default)]
+    struct Captured(Arc<std::sync::Mutex<Vec<u8>>>);
+
+    impl std::io::Write for Captured {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for Captured {
+        type Writer = Captured;
+        fn make_writer(&'a self) -> Self::Writer {
+            self.clone()
+        }
+    }
+
+    // A code in a log line is a session for whoever reads the logs.
+    #[sqlx::test]
+    async fn the_request_log_never_carries_the_query_string(pool: PgPool) {
+        let captured = Captured::default();
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(captured.clone())
+            .with_max_level(Level::INFO)
+            .with_ansi(false)
+            .finish();
+        // Thread-local, and `#[sqlx::test]` runs on one thread.
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        router(test_state(pool))
+            .oneshot(get_from(
+                "/api/auth/github/callback?code=REPLAYABLE-CODE",
+                "203.0.113.95",
+            ))
+            .await
+            .unwrap();
+
+        let logs = String::from_utf8(captured.0.lock().unwrap().clone()).unwrap();
+        assert!(
+            logs.contains("path=/api/auth/github/callback"),
+            "the request was not logged at all: {logs}"
+        );
+        assert!(!logs.contains("REPLAYABLE-CODE"), "{logs}");
     }
 }

@@ -30,8 +30,9 @@ which is where `migrations/` and `.env` live.
 The server refuses to start without a `JWT_SECRET` of at least 32 bytes; the
 `sed` line fills the empty one `.env.example` ships with a random key.
 
-It also refuses to start without `GITHUB_CLIENT_ID` and
-`GITHUB_CLIENT_SECRET`. Sign-in needs a GitHub OAuth app of your own for
+It also refuses to start without `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`
+and `GITHUB_REDIRECT_URL` (`.env.example` sets the last to the local
+frontend's callback). Sign-in needs a GitHub OAuth app of your own for
 local work (github.com/settings/developers, callback URL
 `http://localhost:1420/auth/callback`). To run the server without signing in,
 any non-empty placeholder boots it; only the login itself then fails.

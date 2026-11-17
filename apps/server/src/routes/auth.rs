@@ -29,12 +29,29 @@ use crate::queries;
 use crate::state::AppState;
 use crate::types::{SessionResponse, TokenPair, User, UserRow};
 
-pub fn router() -> Router<AppState> {
+/// The two routes that reach GitHub. Split from [`session_router`] so the
+/// caller can give them their own, tighter rate limit: each callback costs an
+/// outbound exchange and a transaction.
+pub fn github_router() -> Router<AppState> {
     Router::new()
         .route("/auth/github/login", get(github_login))
         .route("/auth/github/callback", get(github_callback))
+}
+
+pub fn session_router() -> Router<AppState> {
+    Router::new()
         .route("/auth/refresh", post(refresh))
         .route("/auth/me", get(me).delete(delete_me))
+}
+
+/// Applied to every auth route: tokens and personal data must not be stored
+/// by a browser or anything between (RFC 6749 §5.1 for token responses).
+pub async fn no_store(mut response: Response) -> Response {
+    response.headers_mut().insert(
+        axum::http::header::CACHE_CONTROL,
+        axum::http::HeaderValue::from_static("no-store"),
+    );
+    response
 }
 
 /// oauth2's client with an authorize and a token endpoint set, and nothing
@@ -155,7 +172,14 @@ async fn github_callback(
                 // a redirect URL the app does not list. Those are ours to fix,
                 // so they are logged as errors by `BadGateway`, not blamed on
                 // the caller's code.
-                tracing::warn!(error = %e, "github token exchange failed");
+                // oauth2 displays a transport failure as only "Request failed";
+                // the reqwest error says which (timeout, connect, TLS).
+                match &e {
+                    RequestTokenError::Request(cause) => {
+                        tracing::warn!(error = %e, cause = %cause, "github token exchange failed")
+                    }
+                    _ => tracing::warn!(error = %e, "github token exchange failed"),
+                }
                 AppError::BadGateway("github token exchange")
             }
         })?;
@@ -178,11 +202,12 @@ async fn github_callback(
         REFRESH_TOKEN_TTL_DAYS,
     )
     .await?;
-    tx.commit().await?;
-
+    // Everything that can still fail happens before the commit, so a failure
+    // rolls the session back rather than leaving one the client never got.
     let role = Role::from_db(&user.role).ok_or(AppError::Internal("users.role out of range"))?;
     let token = auth::issue_jwt(state.config.jwt_secret.expose(), user.id, role)
         .map_err(|_| AppError::Internal("jwt encoding"))?;
+    tx.commit().await?;
 
     Ok(Json(SessionResponse {
         token,
@@ -254,12 +279,12 @@ async fn refresh(State(state): State<AppState>, body: Bytes) -> Result<Json<Toke
         .map_err(|_| AppError::BadRequest("body must be {\"refreshToken\": string}".into()))?;
 
     let new_refresh_token = auth::generate_refresh_token();
-    let mut conn = state.pool.acquire().await?;
+    let mut tx = state.pool.begin().await?;
     // Unknown, expired, already rotated, or a deleted account: one answer for
     // all of them. Each leaves the client the same move, signing in again,
     // and telling them apart would only inform someone holding a stolen one.
     let (user_id, role) = queries::rotate_session(
-        &mut conn,
+        &mut tx,
         &auth::hash_refresh_token(&refresh_token),
         &auth::hash_refresh_token(&new_refresh_token),
         REFRESH_TOKEN_TTL_DAYS,
@@ -267,9 +292,11 @@ async fn refresh(State(state): State<AppState>, body: Bytes) -> Result<Json<Toke
     .await?
     .ok_or(AppError::InvalidToken("invalid refresh token"))?;
 
+    // As in the callback: the old token dies only if the new pair is ready.
     let role = Role::from_db(&role).ok_or(AppError::Internal("users.role out of range"))?;
     let token = auth::issue_jwt(state.config.jwt_secret.expose(), user_id, role)
         .map_err(|_| AppError::Internal("jwt encoding"))?;
+    tx.commit().await?;
     Ok(Json(TokenPair {
         token,
         refresh_token: new_refresh_token,
@@ -367,6 +394,9 @@ mod tests {
         }
         async fn user(headers: HeaderMap) -> Response {
             let token = headers["authorization"].to_str().unwrap();
+            if token == "Bearer gho_noprofile" {
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
             let profile = token.strip_prefix("Bearer gho_ok:").unwrap();
             let (id, login) = profile.split_once(':').unwrap();
             Json(json!({
@@ -548,7 +578,7 @@ mod tests {
     }
 
     #[sqlx::test]
-    async fn signing_in_reactivates_a_tombstone_without_its_old_role(
+    async fn signing_in_reactivates_a_tombstone_as_the_same_account(
         pool: PgPool,
     ) -> sqlx::Result<()> {
         let tombstone = sqlx::query_scalar!(
@@ -608,6 +638,37 @@ mod tests {
     }
 
     #[sqlx::test]
+    async fn a_failure_after_the_upsert_rolls_the_whole_login_back(
+        pool: PgPool,
+    ) -> sqlx::Result<()> {
+        // Make the session insert fail, after the user row is written.
+        sqlx::query(
+            "CREATE FUNCTION refuse() RETURNS trigger LANGUAGE plpgsql
+             AS $$ BEGIN RAISE EXCEPTION 'refused'; END $$",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "CREATE TRIGGER refuse BEFORE INSERT ON user_sessions
+             FOR EACH ROW EXECUTE FUNCTION refuse()",
+        )
+        .execute(&pool)
+        .await?;
+        let github = fake_github().await;
+        let state = state_against(pool.clone(), &github).await;
+
+        assert_eq!(
+            status_of(callback(&state, "ok:42:alice").await).await,
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+        let users = sqlx::query_scalar!(r#"SELECT count(*) AS "n!" FROM users"#)
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(users, 0, "the upsert must roll back with the session");
+        Ok(())
+    }
+
+    #[sqlx::test]
     async fn a_refused_code_is_400_and_a_failing_github_is_502(pool: PgPool) -> sqlx::Result<()> {
         let github = fake_github().await;
         let state = state_against(pool.clone(), &github).await;
@@ -628,6 +689,12 @@ mod tests {
         assert_eq!(
             status_of(callback(&state, "").await).await,
             StatusCode::BAD_REQUEST
+        );
+
+        // Code accepted, profile refused.
+        assert_eq!(
+            status_of(callback(&state, "noprofile").await).await,
+            StatusCode::BAD_GATEWAY
         );
 
         let unreachable = state_against(pool.clone(), "http://127.0.0.1:9").await;

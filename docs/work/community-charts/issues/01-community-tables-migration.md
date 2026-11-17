@@ -59,5 +59,9 @@ them per request would mean parsing on every page view.
 - [ ] Index on `community_songs(official_song_id)` — the community-side
       "fan charts of this song" lookup
 - [ ] Index on `community_reports(resolved_at)` filtered to open reports
+- [ ] Test: tombstoning an uploader (`queries::tombstone_user`) leaves their
+      `community_songs`, `community_charts` and `community_reports` rows
+      untouched (carried from `server-auth-github-oauth` 06, which shipped
+      before these tables existed)
 - [ ] `.sqlx/` regenerated (`cargo sqlx prepare --workspace -- -p server --all-targets`)
 - [ ] `docs/reference/schema.md` gains the tables
