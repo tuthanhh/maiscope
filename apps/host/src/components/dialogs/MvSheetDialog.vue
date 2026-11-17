@@ -48,7 +48,7 @@ const metaRows = computed(() => [
 ]);
 
 const isBookmarked = computed(() =>
-    selectedSheets.value.includes(selected.value),
+    selectedSheets.value.some((s) => s.key === selected.value.key),
 );
 
 function close(): void {

@@ -5,11 +5,11 @@ import MvCover from "~/components/ui/MvCover.vue";
 
 defineOptions({ name: "BrowseGrid" });
 
-const props = defineProps<{ sheets: Sheet[]; selectedSet: Set<Sheet> }>();
+const props = defineProps<{ sheets: Sheet[]; selectedSet: Set<string> }>();
 const emit = defineEmits<{ select: [sheet: Sheet] }>();
 
 function isBookmarked(sheet: Sheet): boolean {
-    return props.selectedSet.has(sheet);
+    return props.selectedSet.has(sheet.key);
 }
 </script>
 

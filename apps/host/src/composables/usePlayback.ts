@@ -20,6 +20,8 @@ export type Playback = {
     applyNoteSpeed: (v: number) => void;
     togglePlay: () => void;
     restartFromTop: () => void;
+    /** A chart is in the engine; `playing` mirrors whether it is running. */
+    markLoaded: (playing: boolean) => void;
 };
 
 export default function usePlayback(): Playback {
@@ -51,7 +53,13 @@ export default function usePlayback(): Playback {
         playing.value = true;
     }
 
+    function markLoaded(isPlaying: boolean): void {
+        loaded.value = true;
+        playing.value = isPlaying;
+    }
+
     return {
+        markLoaded,
         loaded,
         playing,
         speed,

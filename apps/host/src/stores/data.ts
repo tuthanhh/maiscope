@@ -19,13 +19,19 @@ export const useDataStore = defineStore("data", () => {
   const currentLoadingStatus = ref<LoadingStatus>(LoadingStatus.PENDING);
   const currentLoadingErrorMessage = ref("");
   const currentSelectedSheets = ref<Sheet[]>([]);
-  // Keys of bookmarks not yet matched to a loaded sheet: what was persisted,
-  // until a Catalog arrives to resolve it.
-  let pendingBookmarkKeys = readBookmarkKeys();
-  watch(currentSelectedSheets, (sheets) => {
-    if (currentLoadingStatus.value === LoadingStatus.LOADED) {
-      writeBookmarkKeys(sheets.map((s) => s.key));
-    }
+  // Bookmark keys no loaded Catalog has matched yet: the persisted list before
+  // the first install, then whatever an install could not resolve — a sheet
+  // missing from a stale cached body, or hidden upstream for now (ADR-0026).
+  // They stay persisted, so a later Catalog that has them restores them.
+  let unresolvedBookmarkKeys = readBookmarkKeys();
+  function persistBookmarks(): void {
+    writeBookmarkKeys([
+      ...currentSelectedSheets.value.map((s) => s.key),
+      ...unresolvedBookmarkKeys,
+    ]);
+  }
+  watch(currentSelectedSheets, () => {
+    if (currentLoadingStatus.value === LoadingStatus.LOADED) persistBookmarks();
   });
 
   // Lookup maps for the loaded data. Computed once per load and shared across
@@ -55,24 +61,28 @@ export const useDataStore = defineStore("data", () => {
   // Parse a `/api/catalog` body and make it the current catalog; covers
   // still live on dataSourceUrl. The graph is replaced wholesale
   // (preprocessData freezes it), so bookmarks that point into the old graph
-  // — or were only persisted keys — are re-resolved by sheet key. A key whose
-  // sheet is gone (hidden upstream, ADR-0026) drops out.
+  // — or were only persisted keys — are re-resolved by sheet key. A key this
+  // Catalog lacks is kept aside and stays persisted, not dropped.
   function install(raw: string): void {
     const data = JSON.parse(raw) as Data;
     preprocessData(data, GAME.dataSourceUrl, GAME.gameCode);
 
     const byKey = new Map(data.sheets.map((s) => [s.key, s]));
-    const keys = currentLoadingStatus.value === LoadingStatus.LOADED
-      ? currentSelectedSheets.value.map((s) => s.key)
-      : pendingBookmarkKeys;
-    pendingBookmarkKeys = [];
+    const keys = [
+      ...currentSelectedSheets.value.map((s) => s.key),
+      ...unresolvedBookmarkKeys,
+    ];
+    const resolved: Sheet[] = [];
+    unresolvedBookmarkKeys = [];
+    for (const key of keys) {
+      const sheet = byKey.get(key);
+      if (sheet) resolved.push(sheet);
+      else unresolvedBookmarkKeys.push(key);
+    }
 
     currentData.value = data;
     currentLoadingStatus.value = LoadingStatus.LOADED;
-    currentSelectedSheets.value = keys.flatMap((key) => {
-      const sheet = byKey.get(key);
-      return sheet ? [sheet] : [];
-    });
+    currentSelectedSheets.value = resolved;
   }
 
   // Paint from IndexedDB if it holds a catalog. Returns the revision it was

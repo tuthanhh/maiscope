@@ -56,3 +56,12 @@ database remains, and the dialog's play link opens the visualizer with the
 song's UUID and its card. The consumers were migrated mechanically
 (`sheet.title` → `sheet.song.title`); restyling and the song modal are
 ticket 04.
+
+**2026-11-17 — review.** Applied: a bookmark key no loaded Catalog has is
+kept aside and stays persisted, so a cached paint missing a sheet no longer
+erases it (checked in the browser: an unknown key survives reload and
+toggling); bookmarks compare by `key`, never by object, so a sheet held from
+before a Catalog refresh still matches; `regionalValues` admits `undefined`
+fields instead of asserting them away. Out of scope here, handled by issue
+11's modal: reopening the dialog on the same sheet keeps the last chip, and
+the song page's `?id=` differs from the modal's coming `?song=`.

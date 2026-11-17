@@ -331,7 +331,7 @@ export function filterSheets(sheets: Sheet[], filters: Filters) {
   }
   if (filters.noteDesigners.length !== 0) {
     const noteDesignerSet = new Set(filters.noteDesigners);
-    predicates.push((sheet) => noteDesignerSet.has(values(sheet).noteDesigner));
+    predicates.push((sheet) => noteDesignerSet.has(values(sheet).noteDesigner!));
   }
 
   return predicates.length !== 0

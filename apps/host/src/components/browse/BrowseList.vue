@@ -6,7 +6,7 @@ import MvCover from "~/components/ui/MvCover.vue";
 
 defineOptions({ name: "BrowseList" });
 
-const props = defineProps<{ sheets: Sheet[]; selectedSet: Set<Sheet> }>();
+const props = defineProps<{ sheets: Sheet[]; selectedSet: Set<string> }>();
 const emit = defineEmits<{
     select: [sheet: Sheet];
     bookmark: [sheet: Sheet, event: Event];
@@ -15,7 +15,7 @@ const emit = defineEmits<{
 const { getTypeAbbr } = useGameData();
 
 function isBookmarked(sheet: Sheet): boolean {
-    return props.selectedSet.has(sheet);
+    return props.selectedSet.has(sheet.key);
 }
 </script>
 

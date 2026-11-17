@@ -91,6 +91,13 @@ onUnmounted(() => {
     lead.stop();
 });
 
+// Slider tick rules, hoisted so the sliders' computed ticks are not rebuilt
+// on every page render (the `?debug` readout re-renders once a second).
+const isWholeNumber = (v: number) => Number.isInteger(v);
+const everyTick = () => true;
+const plain = (v: number) => String(v);
+const oneDecimal = (v: number) => v.toFixed(1);
+
 usePageTitle(() => ({ title: t("page-title.visualizer") as string }));
 </script>
 
@@ -123,8 +130,8 @@ usePageTitle(() => ({ title: t("page-title.visualizer") as string }));
                     :max="NOTE_SPEED.max"
                     :step="NOTE_SPEED.step"
                     :disabled="!loaded"
-                    :is-major="(v) => Number.isInteger(v)"
-                    :format="(v) => String(v)"
+                    :is-major="isWholeNumber"
+                    :format="plain"
                     :readout="noteSpeed.toFixed(1)"
                     @change="playback.applyNoteSpeed"
                 />
@@ -135,8 +142,8 @@ usePageTitle(() => ({ title: t("page-title.visualizer") as string }));
                     :max="SPEED.max"
                     :step="SPEED.step"
                     :disabled="!loaded"
-                    :is-major="() => true"
-                    :format="(v) => v.toFixed(1)"
+                    :is-major="everyTick"
+                    :format="oneDecimal"
                     :readout="`${speed.toFixed(1)}×`"
                     @change="playback.applySpeed"
                 />

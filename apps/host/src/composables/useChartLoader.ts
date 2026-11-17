@@ -73,7 +73,6 @@ export default function useChartLoader(playback: Playback): {
             const chart = await fetchChart(song, type, difficulty);
             simai.value = chart;
             await loadChart(chart);
-            playback.loaded.value = true;
 
             // Sound can only start from a user gesture (e.g. arriving via a click in
             // the sheet dialog). On a gesture-less hard reload, start paused — the
@@ -81,10 +80,10 @@ export default function useChartLoader(playback: Playback): {
             const active = navigator.userActivation?.isActive ?? false;
             if (active) {
                 resumeAudio();
-                playback.playing.value = true; // engine auto-plays on parse
+                playback.markLoaded(true); // engine auto-plays on parse
             } else {
                 pause();
-                playback.playing.value = false;
+                playback.markLoaded(false);
             }
             if (playback.speed.value !== 1) setSpeed(playback.speed.value);
         } catch (err: unknown) {
@@ -103,8 +102,7 @@ export default function useChartLoader(playback: Playback): {
         try {
             await loadChart(simai.value);
             // Engine transitions to Playing on its own once the chart is parsed.
-            playback.loaded.value = true;
-            playback.playing.value = true;
+            playback.markLoaded(true);
             lastKey = ""; // manual load supersedes any deep-link key
             sheetInfo.value = null; // pasted chart has no catalog metadata
             resumeAudio(); // this click is a gesture — unlock sound

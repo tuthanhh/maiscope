@@ -111,12 +111,12 @@ const filters = computed<Filters>(() => {
 });
 
 // One Set of selected sheets, shared by the My-List filter and per-row checks.
-const selectedSet = computed(() => new Set(selectedSheets.value));
+const selectedSet = computed(() => new Set(selectedSheets.value.map((s) => s.key)));
 
 const results = computed(() => {
     const sheets = filterSheets(data.value.sheets, filters.value);
     if (!myListOnly.value) return sheets;
-    return sheets.filter((sheet) => selectedSet.value.has(sheet));
+    return sheets.filter((sheet) => selectedSet.value.has(sheet.key));
 });
 
 const bookmarkCount = computed(() => selectedSheets.value.length);

@@ -54,14 +54,14 @@ export function isPlaceholderSheet(sheet: Sheet): boolean {
  * an override object that inherited the rest through the prototype chain;
  * this reads the same values without one.
  */
-export function regionalValues(sheet: Sheet, region: string | null): Required<RegionOverride> {
+export function regionalValues(sheet: Sheet, region: string | null): RegionOverride {
   const override: RegionOverride = (region != null ? sheet.regionOverrides?.[region] : undefined) ?? {};
   return {
-    level: override.level ?? sheet.level!,
-    levelValue: override.levelValue ?? sheet.levelValue!,
-    internalLevel: override.internalLevel ?? sheet.internalLevel!,
-    internalLevelValue: override.internalLevelValue ?? sheet.internalLevelValue!,
-    noteDesigner: override.noteDesigner ?? sheet.noteDesigner!,
+    level: override.level ?? sheet.level,
+    levelValue: override.levelValue ?? sheet.levelValue,
+    internalLevel: override.internalLevel ?? sheet.internalLevel,
+    internalLevelValue: override.internalLevelValue ?? sheet.internalLevelValue,
+    noteDesigner: override.noteDesigner ?? sheet.noteDesigner,
   };
 }
 

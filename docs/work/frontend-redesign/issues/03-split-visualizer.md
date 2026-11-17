@@ -37,3 +37,10 @@ pixel-identically to the unsplit page apart from the live frame stats; the
 steppers, the play-speed slider, play/pause and loading pasted text behave
 as before, with no console errors. The engine boundary is untouched — every
 engine call still goes through `useEngine.ts`.
+
+**2026-11-17 — review.** No drift found. Applied: the slider tick rules are
+hoisted constants, so ticks are not rebuilt on each page render; the loader
+reports a loaded chart through `usePlayback.markLoaded` instead of writing
+its refs. The page still imports engine primitives (mount, transport,
+render toggles); the boundary the ticket guards — nothing outside
+`useEngine.ts` touches wasm — holds.

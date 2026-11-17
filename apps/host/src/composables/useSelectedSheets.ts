@@ -17,7 +17,9 @@ export default function useSelectedSheets() {
   function toggleSheetSelection(sheet: Sheet) {
     const newSelectedSheets = selectedSheets.value.slice();
 
-    const index = newSelectedSheets.indexOf(sheet);
+    // By key, not object: a Catalog refresh replaces every sheet object, and a
+    // sheet held from before it (an open dialog) must still match.
+    const index = newSelectedSheets.findIndex((s) => s.key === sheet.key);
     if (index === -1) {
       newSelectedSheets.push(sheet);
     } else {
