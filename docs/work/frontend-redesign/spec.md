@@ -38,6 +38,18 @@ that now has uploads, accounts and a second library.
 | 03 | [Split the visualizer page](issues/03-split-visualizer.md) | Independent, doable now |
 | 04 | [Screens against the new API](issues/04-screens-on-new-api.md) | Blocked by `api-rewrite` and 06 |
 | 05 | [Community library screens](issues/05-community-screens.md) | Blocked by `community-charts` and 06 |
+| 07 | [Tokens and type](issues/07-tokens-and-type.md) | The design system's foundation |
+| 08 | [Base components](issues/08-base-components.md) | The component inventory |
+| 09 | [Navigation and home](issues/09-navigation-and-home.md) | |
+| 10 | [Browse](issues/10-browse.md) | Grid only, filter drawer |
+| 11 | [Song modal with a URL](issues/11-song-modal.md) | Replaces the song page and sheet dialog |
+| 12 | [Chart page](issues/12-chart-page.md) | Around the unchanged playback surface |
+| 13 | [Copy and locales](issues/13-copy-and-locales.md) | Last |
+
+Issue 04 turned out to be two jobs: reading the new API, done with issue 02,
+and the visual and structural redesign `design-direction.md` describes, too
+large for one ticket. 07–13 split the second along the document's own
+sections, each checked in a browser against the local API.
 
 Ticket numbers are creation order, not execution order — 01 and 06 are both
 documents and both come first. The umbrella's build order is the authority.
