@@ -502,3 +502,13 @@ impl From<OfficialSheetRow> for OfficialSheetFields {
         }
     }
 }
+
+/// `GET /api/songs/{id}/sheets/{type}/{difficulty}`: the sheet's own fields
+/// and an explicit `song`, the same reference the client builds for the
+/// Catalog's sheets — not v1's flattening of song fields into the sheet.
+#[derive(Debug, Serialize)]
+pub struct OfficialSheet {
+    #[serde(flatten)]
+    pub fields: OfficialSheetFields,
+    pub song: OfficialSongFields,
+}

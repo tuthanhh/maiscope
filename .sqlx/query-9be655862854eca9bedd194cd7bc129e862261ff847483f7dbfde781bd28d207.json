@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO sheets (song_id_fk, sheet_expr, type, difficulty, level, source_index)\n             VALUES ($1, 'upstream-key|dx|master', 'dx', 'master', '13+', 0),\n                    ($1, 'upstream-key|utage|【協】', 'utage', '【協】', '14?', 1),\n                    ($1, 'upstream-key|utage|【X】', 'utage', '【X】', '13?', 2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9be655862854eca9bedd194cd7bc129e862261ff847483f7dbfde781bd28d207"
+}

@@ -6,23 +6,32 @@ metadata card. Neither needs the snapshot.
 
 **Blocked by:** 03 (same song and sheet shapes).
 
-**Status:** todo
+**Status:** done
 
-- [ ] `GET /api/songs/{id}` → one song, shaped exactly as an element of the
+- [x] `GET /api/songs/{id}` → one song, shaped exactly as an element of the
       Catalog's `songs[]`
-- [ ] `GET /api/songs/{id}/sheets/{type}/{difficulty}` → the sheet's fields
+- [x] `GET /api/songs/{id}/sheets/{type}/{difficulty}` → the sheet's fields
       plus `"song": { …the song's fields, without "sheets" }` — the explicit
       `sheet.song` reference the client builds, not v1's flattening
-- [ ] `{difficulty}` is `difficulties.code`; axum percent-decodes the segment,
+- [x] `{difficulty}` is `difficulties.code`; axum percent-decodes the segment,
       so `/sheets/utage/%E5%8D%94` finds `協`. ASCII UTAGE codes (`X`, `J`, `r`)
       are case-sensitive
-- [ ] `{id}` not a UUID → `400 bad_request` in the contract's JSON shape, not
+- [x] `{id}` not a UUID → `400 bad_request` in the contract's JSON shape, not
       axum's plain-text path rejection
-- [ ] Unknown song, or a known song without that sheet → `404 not_found`. That
+- [x] Unknown song, or a known song without that sheet → `404 not_found`. That
       covers an unknown `{type}` (`std`, `dx`, `utage` exist) and an unknown
       difficulty code: both are validated by the lookup against `sheets` and
       `difficulties.code`, which is the spec's "checked against
       `difficulties`" — no closed enum in code to drift from the table
-- [ ] Tests: each route's shape against seeded rows, a UTAGE code through the
+- [x] Tests: each route's shape against seeded rows, a UTAGE code through the
       encoded path, a malformed id, and both 404s
-- [ ] Contract: both routes
+- [x] Contract: both routes
+
+## Comments
+
+**2026-11-17 — built.** Both routes reuse issue 03's two queries with their
+filters set; no new SQL. The id is parsed by hand so a bad one is the JSON
+`400`. Besides the handler tests, one test sends `/utage/%E5%8D%94` through
+the router to prove axum decodes the segment, and the bracketed name and a
+lower-cased ASCII code both miss. Live against the dev database, an encoded
+UTAGE path returns its sheet with `"difficulty": "協"`.

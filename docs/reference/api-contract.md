@@ -101,6 +101,29 @@ Songs and sheets are in upstream order. Absent fields are omitted, not `null`;
 `?region=` parameter: region filtering is the client's. `ETag`, `304` and
 `Cache-Control: public, max-age=3600` as v1's Catalog.
 
+### `GET /api/songs/{id}`
+
+One song with its sheets, shaped exactly as an element of the Catalog's
+`songs` — the song modal opened by a shared link, without the snapshot.
+`400 bad_request` when `{id}` is not a UUID; `404 not_found` for an unknown
+song.
+
+### `GET /api/songs/{id}/sheets/{type}/{difficulty}`
+
+One sheet: its own fields as in the Catalog, plus its song under `song`
+(the song's fields, without `sheets`):
+
+```jsonc
+{ "type": "utage", "difficulty": "協", "level": "13?", …, "hasChart": true,
+  "song": { "id": "0195f3c2-…", "title": "…", "artist": "…", … } }
+```
+
+`{type}` is `std`, `dx` or `utage`; `{difficulty}` is `difficulties.code`,
+percent-encoded where it is not ASCII (`/sheets/utage/%E5%8D%94`) and
+case-sensitive (`X` is not `x`). The bracketed name (`【協】`) is not an
+address. `400` for a malformed id; `404` for an unknown song, type or code —
+the lookup is the validation.
+
 ---
 
 ## 1. Catalog — replaces static `data.json`  *(shipped)*

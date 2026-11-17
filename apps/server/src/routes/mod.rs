@@ -3,6 +3,7 @@ mod caching;
 mod catalog;
 mod health;
 mod reference;
+mod songs;
 mod v1;
 
 use std::time::Duration;
@@ -87,6 +88,7 @@ pub fn router(state: AppState) -> Router {
     let reads = Router::new()
         .merge(reference::router())
         .merge(catalog::router())
+        .merge(songs::router())
         .layer(limit_layer);
     let api = Router::new()
         .merge(health::router())
