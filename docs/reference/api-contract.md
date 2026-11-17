@@ -141,6 +141,17 @@ nothing more. v1's handler put a database error's own text in the body; this
 one cannot. The body is the message alone — no `error` code — so the `501`
 reads `chart for '…' has no inline simai content`.
 
+### `GET /api/sync/manifest`
+
+The freshness probe: `{ "revision": 42 }`, `0` before the first sync. The
+client compares it with the revision its cached Catalog was fetched under;
+nothing else is sent (v1's `updateTime`, `catalogHash` and `counts` had no
+reader). `Cache-Control: no-cache`, `ETag`, `304` as v1. There is no
+`/api/sync/delta`
+([ADR-0026](../adr/0026-v2-api-carries-codes-and-read-fields-only.md)): a
+changed revision means refetching the Catalog, which its `ETag` makes cheap
+when nothing else moved.
+
 Under `/api`, a path that matches no route is `404 not_found` in the §6
 envelope, and every path or parameter axum cannot parse is `400 bad_request`
 — never axum's plain-text defaults.
@@ -327,6 +338,9 @@ Errors from this endpoint are plain text, not the §6 JSON error shape.
 ---
 
 ## 3. Sync — revision probe for the client cache  *(shipped)*
+
+> v2 carries the manifest over as `GET /api/sync/manifest` (§0), cut to
+> `revision`, and does not carry `/sync/delta`.
 
 Fills the client-side catalog cache: load cache → check manifest → delta sync →
 atomic swap.

@@ -5,6 +5,7 @@ mod extract;
 mod health;
 mod reference;
 mod songs;
+mod sync;
 mod v1;
 
 use std::time::Duration;
@@ -90,6 +91,7 @@ pub fn router(state: AppState) -> Router {
         .merge(reference::router())
         .merge(catalog::router())
         .merge(songs::router())
+        .merge(sync::router())
         .layer(limit_layer);
     let api = Router::new()
         .merge(health::router())

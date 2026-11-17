@@ -6,10 +6,16 @@ reads nothing else.
 
 **Blocked by:** 01.
 
-**Status:** todo
+**Status:** done
 
-- [ ] `GET /api/sync/manifest` → `{ "revision": n }`; `0` before the first sync
-- [ ] ETag and `304` from `Freshness`; `Cache-Control: no-cache`, as v1
-- [ ] No `/api/sync/delta` ([ADR-0026](../../../adr/0026-v2-api-carries-codes-and-read-fields-only.md))
-- [ ] Test: shape, the revision-0 sentinel on an empty `catalog_meta`, `304`
-- [ ] Contract: §3 gains the v2 manifest and says delta is not carried over
+- [x] `GET /api/sync/manifest` → `{ "revision": n }`; `0` before the first sync
+- [x] ETag and `304` from `Freshness`; `Cache-Control: no-cache`, as v1
+- [x] No `/api/sync/delta` ([ADR-0026](../../../adr/0026-v2-api-carries-codes-and-read-fields-only.md))
+- [x] Test: shape, the revision-0 sentinel on an empty `catalog_meta`, `304`
+- [x] Contract: §3 gains the v2 manifest and says delta is not carried over
+
+## Comments
+
+**2026-11-17 — built.** One query (`Freshness::load`), so no snapshot is
+needed. The manifest's ETag is the Catalog's, as in v1; a client that sends
+it back gets a `304` until the revision moves.
