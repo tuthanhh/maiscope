@@ -15,39 +15,52 @@ visible as an unexpected logout.
 
 **Blocked by:** 02, 03
 
-**Status:** todo
+**Status:** done
 
-- [ ] `POST /auth/refresh` takes `{ "refreshToken": "<opaque>" }`
-- [ ] Presented token hashed and matched against `user_sessions.refresh_token_hash`;
+- [x] `POST /auth/refresh` takes `{ "refreshToken": "<opaque>" }`
+- [x] Presented token hashed and matched against `user_sessions.refresh_token_hash`;
       no match → `401`
-- [ ] A token past `user_sessions.expires_at` → `401`, even if the hash
+- [x] A token past `user_sessions.expires_at` → `401`, even if the hash
       matches
-- [ ] A user with `deleted_at` set → `401`; reactivation happens through the
+- [x] A user with `deleted_at` set → `401`; reactivation happens through the
       OAuth callback (issue 03), never through refresh
-- [ ] On success: issue a new JWT **and** a new refresh token, replacing that
+- [x] On success: issue a new JWT **and** a new refresh token, replacing that
       session row's hash and setting its `expires_at` to **now + 30 days**
       (rotation). Other sessions of the same user are untouched
-- [ ] Rotation is one conditional `UPDATE user_sessions … WHERE
+- [x] Rotation is one conditional `UPDATE user_sessions … WHERE
       refresh_token_hash = $old AND expires_at > now()` joined to a live
       (`deleted_at IS NULL`) user, `RETURNING …`, so of two concurrent refreshes
       with one token exactly one succeeds; it sets `updated_at = now()`
-- [ ] CORS admits the auth routes: `POST` and `DELETE` beside `GET`, and the
+- [x] CORS admits the auth routes: `POST` and `DELETE` beside `GET`, and the
       `Authorization` and `Content-Type` request headers. Today the layer allows
       `GET` only, so every authenticated cross-origin call fails preflight
-- [ ] Response: `{ "token": "<jwt>", "refreshToken": "<opaque>" }`
-- [ ] `GET /auth/me` uses the `AuthUser` extractor and returns
+- [x] Response: `{ "token": "<jwt>", "refreshToken": "<opaque>" }`
+- [x] A body that is not `{ "refreshToken": string }` → `400` in the contract's
+      error shape, not axum's plain-text rejection
+- [x] `GET /auth/me` uses the `AuthUser` extractor and returns
       `{ id, login, avatarUrl, role }`. It reads the `users` row (the JWT
       carries neither `login` nor `avatarUrl`), so unlike other `AuthUser`
       routes it sees a deletion at once: a tombstoned row is `401`
-- [ ] `GET /auth/me` without a token, or with an expired one, returns `401`
-- [ ] Both routes registered under `/api` — the version segment is retired in
+- [x] `GET /auth/me` without a token, or with an expired one, returns `401`
+- [x] Both routes registered under `/api` — the version segment is retired in
       v2 ([`api-rewrite`](../../api-rewrite/spec.md)), and this feature builds on
       the v2 branch, so it never sees `/api/v1`
-- [ ] Tests: refresh rotates and invalidates the previous token; an expired
+- [x] Tests: refresh rotates and invalidates the previous token; an expired
       token is rejected; a deleted user is rejected; `me` returns the
       authenticated user; all reject unauthenticated calls
 
 ## Comments
+
+**2026-11-17 — built.** The rotation is a single `UPDATE … FROM users …
+RETURNING`; under READ COMMITTED a racing second refresh waits on the row
+lock, re-evaluates its `WHERE` against the new hash and matches nothing, so
+no explicit lock is taken (a test races two). Every refusal is the same
+`401 invalid refresh token`: unknown, expired, rotated and deleted all leave
+the client one move, and distinguishing them would only inform a thief.
+`/me` returns the row's role, not the JWT's. The `#[expect(dead_code)]`
+markers from issue 02 fired as unfulfilled the moment these routes mounted,
+and are gone. The contract's §4 and §6 are updated here rather than left
+for issue 05.
 
 **2026-09-16 — the refresh token stays in client storage, and it is not a
 preference.**

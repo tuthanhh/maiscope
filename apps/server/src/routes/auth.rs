@@ -9,10 +9,11 @@
 
 use axum::{
     Json, Router,
+    body::Bytes,
     extract::{Query, State},
     http::{StatusCode, header::LOCATION},
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{get, post},
 };
 use oauth2::basic::BasicClient;
 use oauth2::{
@@ -21,17 +22,19 @@ use oauth2::{
 };
 use serde::Deserialize;
 
-use crate::auth::{self, REFRESH_TOKEN_TTL_DAYS, Role};
+use crate::auth::{self, AuthUser, REFRESH_TOKEN_TTL_DAYS, Role};
 use crate::config::GitHubConfig;
 use crate::error::AppError;
 use crate::queries;
 use crate::state::AppState;
-use crate::types::{SessionResponse, User};
+use crate::types::{SessionResponse, TokenPair, User, UserRow};
 
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/auth/github/login", get(github_login))
         .route("/auth/github/callback", get(github_callback))
+        .route("/auth/refresh", post(refresh))
+        .route("/auth/me", get(me))
 }
 
 /// oauth2's client with an authorize and a token endpoint set, and nothing
@@ -184,12 +187,7 @@ async fn github_callback(
     Ok(Json(SessionResponse {
         token,
         refresh_token,
-        user: User {
-            id: user.id.to_string(),
-            login: user.login,
-            avatar_url: user.avatar_url,
-            role,
-        },
+        user: user_from_row(user)?,
     }))
 }
 
@@ -239,6 +237,60 @@ async fn fetch_profile(state: &AppState, access_token: &str) -> Result<GitHubPro
     serde_json::from_slice(&body).map_err(|e| {
         tracing::warn!(error = %e, "github profile did not parse");
         AppError::BadGateway("github profile")
+    })
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RefreshBody {
+    refresh_token: String,
+}
+
+// POST /auth/refresh — trade a refresh token for a new pair (rotation).
+async fn refresh(State(state): State<AppState>, body: Bytes) -> Result<Json<TokenPair>, AppError> {
+    // Parsed here rather than by axum's `Json`, whose rejection is plain text
+    // rather than the contract's error shape.
+    let RefreshBody { refresh_token } = serde_json::from_slice(&body)
+        .map_err(|_| AppError::BadRequest("body must be {\"refreshToken\": string}".into()))?;
+
+    let new_refresh_token = auth::generate_refresh_token();
+    let mut conn = state.pool.acquire().await?;
+    // Unknown, expired, already rotated, or a deleted account: one answer for
+    // all of them. Each leaves the client the same move, signing in again,
+    // and telling them apart would only inform someone holding a stolen one.
+    let (user_id, role) = queries::rotate_session(
+        &mut conn,
+        &auth::hash_refresh_token(&refresh_token),
+        &auth::hash_refresh_token(&new_refresh_token),
+        REFRESH_TOKEN_TTL_DAYS,
+    )
+    .await?
+    .ok_or(AppError::InvalidToken("invalid refresh token"))?;
+
+    let role = Role::from_db(&role).ok_or(AppError::Internal("users.role out of range"))?;
+    let token = auth::issue_jwt(state.config.jwt_secret.expose(), user_id, role)
+        .map_err(|_| AppError::Internal("jwt encoding"))?;
+    Ok(Json(TokenPair {
+        token,
+        refresh_token: new_refresh_token,
+    }))
+}
+
+// GET /auth/me — the caller, read fresh from `users`.
+async fn me(State(state): State<AppState>, caller: AuthUser) -> Result<Json<User>, AppError> {
+    let mut conn = state.pool.acquire().await?;
+    let row = queries::fetch_active_user(&mut conn, caller.id)
+        .await?
+        .ok_or(AppError::InvalidToken("account deleted"))?;
+    Ok(Json(user_from_row(row)?))
+}
+
+fn user_from_row(row: UserRow) -> Result<User, AppError> {
+    Ok(User {
+        id: row.id.to_string(),
+        role: Role::from_db(&row.role).ok_or(AppError::Internal("users.role out of range"))?,
+        login: row.login,
+        avatar_url: row.avatar_url,
     })
 }
 
@@ -571,6 +623,192 @@ mod tests {
             .fetch_one(&pool)
             .await?;
         assert_eq!(users, 0, "a failed login writes nothing");
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod session_tests {
+    use super::*;
+    use sqlx::PgPool;
+
+    use crate::test_support;
+
+    /// A live user with one session whose refresh token is `token`.
+    async fn signed_in(pool: &PgPool, github_id: i64, token: &str) -> sqlx::types::Uuid {
+        let user = sqlx::query_scalar!(
+            "INSERT INTO users (github_id, login, avatar_url, role)
+             VALUES ($1, 'alice', 'https://avatars.example/alice', 'moderator') RETURNING id",
+            github_id
+        )
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        add_session(pool, user, token, "1 day").await;
+        user
+    }
+
+    async fn add_session(pool: &PgPool, user: sqlx::types::Uuid, token: &str, lifetime: &str) {
+        sqlx::query!(
+            "INSERT INTO user_sessions (user_id, refresh_token_hash, expires_at)
+             VALUES ($1, $2, now() + $3::text::interval)",
+            user,
+            auth::hash_refresh_token(token),
+            lifetime
+        )
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    async fn refresh_with(pool: &PgPool, token: &str) -> Result<TokenPair, AppError> {
+        let body = serde_json::json!({ "refreshToken": token }).to_string();
+        refresh(
+            State(test_support::state(pool.clone(), test_support::config())),
+            Bytes::from(body),
+        )
+        .await
+        .map(|Json(pair)| pair)
+    }
+
+    fn status(result: Result<impl std::fmt::Debug, AppError>) -> StatusCode {
+        result.unwrap_err().into_response().status()
+    }
+
+    #[sqlx::test]
+    async fn refresh_rotates_and_the_old_token_dies(pool: PgPool) -> sqlx::Result<()> {
+        let user = signed_in(&pool, 42, "first").await;
+
+        let pair = refresh_with(&pool, "first").await.unwrap();
+
+        let claims = auth::verify_jwt(test_support::JWT_SECRET, &pair.token).unwrap();
+        assert_eq!(claims.id, user);
+        assert_eq!(claims.role, Role::Moderator, "role comes from the row");
+        assert_eq!(
+            status(refresh_with(&pool, "first").await),
+            StatusCode::UNAUTHORIZED
+        );
+        assert!(refresh_with(&pool, &pair.refresh_token).await.is_ok());
+
+        let days_left = sqlx::query_scalar!(
+            r#"SELECT extract(day FROM expires_at - now())::int AS "d!"
+               FROM user_sessions WHERE user_id = $1"#,
+            user
+        )
+        .fetch_one(&pool)
+        .await?;
+        assert_eq!(
+            days_left,
+            REFRESH_TOKEN_TTL_DAYS - 1,
+            "expiry restarts at 30 days"
+        );
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn refresh_leaves_the_users_other_devices_alone(pool: PgPool) -> sqlx::Result<()> {
+        let user = signed_in(&pool, 42, "phone").await;
+        add_session(&pool, user, "desktop", "1 day").await;
+
+        refresh_with(&pool, "phone").await.unwrap();
+
+        assert!(refresh_with(&pool, "desktop").await.is_ok());
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn two_concurrent_refreshes_with_one_token_yield_one_pair(pool: PgPool) {
+        signed_in(&pool, 42, "contested").await;
+
+        let (a, b) = tokio::join!(
+            refresh_with(&pool, "contested"),
+            refresh_with(&pool, "contested")
+        );
+
+        assert_eq!(
+            [a.is_ok(), b.is_ok()].iter().filter(|ok| **ok).count(),
+            1,
+            "a refresh token is single-use"
+        );
+    }
+
+    #[sqlx::test]
+    async fn refresh_refuses_expired_unknown_and_deleted(pool: PgPool) -> sqlx::Result<()> {
+        let user = signed_in(&pool, 42, "live").await;
+        add_session(&pool, user, "stale", "-1 second").await;
+        assert_eq!(
+            status(refresh_with(&pool, "stale").await),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            status(refresh_with(&pool, "never-issued").await),
+            StatusCode::UNAUTHORIZED
+        );
+
+        // A tombstone with a session left over (deletion removes them; this
+        // proves refresh does not rely on that).
+        sqlx::query!(
+            "UPDATE users SET deleted_at = now(), login = NULL, avatar_url = NULL,
+                              role = 'user' WHERE id = $1",
+            user
+        )
+        .execute(&pool)
+        .await?;
+        assert_eq!(
+            status(refresh_with(&pool, "live").await),
+            StatusCode::UNAUTHORIZED
+        );
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn refresh_rejects_a_malformed_body_as_400(pool: PgPool) {
+        for body in ["", "{}", "not json", r#"{"refreshToken": 42}"#] {
+            let result = refresh(
+                State(test_support::state(pool.clone(), test_support::config())),
+                Bytes::from(body),
+            )
+            .await;
+            assert_eq!(status(result), StatusCode::BAD_REQUEST, "{body:?}");
+        }
+    }
+
+    #[sqlx::test]
+    async fn me_returns_the_caller_as_stored(pool: PgPool) {
+        let user = signed_in(&pool, 42, "t").await;
+        let Json(me) = me(
+            State(test_support::state(pool.clone(), test_support::config())),
+            AuthUser {
+                id: user,
+                // A stale JWT role: `me` reports the row's.
+                role: Role::User,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(me.id, user.to_string());
+        assert_eq!(me.login, "alice");
+        assert_eq!(me.role, Role::Moderator);
+    }
+
+    #[sqlx::test]
+    async fn me_refuses_a_deleted_account_while_its_jwt_still_verifies(
+        pool: PgPool,
+    ) -> sqlx::Result<()> {
+        let user = sqlx::query_scalar!(
+            "INSERT INTO users (github_id, deleted_at) VALUES (42, now()) RETURNING id"
+        )
+        .fetch_one(&pool)
+        .await?;
+        let result = me(
+            State(test_support::state(pool.clone(), test_support::config())),
+            AuthUser {
+                id: user,
+                role: Role::User,
+            },
+        )
+        .await;
+        assert_eq!(status(result), StatusCode::UNAUTHORIZED);
         Ok(())
     }
 }

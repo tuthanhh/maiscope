@@ -306,3 +306,11 @@ pub struct SessionResponse {
     pub refresh_token: String,
     pub user: User,
 }
+
+/// `POST /auth/refresh` response: the rotated pair for this device.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenPair {
+    pub token: String,
+    pub refresh_token: String,
+}

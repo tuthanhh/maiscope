@@ -23,24 +23,10 @@ pub enum AppError {
     /// `/sync/delta`'s `since` predates the last full reload (contract §3).
     SnapshotRequired,
     /// No credential presented (contract §4).
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "constructed by AuthUser, first mounted in ticket 04"
-        )
-    )]
     Unauthorized(&'static str),
-    /// A credential presented and refused. The message says expired or
-    /// invalid, so a client knows whether refreshing can help; it never says
-    /// *why* a token is invalid.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "constructed by AuthUser, first mounted in ticket 04"
-        )
-    )]
+    /// A credential presented and refused: an expired or invalid JWT, a dead
+    /// refresh token, a deleted account. The message distinguishes only what
+    /// changes the client's next move; it never says *why* a token is invalid.
     InvalidToken(&'static str),
     /// Per-IP rate limit tripped (ticket 08). `retry_after_secs` comes from
     /// `tower_governor`'s own wait-time calculation.

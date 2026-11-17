@@ -1,10 +1,3 @@
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "callers arrive with the OAuth callback and /auth/me (tickets 03, 04)"
-    )
-)]
 mod auth;
 mod config;
 mod domain;

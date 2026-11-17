@@ -62,3 +62,53 @@ pub async fn start_session(
     .await?;
     Ok(())
 }
+
+/// Rotates one session's refresh token, if it is live: known, unexpired, and
+/// belonging to an account that is not a tombstone. Returns the user it
+/// belongs to, or `None` for any refusal.
+///
+/// One statement on purpose. Two refreshes racing with the same token both
+/// reach the row; the second waits on the first's row lock, re-checks the
+/// `WHERE` against the hash the first wrote, and matches nothing. That is
+/// what makes a refresh token single-use without an explicit lock.
+pub async fn rotate_session(
+    conn: &mut PgConnection,
+    old_hash: &str,
+    new_hash: &str,
+    ttl_days: i32,
+) -> Result<Option<(Uuid, String)>, sqlx::Error> {
+    let row = sqlx::query!(
+        "UPDATE user_sessions s
+            SET refresh_token_hash = $2,
+                expires_at = now() + make_interval(days => $3),
+                updated_at = now()
+           FROM users u
+          WHERE s.refresh_token_hash = $1
+            AND s.expires_at > now()
+            AND u.id = s.user_id
+            AND u.deleted_at IS NULL
+         RETURNING u.id, u.role",
+        old_hash,
+        new_hash,
+        ttl_days
+    )
+    .fetch_optional(conn)
+    .await?;
+    Ok(row.map(|r| (r.id, r.role)))
+}
+
+/// A user as `/auth/me` shows them, or `None` for a tombstone: the JWT may
+/// still be valid for minutes after a deletion, but this read is not.
+pub async fn fetch_active_user(
+    conn: &mut PgConnection,
+    id: Uuid,
+) -> Result<Option<UserRow>, sqlx::Error> {
+    sqlx::query_as!(
+        UserRow,
+        r#"SELECT id, login AS "login!", avatar_url, role
+           FROM users WHERE id = $1 AND deleted_at IS NULL"#,
+        id
+    )
+    .fetch_optional(conn)
+    .await
+}

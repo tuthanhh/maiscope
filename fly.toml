@@ -43,8 +43,9 @@ LOG_JSON = "true"
 #
 # Production is the Cloudflare Pages origin (`web-delivery` 03). The Vite dev
 # server stays listed so the local frontend can be pointed at the deployed API.
-# Low risk: the API is public read-only with no cookies or auth, so an origin
-# entry grants a browser nothing curl could not already do.
+# Low risk: the API sets no cookies and credentials travel only in an
+# `Authorization` header the page itself sets, so an origin entry grants a
+# browser nothing curl could not already do. (With accounts, v2.)
 #
 # Preview deployments get a distinct origin each and must NOT be added casually —
 # matching is exact, with no wildcard support.

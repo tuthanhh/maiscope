@@ -10,7 +10,7 @@ mod sync;
 use std::time::Duration;
 
 use axum::Router;
-use axum::http::{HeaderValue, Method};
+use axum::http::{HeaderValue, Method, header};
 use tower_http::cors::CorsLayer;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use tracing::Level;
@@ -91,11 +91,19 @@ pub fn router(state: AppState) -> Router {
         .layer(tower_http::compression::CompressionLayer::new())
         // CORS here is an egress control, not a security control — curl
         // ignores it entirely. The real cap on abuse is ticket 08's rate
-        // limiting.
+        // limiting. Credentials travel in an `Authorization` header the page
+        // sets, never in cookies, so no `allow_credentials`: a listed origin
+        // gains nothing a script on it could not already send.
+        //
+        // POST (refresh) and an `Authorization` or JSON `Content-Type`
+        // header make a request non-simple, so the browser preflights it;
+        // anything not listed here fails that preflight before the request
+        // is ever sent (server-auth-github-oauth 04).
         .layer(
             CorsLayer::new()
                 .allow_origin(cors_origins)
-                .allow_methods([Method::GET])
+                .allow_methods([Method::GET, Method::POST, Method::DELETE])
+                .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
                 // Without this the browser hides `X-Total-Count` from JS —
                 // `headers.get()` returns null, no error is raised, and it only
                 // happens cross-origin. A same-origin test cannot catch it, so
@@ -210,5 +218,52 @@ mod tests {
         );
         assert!(response.headers().contains_key("x-total-count"));
         Ok(())
+    }
+
+    // A browser sends nothing authenticated until this preflight passes, and
+    // a handler test cannot see the CORS layer at all.
+    #[sqlx::test]
+    async fn an_authenticated_cross_origin_call_passes_preflight(pool: PgPool) {
+        let origin = "https://maiscope.pages.dev";
+        let mut state = test_state(pool);
+        Arc::make_mut(&mut state.config).cors_allowed_origins = vec![origin.to_string()];
+
+        let preflight = Request::builder()
+            .method("OPTIONS")
+            .uri("/api/auth/refresh")
+            .header("fly-client-ip", "203.0.113.91")
+            .header("origin", origin)
+            .header("access-control-request-method", "POST")
+            .header(
+                "access-control-request-headers",
+                "authorization,content-type",
+            )
+            .body(Body::empty())
+            .unwrap();
+        let response = router(state).oneshot(preflight).await.unwrap();
+
+        let header = |name: &str| {
+            response
+                .headers()
+                .get(name)
+                .unwrap_or_else(|| panic!("preflight lacks {name}"))
+                .to_str()
+                .unwrap()
+                .to_ascii_lowercase()
+        };
+        assert_eq!(header("access-control-allow-origin"), origin);
+        assert!(header("access-control-allow-methods").contains("post"));
+        assert!(header("access-control-allow-headers").contains("authorization"));
+        assert!(header("access-control-allow-headers").contains("content-type"));
+    }
+
+    // Mounted under `/api`, behind the extractor: no token, no user.
+    #[sqlx::test]
+    async fn auth_me_is_mounted_and_refuses_an_anonymous_caller(pool: PgPool) {
+        let response = router(test_state(pool))
+            .oneshot(get_from("/api/auth/me", "203.0.113.92"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 }

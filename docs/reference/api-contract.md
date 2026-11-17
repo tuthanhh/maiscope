@@ -284,9 +284,8 @@ If `since` is too old to diff, respond `409` with
 
 ## 4. Auth — GitHub OAuth, roles user/moderator/admin  *(phase 2)*
 
-**Partly implemented** on the v2 branch: the two GitHub routes are mounted;
-refresh, `me` and deletion are still the plan of record in
-`docs/work/server-auth-github-oauth/`. Required to gate §5.
+**Implemented on the v2 branch** except deletion, which is still the plan of
+record in `docs/work/server-auth-github-oauth/` issue 06. Required to gate §5.
 
 Paths are shown under `/api`, without a version segment — auth is built on the
 v2 branch, which retires `/api/v1` entirely
@@ -321,15 +320,31 @@ by the SPA on another domain.
   `400 bad_request` for a missing code or one GitHub refuses (bad, expired or
   already used); `502 upstream_error` when GitHub cannot be reached or answers
   unexpectedly. A failed callback writes nothing.
-- `POST /api/auth/refresh` → `{ "refreshToken": "<opaque>" }` in, a new JWT *and*
-  a new refresh token out. Refresh tokens rotate on every use and expire 30 days
-  after issue; a token past its expiry is rejected even if its hash matches.
-- `GET /api/auth/me` → current user:
+- `POST /api/auth/refresh` → `{ "refreshToken": "<opaque>" }` in,
+  `{ "token": "<jwt>", "refreshToken": "<opaque>" }` out. Refresh tokens rotate
+  on every use: the presented one stops working as the new one is issued, and
+  of two concurrent refreshes with one token exactly one succeeds. A token
+  lives 30 days from issue or last rotation. Rotation touches only the
+  caller's own session; the user's other devices are unaffected.
+  `401` (`invalid refresh token`) for a token that is unknown, expired,
+  already rotated, or belongs to a deleted account — one answer for all four;
+  `400 bad_request` for a body that is not `{ "refreshToken": string }`.
+- `GET /api/auth/me` → current user, read from the database, so `role` is
+  current even if the JWT's is not:
 ```jsonc
-{ "id": "string", "login": "string", "avatarUrl": "string",
+{ "id": "string", "login": "string", "avatarUrl": "string|null",
   "role": "user|moderator|admin" }
 ```
-`401` when no/invalid token.
+`401` when no/invalid token, or when the account has been deleted — `/me`
+reads the row, so it sees a deletion at once, unlike routes that need only
+the JWT.
+
+**401 responses.** Body `{ "error": "unauthorized", "message": … }` with a
+`WWW-Authenticate` challenge (RFC 6750 §3.1): bare `Bearer` and the message
+`missing bearer token` when no credential was sent; `Bearer
+error="invalid_token"` when one was refused, with the message `token expired`
+(refresh and retry), `invalid token`, `invalid refresh token` or
+`account deleted` (sign in again).
 - `DELETE /api/auth/me` → deletes the caller's account. See below.
 
 **Tokens live in client storage, not a cookie.** The frontend and API are on
@@ -338,8 +353,8 @@ List entries), so an API-set cookie is third-party and browsers block it. Hence
 `Authorization: Bearer` and an opaque refresh token the client stores itself.
 
 **Deleting an account strips identity; it does not delete published work.** The
-row is kept with `login` and `avatar_url` nulled, `deleted_at` set and the
-refresh token revoked. `github_id` is retained so a later login reaches the same
+row is kept with `login` and `avatar_url` nulled, `role` reset to `user`,
+`deleted_at` set and every session revoked. `github_id` is retained so a later login reaches the same
 row rather than minting a second one. Community uploads stay published,
 attributed to a deleted user. Describe it to users as identity removal, not
 deletion.
@@ -434,6 +449,10 @@ Status enum: `pending | approved | rejected | merged`.
   issue 06) — no origin configured means no origin allowed, not a permissive
   fallback. `.env.example` names the Vite dev origin, `http://localhost:1420`;
   `apps/host/vite.config.ts` pins that port because it is allowlisted.
+  Methods `GET`, `POST`, `DELETE`; request headers `Authorization` and
+  `Content-Type`, which an authenticated or JSON request needs to pass the
+  browser's preflight. No `Access-Control-Allow-Credentials`: credentials
+  travel in a header the page sets, never in cookies.
   Egress control, not a security control: `curl` ignores CORS entirely, so
   it doesn't gate access to public read-only data — the real cap on abuse is
   `server-restructure` issue 08's rate limiting. There is no native proxy
