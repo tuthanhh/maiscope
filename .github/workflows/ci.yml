@@ -93,8 +93,15 @@ jobs:
 
       # The server must never link Bevy (ADR-0014). Checked on the resolved
       # graph, so a feature switched on anywhere upstream is caught here.
+      # The tree goes to a file first: in a pipe, a failing `cargo tree` would
+      # print nothing, grep would find nothing, and the step would pass.
       - name: No Bevy in the server's graph
-        run: "! cargo tree -p server -e normal | grep -i bevy"
+        run: |
+          cargo tree -p server -e normal > server-tree.txt
+          if grep -i bevy server-tree.txt; then
+            echo "::error::Bevy is in the server's dependency graph (ADR-0014)"
+            exit 1
+          fi
 
       - name: cargo test
         run: cargo test -p server -p simai

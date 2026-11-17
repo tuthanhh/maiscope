@@ -17,7 +17,7 @@ Conditionally relevant:
 ## What this is
 
 maiscope: a web app for browsing maimai songs and visualizing charts. Rust/TypeScript
-monorepo — one Cargo workspace (`apps/server`, `crates/simai`, `engine`) plus a
+monorepo: one Cargo workspace (`apps/server`, `crates/simai`, `engine`) plus a
 pnpm-managed frontend under `apps/host`.
 
 The frontend is a port of [zetaraku/arcade-songs](https://github.com/zetaraku/arcade-songs)
@@ -153,7 +153,7 @@ through the migrator, which no module owns.
 
 `crates/simai` is the simai parser, a crate with no Bevy in its graph
 ([ADR-0014](docs/adr/0014-simai-parser-as-its-own-crate.md)). Per-note tests are
-inline `#[cfg(test)]` modules in its `src/` — `parse_note`, `parse_slide_note`
+inline `#[cfg(test)]` modules in its `src/`: `parse_note`, `parse_slide_note`
 and `parse_duration_bracket` are private, so an integration test cannot reach
 them. Shared helpers live in `src/testutil.rs`. The corpus test in
 `crates/simai/tests/corpus.rs` drives the one public entry point, `parse_chart`,

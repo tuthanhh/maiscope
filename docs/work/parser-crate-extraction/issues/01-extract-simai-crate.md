@@ -27,7 +27,8 @@ What moves:
 - [x] The `pub mod chart` façade in `engine/src/lib.rs` is removed — it existed
       only so `tests/corpus.rs` could reach a private module, which the crate
       root now does directly
-- [x] All 63 parser tests move with the code and pass **unmodified**. A test
+- [x] All 63 parser tests (65 by the time of the move) move with the code and
+      pass with only their import paths changed. A test
       that needs editing means the move changed behaviour — stop and say so
 - [x] `engine/tests/corpus.rs` + `fixtures/` move to `crates/simai/tests/`,
       including the gitignore entry for `fixtures/local/`
@@ -43,7 +44,7 @@ behaviour:
 - The chart types went to `crates/simai/src/types.rs`, not `chart.rs`: the
   parser already has a `chart.rs` (file to events), which moved with it.
 - The optional dependency is `bevy_ecs`, which owns the `Component` derive,
-  behind a feature still named `bevy`. All of Bevy would have worked too, but
+  behind a feature still named `bevy` ([ADR-0025](../../../adr/0025-simai-depends-on-bevy-ecs-and-engine-re-exports.md)). All of Bevy would have worked too, but
   a crate whose purpose is staying light should pull in the one piece it uses.
 - `engine/src/systems/component.rs` stays as a re-export of the chart types
   plus `TimedEvent`, so no engine import path changed at all, not only the

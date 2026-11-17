@@ -53,9 +53,23 @@ impl std::fmt::Display for MaidataError {
 
 impl std::error::Error for MaidataError {}
 
-/// The difficulty code a standard slot stores as (`sheets.difficulty` in the
-/// catalog). Slot 7 is UTAGE, whose code is the tag in `&lv_7=`, and slot 1
-/// (EASY) has no catalog sheet; both are `None`.
+/// maidata's slot for UTAGE charts, whose `&lv_7=` holds a tag, not a level.
+pub const UTAGE_SLOT: u8 = 7;
+
+impl Maidata {
+    /// The UTAGE slot, when the file gives it a level or a chart. A bare
+    /// `&des_7=` is not enough.
+    pub fn utage(&self) -> Option<&Difficulty> {
+        self.difficulties
+            .iter()
+            .find(|d| d.slot == UTAGE_SLOT && (d.lv.is_some() || d.inote.is_some()))
+    }
+}
+
+/// The difficulty a standard slot holds, by its lowercase name: slot 2 is
+/// BASIC in every maidata file, through slot 6, Re:MASTER. These names are
+/// also the catalog's `sheets.difficulty` codes. Slot 1 (EASY) and the UTAGE
+/// slot have none.
 pub fn standard_difficulty(slot: u8) -> Option<&'static str> {
     match slot {
         2 => Some("basic"),
@@ -79,7 +93,7 @@ pub fn parse(text: &str) -> Result<Maidata, MaidataError> {
     for (key, value) in pairs(text) {
         let slot_key = key
             .split_once('_')
-            .and_then(|(name, n)| Some((name, n.parse::<u8>().ok()?)));
+            .and_then(|(name, n)| Some((name, slot_number(n)?)));
         match (key.as_str(), slot_key) {
             ("title", _) => title = Some(value.trim().to_string()),
             ("artist", _) => m.artist = Some(value.trim().to_string()),
@@ -94,7 +108,8 @@ pub fn parse(text: &str) -> Result<Maidata, MaidataError> {
                 match field {
                     "lv" => d.lv = Some(value.trim().to_string()),
                     "des" => d.des = Some(value.trim().to_string()),
-                    _ => d.inote = (!value.trim().is_empty()).then_some(value),
+                    "inote" => d.inote = (!value.trim().is_empty()).then_some(value),
+                    _ => unreachable!("the pattern above admits only lv, des and inote"),
                 }
             }
             _ => m.other.push((key, value)),
@@ -104,6 +119,13 @@ pub fn parse(text: &str) -> Result<Maidata, MaidataError> {
     m.title = title.ok_or(MaidataError::MissingTitle)?;
     m.difficulties = slots.into_values().collect();
     Ok(m)
+}
+
+/// `7` in `&lv_7=`: digits only, no sign and no leading zero, so `&lv_07=` is
+/// an unknown key rather than a second spelling of slot 7.
+fn slot_number(n: &str) -> Option<u8> {
+    let plain = !n.is_empty() && !n.starts_with('0') && n.bytes().all(|b| b.is_ascii_digit());
+    plain.then(|| n.parse().ok()).flatten()
 }
 
 /// `&key=value` pairs in file order. A value runs from its `&key=` line to
@@ -209,6 +231,27 @@ mod tests {
         assert_eq!(m.difficulties[0].inote, None);
         assert_eq!(m.difficulties[1].lv.as_deref(), Some("協"));
         assert_eq!(m.difficulties[1].inote.as_deref(), Some("1,"));
+    }
+
+    #[test]
+    fn only_a_plain_number_names_a_slot() {
+        let m = parse("&title=Odd\n&lv_07=X\n&lv_+5=1\n&lv_5=12\n").unwrap();
+        assert_eq!(
+            m.difficulties.iter().map(|d| d.slot).collect::<Vec<_>>(),
+            [5]
+        );
+        assert_eq!(m.other.len(), 2);
+    }
+
+    #[test]
+    fn utage_needs_a_level_or_a_chart_in_slot_7() {
+        assert!(parse("&title=U\n&lv_7=協\n").unwrap().utage().is_some());
+        assert!(
+            parse("&title=U\n&des_7=someone\n")
+                .unwrap()
+                .utage()
+                .is_none()
+        );
     }
 
     #[test]

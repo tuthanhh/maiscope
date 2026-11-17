@@ -285,10 +285,13 @@ struct UtageClaim<'a> {
     tag: &'a str,
 }
 
-/// A slot-7 folder's claim and its chart text, or `None` when the folder has
-/// no slot-7 chart to seed.
-fn utage_claim<'a>(m: &'a Maidata, dir_name: &'a str) -> Option<(UtageClaim<'a>, &'a String)> {
-    let slot = utage_slot(m)?;
+/// A UTAGE folder's claim and its chart text, or `None` when its UTAGE slot
+/// has a level but no chart to seed.
+fn utage_claim<'a>(
+    m: &'a Maidata,
+    slot: &'a maidata::Difficulty,
+    dir_name: &'a str,
+) -> Option<(UtageClaim<'a>, &'a String)> {
     let inote = slot.inote.as_ref()?;
     let claim = UtageClaim {
         title: &m.title,
@@ -296,14 +299,6 @@ fn utage_claim<'a>(m: &'a Maidata, dir_name: &'a str) -> Option<(UtageClaim<'a>,
         tag: slot.lv.as_deref().unwrap_or(""),
     };
     Some((claim, inote))
-}
-
-/// Slot 7, when the file has a UTAGE level or chart there. A bare `&des_7=`
-/// does not make a folder UTAGE.
-fn utage_slot(m: &Maidata) -> Option<&maidata::Difficulty> {
-    m.difficulties
-        .iter()
-        .find(|d| d.slot == 7 && (d.lv.is_some() || d.inote.is_some()))
 }
 
 #[derive(Debug, PartialEq)]
@@ -572,8 +567,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         // Slot 7 is UTAGE. No sample folder mixes it with slots 2-6, so the
         // folder is done once its UTAGE chart is resolved.
-        if utage_slot(&m).is_some() {
-            let Some((claim, inote)) = utage_claim(&m, &dir_name) else {
+        if let Some(slot) = m.utage() {
+            let Some((claim, inote)) = utage_claim(&m, slot, &dir_name) else {
                 continue; // a level with no chart: nothing to seed
             };
             let tag = claim.tag;
@@ -1001,7 +996,8 @@ mod tests {
     /// Parse a real header and resolve it the way the run does.
     fn resolve_file(maidata: &str, dir: &str) -> UtageResolution {
         let m = maidata::parse(maidata).unwrap();
-        let (claim, _) = utage_claim(&m, dir).expect("a slot-7 chart");
+        let slot = m.utage().expect("a UTAGE slot");
+        let (claim, _) = utage_claim(&m, slot, dir).expect("a slot-7 chart");
         resolve_utage(&claim, &utage_index())
     }
 
@@ -1046,7 +1042,8 @@ mod tests {
     #[test]
     fn a_folder_without_a_slot_7_chart_makes_no_claim() {
         let m = maidata::parse("&title=[宴] X\n&lv_7=X\n&inote_7=\n").unwrap();
-        assert!(utage_claim(&m, "[X] X").is_none());
+        let slot = m.utage().expect("a UTAGE level");
+        assert!(utage_claim(&m, slot, "[X] X").is_none());
     }
 
     // Two catalog charts carry 協 for "Love You", one under each title form,

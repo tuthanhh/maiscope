@@ -1,6 +1,6 @@
 # ADR-0014 — The simai parser is its own crate
 
-**Status:** accepted
+**Status:** accepted; the derive goes through `bevy_ecs`, see [ADR-0025](0025-simai-depends-on-bevy-ecs-and-engine-re-exports.md)
 **Date:** 2026-09-16
 
 ## Context

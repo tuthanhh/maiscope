@@ -16,7 +16,6 @@ pub enum ChartEvent {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-#[allow(dead_code)]
 pub struct Note {
     /// Applies to Taps, Holds, Touches, and Slide Stars (Heads).
     /// Ignored if the note is a `HeadlessSlide`.
@@ -38,7 +37,6 @@ pub struct SlideSegment {
     pub shape: SlideShape,
     pub duration: Duration,
     /// The break modifier for the specific tracing path (independent of the star).
-    #[allow(dead_code)]
     pub is_break: bool,
 }
 

@@ -18,8 +18,10 @@ which parses chart text in the browser, and the server, which reads
 `maidata.txt` when seeding and will validate uploads. Only the engine turns
 on its `bevy` feature, so the server never links Bevy
 ([ADR-0014](../adr/0014-simai-parser-as-its-own-crate.md)); building the
-crates together with `--workspace` would undo that. There is no shared-types crate: the server emits raw fields
-the client reshapes, and a snapshot test guards the wire contract instead
+crates together with `--workspace` would undo that.
+
+There is no shared-types crate: the server emits raw fields the client
+reshapes, and a snapshot test guards the wire contract instead
 ([ADR-0018](../adr/0018-no-shared-types-crate.md)).
 
 ## Data flow

@@ -40,7 +40,8 @@ not have to know that `&lv_4=` pairs with `&inote_4=`.
 **2026-11-17: done.** `simai::maidata::parse(text) -> Result<Maidata,
 MaidataError>`. The error is `MaidataError`, not `ParseError`, so it cannot be
 confused with the chart parser's `simai::ParseError`; its one case is
-`MissingTitle`. The slot table became `maidata::standard_difficulty(slot)`.
+`MissingTitle`. The slot table became `maidata::standard_difficulty(slot)`, with
+`maidata::UTAGE_SLOT` for slot 7.
 
 Details that keep the seeder's behaviour exact:
 
@@ -50,8 +51,12 @@ Details that keep the seeder's behaviour exact:
   included. A known key that repeats keeps its last value, as before.
 - A leading byte-order mark is stripped here now, so the seeder's own
   BOM handling and its test moved into the library.
-- A folder is UTAGE when slot 7 has a level or a chart. A bare `&des_7=` is
-  not enough, matching the old check on `lv_7`/`inote_7`.
+- A folder is UTAGE when slot 7 has a level or a chart (`Maidata::utage`).
+  A bare `&des_7=` is not enough, as before. One edge differs: a blank
+  `&inote_7=` with no `&lv_7=` used to be skipped silently and now takes
+  the standard path, where it is reported. No sample file has that shape.
+- Slot keys must be plain numbers: `&lv_07=` is an unknown key, kept in
+  `other`, where the old code simply never read it.
 
 The test fixtures copy a real file's shape (BOM, mixed CRLF and LF, extra
 keys) with hand-written chart bodies; real chart text is not committed.
