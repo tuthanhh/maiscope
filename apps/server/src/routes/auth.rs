@@ -34,7 +34,7 @@ pub fn router() -> Router<AppState> {
         .route("/auth/github/login", get(github_login))
         .route("/auth/github/callback", get(github_callback))
         .route("/auth/refresh", post(refresh))
-        .route("/auth/me", get(me))
+        .route("/auth/me", get(me).delete(delete_me))
 }
 
 /// oauth2's client with an authorize and a token endpoint set, and nothing
@@ -283,6 +283,23 @@ async fn me(State(state): State<AppState>, caller: AuthUser) -> Result<Json<User
         .await?
         .ok_or(AppError::InvalidToken("account deleted"))?;
     Ok(Json(user_from_row(row)?))
+}
+
+// DELETE /auth/me — identity erasure, not erasure: the row stays, and so does
+// everything the account published.
+//
+// Acts on the verified caller only; there is no id in the path to get wrong.
+// The caller's outstanding JWT keeps verifying until it expires, up to 15
+// minutes (production-v2, *Accepted, not solved*), but no session survives to
+// refresh it, and `/auth/me` refuses it at once.
+async fn delete_me(
+    State(state): State<AppState>,
+    caller: AuthUser,
+) -> Result<StatusCode, AppError> {
+    let mut tx = state.pool.begin().await?;
+    queries::tombstone_user(&mut tx, caller.id).await?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 fn user_from_row(row: UserRow) -> Result<User, AppError> {
@@ -809,6 +826,96 @@ mod session_tests {
         )
         .await;
         assert_eq!(status(result), StatusCode::UNAUTHORIZED);
+        Ok(())
+    }
+
+    async fn delete(pool: &PgPool, user: sqlx::types::Uuid) -> StatusCode {
+        delete_me(
+            State(test_support::state(pool.clone(), test_support::config())),
+            AuthUser {
+                id: user,
+                role: Role::Moderator,
+            },
+        )
+        .await
+        .unwrap()
+    }
+
+    #[sqlx::test]
+    async fn deleting_strips_identity_and_sessions_and_keeps_the_row(
+        pool: PgPool,
+    ) -> sqlx::Result<()> {
+        let user = signed_in(&pool, 42, "phone").await;
+        add_session(&pool, user, "desktop", "1 day").await;
+
+        assert_eq!(delete(&pool, user).await, StatusCode::NO_CONTENT);
+
+        let row = sqlx::query!(
+            "SELECT github_id, login, avatar_url, role, deleted_at FROM users WHERE id = $1",
+            user
+        )
+        .fetch_one(&pool)
+        .await?;
+        assert_eq!(row.github_id, 42, "github_id is what a later sign-in finds");
+        assert!(row.login.is_none() && row.avatar_url.is_none());
+        assert_eq!(row.role, "user", "a moderator's privileges do not survive");
+        assert!(row.deleted_at.is_some());
+
+        for token in ["phone", "desktop"] {
+            assert_eq!(
+                status(refresh_with(&pool, token).await),
+                StatusCode::UNAUTHORIZED,
+                "{token} still refreshes"
+            );
+        }
+        let me_after = me(
+            State(test_support::state(pool.clone(), test_support::config())),
+            AuthUser {
+                id: user,
+                role: Role::Moderator,
+            },
+        )
+        .await;
+        assert_eq!(status(me_after), StatusCode::UNAUTHORIZED);
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn deleting_twice_succeeds_and_keeps_the_first_timestamp(
+        pool: PgPool,
+    ) -> sqlx::Result<()> {
+        let user = signed_in(&pool, 42, "t").await;
+        delete(&pool, user).await;
+        let first = sqlx::query_scalar!("SELECT deleted_at FROM users WHERE id = $1", user)
+            .fetch_one(&pool)
+            .await?;
+
+        assert_eq!(delete(&pool, user).await, StatusCode::NO_CONTENT);
+
+        let second = sqlx::query_scalar!("SELECT deleted_at FROM users WHERE id = $1", user)
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(first, second);
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn deleting_touches_no_other_account(pool: PgPool) -> sqlx::Result<()> {
+        let user = signed_in(&pool, 42, "mine").await;
+        let other = sqlx::query_scalar!(
+            "INSERT INTO users (github_id, login) VALUES (43, 'bob') RETURNING id"
+        )
+        .fetch_one(&pool)
+        .await?;
+        add_session(&pool, other, "theirs", "1 day").await;
+
+        delete(&pool, user).await;
+
+        assert!(refresh_with(&pool, "theirs").await.is_ok());
+        let login = sqlx::query_scalar!("SELECT login FROM users WHERE id = $1", other)
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(login.as_deref(), Some("bob"));
         Ok(())
     }
 }

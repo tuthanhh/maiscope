@@ -15,4 +15,6 @@ pub use sheets::{
     SheetSearchParams, fetch_all_sheets, fetch_sheet_by_expr, fetch_sheets_for_song, search_sheets,
 };
 pub use songs::{fetch_all_songs, fetch_song_by_song_id};
-pub use users::{fetch_active_user, rotate_session, start_session, upsert_github_user};
+pub use users::{
+    fetch_active_user, rotate_session, start_session, tombstone_user, upsert_github_user,
+};

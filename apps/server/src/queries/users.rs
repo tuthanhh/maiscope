@@ -112,3 +112,27 @@ pub async fn fetch_active_user(
     .fetch_optional(conn)
     .await
 }
+
+/// Turns an account into a tombstone (server-auth-github-oauth 06): identity
+/// and privileges cleared, every session revoked, the row and `github_id`
+/// kept so uploads stay attributed and a later sign-in finds it. Idempotent:
+/// a second call rewrites the same tombstone and keeps the first
+/// `deleted_at`.
+pub async fn tombstone_user(conn: &mut PgConnection, id: Uuid) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        "UPDATE users
+            SET deleted_at = COALESCE(deleted_at, now()),
+                login = NULL,
+                avatar_url = NULL,
+                role = 'user',
+                updated_at = now()
+          WHERE id = $1",
+        id
+    )
+    .execute(&mut *conn)
+    .await?;
+    sqlx::query!("DELETE FROM user_sessions WHERE user_id = $1", id)
+        .execute(&mut *conn)
+        .await?;
+    Ok(())
+}

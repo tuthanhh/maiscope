@@ -284,8 +284,8 @@ If `since` is too old to diff, respond `409` with
 
 ## 4. Auth — GitHub OAuth, roles user/moderator/admin  *(phase 2)*
 
-**Implemented on the v2 branch** except deletion, which is still the plan of
-record in `docs/work/server-auth-github-oauth/` issue 06. Required to gate §5.
+**Implemented on the v2 branch** (`docs/work/server-auth-github-oauth/`).
+Required to gate §5.
 
 Paths are shown under `/api`, without a version segment — auth is built on the
 v2 branch, which retires `/api/v1` entirely
@@ -345,7 +345,9 @@ the JWT.
 error="invalid_token"` when one was refused, with the message `token expired`
 (refresh and retry), `invalid token`, `invalid refresh token` or
 `account deleted` (sign in again).
-- `DELETE /api/auth/me` → deletes the caller's account. See below.
+- `DELETE /api/auth/me` → `204`, identity removed from the caller's account
+  (see below). Acts on the token's user only. Idempotent: deleting a deleted
+  account is `204` again. `401` without a valid token.
 
 **Tokens live in client storage, not a cookie.** The frontend and API are on
 different registrable domains (`pages.dev` and `fly.dev` are both Public Suffix
