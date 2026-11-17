@@ -65,7 +65,7 @@ revision-probe design is working and is not what is broken.
    to song ids, and to any identifier community charts acquire.
 
    The mint is **UUID v7 in a native `uuid` column, canonical hyphenated in
-   URLs**, and it **is the primary key** — `songs.id`, `community_songs.id`,
+   URLs**, and it **is the primary key** — `songs.id`, `users.id`, `community_songs.id`,
    `community_charts.id`. One scheme across both libraries, and one id per row
    rather than a bigserial with a `public_id` beside it. Two ids for one row is
    two things to keep in step, two things to pick the wrong one of in a query,

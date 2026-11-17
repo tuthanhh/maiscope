@@ -13,26 +13,28 @@ credentials.
 
 **Blocked by:** None — first ticket of this feature.
 
-**Status:** todo
+**Status:** done
 
-- [ ] `apps/server/migrations/20260907090000_users.up.sql` creates `users`:
-      `id BIGSERIAL PK`, `github_id BIGINT UNIQUE NOT NULL`, `login TEXT NOT NULL`,
+- [x] `apps/server/migrations/20261117120000_users.up.sql` creates `users`:
+      `id UUID PK DEFAULT uuidv7()`, `github_id BIGINT UNIQUE NOT NULL`, `login TEXT NOT NULL`,
       `avatar_url TEXT`, `role TEXT NOT NULL DEFAULT 'user'`, `refresh_token_hash TEXT`,
       `refresh_token_expires_at TIMESTAMPTZ`, `deleted_at TIMESTAMPTZ`,
-      `created_at TIMESTAMPTZ`, `updated_at TIMESTAMPTZ`
-- [ ] Matching `.down.sql` drops the table
-- [ ] `role` constrained to `user | moderator | admin`
-- [ ] `login` and `avatar_url` are nullable — a deleted account keeps its row
+      `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`, `updated_at` likewise
+- [x] Matching `.down.sql` drops the table
+- [x] `role` constrained to `user | moderator | admin`
+- [x] `login` and `avatar_url` are nullable — a deleted account keeps its row
       with both nulled (see below); `github_id` is **not** nullable and is never
       cleared
-- [ ] No email column. The project stores no email address, and adding one later
+- [x] No email column. The project stores no email address, and adding one later
       is a decision about privacy obligations, not a schema convenience
-- [ ] `apps/server/Cargo.toml` gains `oauth2`, `jsonwebtoken`, `rand` (`sha2` is
+- [x] `apps/server/Cargo.toml` gains `oauth2`, `jsonwebtoken`, `rand` (`sha2` is
       already a dependency)
-- [ ] `apps/server/.env.example` gains `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`,
-      `JWT_SECRET`, and the OAuth callback URL, each with a comment
-- [ ] `sqlx migrate run` applies cleanly against local dev Postgres
-- [ ] `cargo build` succeeds with the new dependencies
+- [x] `apps/server/.env.example` gains `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`,
+      `JWT_SECRET`, and the OAuth callback URL (`GITHUB_REDIRECT_URL`), each
+      with a comment
+- [x] `sqlx migrate run` applies cleanly against local dev Postgres
+- [x] `cargo build -p server` succeeds with the new dependencies
+- [x] `docs/reference/schema.md` describes `users` as built
 
 ## Comments
 
@@ -67,3 +69,22 @@ stolen token that is never used is never rotated, so without an expiry it is a
 credential with an infinite lifetime — see issue 04 for the 30-day value and why
 the token cannot live in a cookie.
 
+
+**2026-11-17 — built on the `v2` branch; three departures from the plan.**
+
+- **`users.id` is a UUID v7, not a bigserial.** Production-v2 rule 4 was
+  written after this ticket and named only the song and community tables.
+  Put as a choice: the id is the JWT `sub` and the attribution on every
+  upload, so a sequence would publish the account count and signup order, and
+  an `i64` user id would type-check wherever any other `i64` id does. Rule 4
+  now names `users.id`.
+- **The migration is `20261117120000_users`**, not `20260907090000`: the
+  planned timestamp sorts before the `20261117…` migrations already merged,
+  and a migration must sort after everything it builds on.
+- **`jsonwebtoken` is held at 10**, with `rust_crypto` and no `use_pem`.
+  12's `rust_crypto` backend needs RustCrypto's `rsa 0.10` / `digest 0.11`
+  generation, which does not resolve against this lockfile. The backend
+  feature is all-or-nothing, so RSA and EC crates compile in unused; `rsa 0.9`
+  carries RUSTSEC-2023-0071, which an HS256-only server never reaches.
+  `oauth2` is built without default features, dropping its bundled reqwest
+  0.12: ticket 03 hands it the server's own reqwest 0.13.

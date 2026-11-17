@@ -66,7 +66,7 @@ Unscheduled.
 | ├ [song-public-id](work/song-public-id/spec.md) | active | v2.0 |
 | ├ [parser-crate-extraction](work/parser-crate-extraction/spec.md) | active | v2.0 |
 | ├ [sync-rename-alarm](work/sync-rename-alarm/spec.md) | active | v2.0 |
-| ├ [server-auth-github-oauth](work/server-auth-github-oauth/spec.md) | planned | v2.0 |
+| ├ [server-auth-github-oauth](work/server-auth-github-oauth/spec.md) | active | v2.0 |
 | ├ [api-rewrite](work/api-rewrite/spec.md) | planned | v2.0 |
 | └ [community-charts](work/community-charts/spec.md) | planned | v2.0 |
 | [server-contributions](work/server-contributions/spec.md) | superseded | — |

@@ -20,6 +20,16 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
 tower_governor = { version = "0.8.0", default-features = false, features = ["axum", "tracing"] }
 governor = "0.10.4"
+# Auth (server-auth-github-oauth). oauth2 without its bundled reqwest 0.12: the
+# token exchange goes through this crate's reqwest instead of a second HTTP and
+# TLS stack.
+oauth2 = { version = "5.0.0", default-features = false }
+# HS256 with a shared secret only, so no PEM parsing; pure-Rust crypto rather
+# than aws-lc, which needs a C toolchain in the image. Held at 10: 12's
+# rust_crypto backend needs the RustCrypto rsa 0.10 / digest 0.11 generation,
+# which does not resolve against this lockfile; 10 shares sha2 0.10 with us.
+jsonwebtoken = { version = "10", default-features = false, features = ["rust_crypto"] }
+rand = "0.10.4"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

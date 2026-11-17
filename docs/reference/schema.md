@@ -166,6 +166,29 @@ Append-only history — every applied revision adds a row (`chart_id`,
 > today; phase 2's contribution-approve handler will call the same function.
 > Contributor/contribution FKs are still nullable placeholders until §5 lands.
 
+## Account tables (built)
+
+Not part of `Data`: nothing here reaches `/catalog`, and no catalog table
+references it. Migration `20261117120000_users`.
+
+### `users`
+One row per GitHub identity that has ever signed in (`server-auth-github-oauth`,
+contract §4). Stores no email and no password.
+- `id UUID` primary key, minted by `uuidv7()` like `songs.id`. It is the JWT
+  `sub` and what community uploads will be attributed to.
+- `github_id BIGINT UNIQUE NOT NULL` — GitHub's numeric user id, the login's
+  match key. Never cleared, not even by deletion.
+- `login`, `avatar_url` — GitHub profile fields, refreshed on each login.
+  Nullable: a deleted account has both nulled.
+- `role` — `user | moderator | admin`, enforced by a `CHECK`, default `user`.
+- `refresh_token_hash` — SHA-256 of the current refresh token, never the token
+  itself, so a leaked row is not a working credential.
+  `refresh_token_expires_at` bounds a stolen token that is never used.
+- `deleted_at` — set by account deletion, which is a tombstone, not a row
+  removal: `login`, `avatar_url` and the refresh token are nulled and the row
+  stays, keeping uploads attributed. Signing in again with the same GitHub
+  account reactivates it.
+
 ## Relationships
 
 ```
@@ -197,13 +220,12 @@ convention. See `deleted_songs`/`deleted_sheets` above.
 
 | Table | Purpose | Contract |
 |-------|---------|----------|
-| `users` | GitHub-OAuth identities + role | §4 |
 | `contributions` | open submission queue (`payload` JSONB, `status`) → merge on approve | §5 |
 | `audit_log` | moderator/admin action trail | §5 |
 
 ## Conventions
 
-- `id UUID DEFAULT uuidv7()` PK on `songs`; `id BIGSERIAL` surrogate PK on
+- `id UUID DEFAULT uuidv7()` PK on `songs` and `users`; `id BIGSERIAL` surrogate PK on
   `sheets` and `charts`; natural composite PKs on lookups and sub-tables.
 - Timestamps `TIMESTAMPTZ DEFAULT now()`; dates `DATE`.
 - Numerics `DOUBLE PRECISION` (`bpm`, `*_value`); counts `INTEGER`.
