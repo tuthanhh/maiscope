@@ -197,7 +197,7 @@ only cost the client a parse and an unwrap.
 
 The path segment is the **`songId` alone**, not the full `sheetExpr`; `type`
 and `difficulty` are query params. The server rebuilds `sheet_expr` from the
-three (`routes/charts.rs:get_chart`), so the cross-tier key is still what is matched —
+three (`routes/v1/charts.rs:get_chart`), so the cross-tier key is still what is matched —
 it is just not URL-encoded into one segment here.
 
 | status | meaning |

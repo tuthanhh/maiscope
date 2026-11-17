@@ -1,11 +1,6 @@
 mod auth;
 mod caching;
-mod catalog;
-mod charts;
-mod health;
-pub(crate) mod sheets;
-mod songs;
-mod sync;
+mod v1;
 
 use std::time::Duration;
 
@@ -67,13 +62,7 @@ pub fn router(state: AppState) -> Router {
     );
     rate_limit::spawn_reaper(limiter, RATE_LIMIT_CLEANUP_INTERVAL);
 
-    let limited = Router::new()
-        .merge(sync::router())
-        .merge(catalog::router())
-        .merge(songs::router())
-        .merge(sheets::router())
-        .merge(charts::router())
-        .layer(limit_layer.clone());
+    let limited = v1::limited_router().layer(limit_layer.clone());
 
     let (github_limit_layer, github_limiter) = rate_limit::layer(
         &state.config.trusted_ip_headers,
@@ -97,7 +86,7 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .nest(
             "/api/v1",
-            Router::new().merge(health::router()).merge(limited),
+            Router::new().merge(v1::health_router()).merge(limited),
         )
         .nest("/api", api)
         // Both default to DEBUG; DEFAULT_LOG_FILTER (config.rs) is
@@ -142,7 +131,7 @@ pub fn router(state: AppState) -> Router {
                 // `headers.get()` returns null, no error is raised, and it only
                 // happens cross-origin. A same-origin test cannot catch it, so
                 // `sheets::tests` exercises it through the assembled router.
-                .expose_headers([sheets::TOTAL_COUNT_HEADER]),
+                .expose_headers([v1::sheets::TOTAL_COUNT_HEADER]),
         )
         .with_state(state)
 }

@@ -1,4 +1,4 @@
-// Chart-query domain enums, shared only by routes::charts.
+// Chart-query domain enums, shared only by routes::v1::charts.
 
 use serde::Deserialize;
 

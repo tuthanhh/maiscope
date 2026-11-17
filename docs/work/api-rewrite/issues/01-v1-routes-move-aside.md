@@ -11,12 +11,20 @@ everything that stays. Moving v1 aside makes ticket 07 a single `rm -r`.
 
 **Blocked by:** None.
 
-**Status:** todo
+**Status:** done
 
-- [ ] `routes/v1/mod.rs` exposes one `router()` that `routes/mod.rs` nests at
+- [x] `routes/v1/mod.rs` exposes one `router()` that `routes/mod.rs` nests at
       `/api/v1`, with the same rate limiter and the health exemption intact
-- [ ] Shared pieces stay outside `v1/`: `caching::Freshness` (the v2 Catalog and
+- [x] Shared pieces stay outside `v1/`: `caching::Freshness` (the v2 Catalog and
       manifest need it), `AppError`, state, rate limiting
-- [ ] Every existing test still passes, unmoved in meaning; the router tests in
+- [x] Every existing test still passes, unmoved in meaning; the router tests in
       `routes/mod.rs` keep exercising `/api/v1` paths until 07
-- [ ] `CLAUDE.md`'s testing section names `routes/v1/` where it lists route tests
+- [x] `CLAUDE.md`'s testing section names `routes/v1/` where it lists route tests
+
+## Comments
+
+**2026-11-17 — built.** `git mv`, so each file's history follows it.
+`routes/v1/mod.rs` exposes `health_router()` and `limited_router()` rather
+than one router, so the caller still decides what goes behind the limiter
+and the health exemption stays where its router test looks for it. `caching`
+stays in `routes/`, shared with v2. 215 server tests pass unchanged.
