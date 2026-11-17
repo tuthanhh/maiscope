@@ -57,6 +57,39 @@ async fn re_presenting_a_song_reuses_its_id(pool: PgPool) -> sqlx::Result<()> {
     Ok(())
 }
 
+// The regression that would break every link at once: the daily sync of an
+// unchanged catalog must not touch a single id.
+#[sqlx::test]
+async fn an_unchanged_resync_keeps_every_id(pool: PgPool) -> sqlx::Result<()> {
+    apply(&pool, &payload(TWO_SONGS)).await?;
+    let before = ids_by_song_id(&pool).await;
+
+    apply(&pool, &payload(TWO_SONGS)).await?;
+
+    assert_eq!(ids_by_song_id(&pool).await, before);
+    Ok(())
+}
+
+// A song upstream stops listing is tombstoned, not deleted, and keeps its
+// id: a manual rename fix needs something to re-point, and a song that
+// comes back must come back at the same URL.
+#[sqlx::test]
+async fn a_tombstoned_song_keeps_its_id_and_returns_with_it(pool: PgPool) -> sqlx::Result<()> {
+    apply(&pool, &payload(TWO_SONGS)).await?;
+    let before = ids_by_song_id(&pool).await;
+
+    let halcyon_only = r#"{ "songs": [
+        { "songId": "Halcyon", "title": "Halcyon", "artist": "xi",
+          "sheets": [{ "type": "dx", "difficulty": "master", "level": "13" }] } ] }"#;
+    let stats = apply(&pool, &payload(halcyon_only)).await?;
+    assert_eq!(stats.songs_vanished, 1);
+    assert_eq!(ids_by_song_id(&pool).await, before);
+
+    apply(&pool, &payload(TWO_SONGS)).await?;
+    assert_eq!(ids_by_song_id(&pool).await, before);
+    Ok(())
+}
+
 const SONG_ID_MIGRATION: i64 = 20261117110000;
 
 // The one change in this feature that is painful to undo by hand, because

@@ -524,6 +524,9 @@ async fn upsert_songs(
     }
 
     let changed: Vec<(String, bool)> = sqlx::query_as(
+        // `id` appears nowhere here, and must not: the column default mints
+        // it for a new song, and an update that assigned it would change the
+        // URL of a song whenever any of its fields changed (song-public-id).
         "INSERT INTO songs \
          (song_id, song_no, category, title, artist, bpm, image_name, version, \
           release_date, is_new, is_locked, comment, source_index, revision) \
