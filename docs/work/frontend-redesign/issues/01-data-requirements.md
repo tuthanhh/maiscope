@@ -13,7 +13,7 @@ plus `MvSheetDialog`. v2 adds community browse, upload, and a reports queue.
 
 **Blocked by:** None. Start here.
 
-**Status:** done (2026-11-17) — [`docs/reference/screen-data-requirements.md`](../../../reference/screen-data-requirements.md)
+**Status:** done (2026-11-17): [`docs/reference/screen-data-requirements.md`](../../../reference/screen-data-requirements.md)
 
 - [x] Per screen: the fields displayed, and which are derived today
       (`songNo`, `imageUrl`, `sheetExpr`, `notePercents`, `$canonicalSheet`)
@@ -34,7 +34,7 @@ plus `MvSheetDialog`. v2 adds community browse, upload, and a reports queue.
 
 ## Comments
 
-**2026-11-17 — grilled after the first draft; eleven decisions taken.**
+**2026-11-17: grilled after the first draft; eleven decisions taken.**
 
 Snapshot plus standalone reference tables, no server search in v2
 ([ADR-0021](../../../adr/0021-catalog-snapshot-plus-reference-tables-no-server-search.md)).
@@ -43,6 +43,6 @@ the wire with an explicit `song` reference replacing the prototype chain;
 cover URL client-side in one helper; bookmarks persist per browser by minted
 sheet id, per-account later; `difficulties[].color` is the one colour source
 and no other unrendered field is required; uploader login shown on community
-browse and detail; a linked fan chart carries and borrows its official song's
-title and cover; the visualizer takes `?sheet=` or `?communityChart=`; song
+browse and detail; a linked fan chart keeps its own title and artist and
+borrows its official song's cover; the visualizer takes `?sheet=` or `?communityChart=`; song
 detail is a per-song fetch; the upload chooser searches the snapshot.

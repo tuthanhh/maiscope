@@ -109,6 +109,10 @@ contrast; they divide, they do not inform.
 shows a level. It is never used as a background for text. It appears as a
 3px bar, a chip underline, or the colour of the level figure itself, so a
 low-contrast value for one difficulty never makes a label unreadable.
+`color` is optional: the 50 UTAGE difficulties carry none
+([ADR-0022](../adr/0022-difficulties-derived-and-referenced.md)),
+so `--diff` falls back to `--fg`, and the bar, underline and level figure
+render in the text colour.
 
 ### Type scale
 
@@ -442,7 +446,8 @@ OFFICIAL SONG                                optional
 Arriving from the chart page prefills the file field with the pasted text
 (shown as "pasted chart · 38 KB"). Over 512 KB is refused before upload
 with the short error form. Title and artist are editable so the file's
-header can be corrected; the server accepts both as overrides.
+header can be corrected; the upload sends both as overrides, two
+optional fields `community-charts` issue 02 gains.
 
 ### Upload rejection
 
@@ -480,7 +485,8 @@ Community is reached from the bar.
 
 ## Worked example: browse in the new system
 
-The browse screen, element by element, as a checklist for ticket 04.
+The browse screen, element by element, as a checklist for the restyle
+of the existing screens.
 
 | Element | Spec |
 |---|---|
@@ -502,8 +508,8 @@ The browse screen, element by element, as a checklist for ticket 04.
 ## Not changing
 
 - The visualizer's playback surface: canvas, transport, speed sliders,
-  the `?debug` overlay. Ticket 03 splits the page for legibility; nothing
-  here restyles playback.
+  the `?debug` overlay. The page is split into the chart page
+  layout for legibility; nothing here restyles playback.
 - The engine's own rendering: notes, judgement ring, sprites.
 - The generated jacket algorithm; it is the identity of standalone fan
   songs.

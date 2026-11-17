@@ -68,3 +68,10 @@ declined to host, and its only reader would be the maintainer, occasionally.
 Fly's log retention is the accepted limit — a rejection nobody looks at inside
 the window is gone.
 
+
+**2026-11-17: two optional override fields.** The upload page shows the
+title and artist parsed from the file as editable fields, and sends them as
+overrides only when the uploader changed them: `title` and `artist`,
+both optional, both falling back to the parsed values. Source:
+`frontend-redesign` ticket 06, upload screen in
+[`design-direction.md`](../../../reference/design-direction.md).

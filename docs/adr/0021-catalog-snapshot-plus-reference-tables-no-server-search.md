@@ -11,7 +11,7 @@ browse path". Two facts at v2 planning time:
 
 - The search endpoint has no caller. `composables/useSheetSearch.ts` is
   imported by nothing; the browse page filters the in-memory snapshot. The
-  endpoint is 766 lines of query building, has its own tests, and the CORS
+  endpoint is a module of query building with its own tests, and the CORS
   layer exposes a pagination header for it that no client reads.
 - The reference tables (categories, versions, types, difficulties, regions)
   reach the client only inside the 3MB Catalog snapshot. The visualizer
@@ -52,7 +52,7 @@ sheet search in v2; the browse page filters the snapshot in memory.
 
 ## Consequences
 
-The 766-line search module and its tests go with `/api/v1`; the API contract
+The search module and its tests go with `/api/v1`; the API contract
 drops them. ADR-0007's decision stands; only its "retained server-side" clause
 is overtaken.
 

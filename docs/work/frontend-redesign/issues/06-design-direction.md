@@ -23,7 +23,7 @@ a committed file.
 
 **Blocked by:** None. Start alongside ticket 01.
 
-**Status:** done (2026-11-17) — [`docs/reference/design-direction.md`](../../../reference/design-direction.md)
+**Status:** done (2026-11-17): [`docs/reference/design-direction.md`](../../../reference/design-direction.md)
 
 - [x] Type scale — families, sizes, weights, line heights, and which is used
       where
@@ -50,7 +50,7 @@ a committed file.
 
 ## Comments
 
-**2026-11-17 — brainstormed, then written.** References: acutic.net,
+**2026-11-17: brainstormed, then written.** References: acutic.net,
 sasakure.uk.com, Instagram's phone layout; anti-reference adxdls.saop.cc.
 Twelve decisions, each with its rejected alternatives, are tabled at the
 end of the reference document. Three affect other features: the song page
