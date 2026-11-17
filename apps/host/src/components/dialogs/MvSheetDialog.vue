@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
+import { shallowRef, computed, watch } from "vue";
 import { useRouter } from "vue-router";
 import useI18n from "~/composables/useI18n";
 import useGameData from "~/composables/useGameData";
 import useSheetDialog from "~/composables/useSheetDialog";
 import useSelectedSheets from "~/composables/useSelectedSheets";
-import { useDataStore } from "~/stores/data";
-import { isCanonicalSheet } from "~/utils";
+import { isPlaceholderSheet } from "~/utils";
 import type { Sheet } from "~/types";
 import MvIcon from "~/components/ui/MvIcon.vue";
 import MvCover from "~/components/ui/MvCover.vue";
@@ -19,22 +18,18 @@ const router = useRouter();
 const { getDifficultyName, getTypeName, getSheetSearchLink } = useGameData();
 const { isOpened, currentSheet } = useSheetDialog();
 const { selectedSheets, toggleSheetSelection } = useSelectedSheets();
-const dataStore = useDataStore();
 
 // Which difficulty within the song is shown. Defaults to the opened sheet,
 // switchable via the difficulty chips.
-const selected = ref<Sheet>(currentSheet.value);
+// shallowRef: the sheet is a frozen Catalog object, never mutated, and a deep
+// ref would try to unwrap its sheet → song → sheets cycle.
+const selected = shallowRef<Sheet>(currentSheet.value);
 watch(currentSheet, (sheet) => {
     selected.value = sheet;
 });
 
 // Sibling sheets of the same song (the difficulty chips).
-const siblingSheets = computed<Sheet[]>(() => {
-    const song = dataStore.currentData.songs.find(
-        (s) => s.songId === currentSheet.value.songId,
-    );
-    return song?.sheets ?? [currentSheet.value];
-});
+const siblingSheets = computed<Sheet[]>(() => currentSheet.value.song.sheets);
 
 const internalLevel = computed(() =>
     selected.value.internalLevelValue != null
@@ -47,9 +42,9 @@ const metaRows = computed(() => [
         key: t("term.noteDesigner"),
         value: selected.value.noteDesigner ?? "N/A",
     },
-    { key: t("term.releaseDate"), value: selected.value.releaseDate ?? "N/A" },
+    { key: t("term.releaseDate"), value: selected.value.song.releaseDate ?? "N/A" },
     { key: t("term.type"), value: getTypeName(selected.value.type) },
-    { key: t("term.comment"), value: selected.value.comment ?? "N/A" },
+    { key: t("term.comment"), value: selected.value.song.comment ?? "N/A" },
 ]);
 
 const isBookmarked = computed(() =>
@@ -60,24 +55,23 @@ function close(): void {
     isOpened.value = false;
 }
 function toggleBookmark(): void {
-    // Bookmarks are keyed on canonical sheets; the opened sheet already is one.
-    if (isCanonicalSheet(selected.value)) toggleSheetSelection(selected.value);
+    // A placeholder is not in the Catalog, so it has nothing to bookmark.
+    if (!isPlaceholderSheet(selected.value)) toggleSheetSelection(selected.value);
 }
 function searchOnYouTube(): void {
     const link = getSheetSearchLink(selected.value);
     if (link != null) window.open(link, "_blank", "noopener");
 }
 function openInVisualizer(): void {
-    const { songId, type, difficulty } = selected.value;
+    const { song, type, difficulty } = selected.value;
     close();
     // Deep-link the visualizer to this sheet; it fetches the chart from the
     // backend on mount. Without a chart, it opens blank (manual-paste mode).
     router.push({
         name: "visualizer",
-        query:
-            songId != null && type != null && difficulty != null
-                ? { songId, type, difficulty }
-                : undefined,
+        query: isPlaceholderSheet(selected.value)
+            ? undefined
+            : { song: song.id, type, difficulty },
     });
 }
 </script>
@@ -87,7 +81,7 @@ function openInVisualizer(): void {
         <div class="mv-modal" @click.stop>
             <!-- jacket header (real cover, generative fallback) -->
             <div class="mv-modal-art">
-                <MvCover :item="selected" />
+                <MvCover :item="selected.song" />
 
                 <button
                     type="button"
@@ -96,18 +90,18 @@ function openInVisualizer(): void {
                 >
                     <MvIcon name="bookmark" :size="18" :filled="isBookmarked" />
                 </button>
-                <span class="mv-art-badge">{{ selected.category }}</span>
+                <span class="mv-art-badge">{{ selected.song.category }}</span>
             </div>
 
             <div class="mv-modal-body">
                 <div class="mv-modal-top">
-                    <span class="mv-label">{{ selected.category }}</span>
+                    <span class="mv-label">{{ selected.song.category }}</span>
                     <span class="mv-label mv-bpm"
-                        >{{ selected.bpm }} {{ t("term.bpm") }}</span
+                        >{{ selected.song.bpm }} {{ t("term.bpm") }}</span
                     >
                 </div>
-                <div class="mv-modal-title">{{ selected.title }}</div>
-                <div class="mv-modal-artist">{{ selected.artist }}</div>
+                <div class="mv-modal-title">{{ selected.song.title }}</div>
+                <div class="mv-modal-artist">{{ selected.song.artist }}</div>
 
                 <div class="mv-modal-cols">
                     <div class="mv-modal-main">
@@ -145,7 +139,7 @@ function openInVisualizer(): void {
                     <div class="mv-modal-side">
                         <div
                             class="mv-side-icon"
-                            :class="{ on: selected.isLocked }"
+                            :class="{ on: selected.song.isLocked }"
                         >
                             <MvIcon name="lock" :size="15" />
                         </div>

@@ -85,7 +85,7 @@ const difficultyChips = computed(() => {
             .filter((sheet) => sheet.type !== "utage")
             .map((sheet) => sheet.difficulty),
     );
-    return data.value.difficulties.filter((d) => used.has(d.difficulty));
+    return data.value.difficulties.filter((d) => used.has(d.code));
 });
 
 // ── build Filters from UI state, then run the engine ──────────

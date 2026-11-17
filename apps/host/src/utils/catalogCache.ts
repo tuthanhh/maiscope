@@ -14,15 +14,21 @@
 // — none of these may stop the catalog from loading over the network, which
 // is what the app did before this layer existed.
 
-const DB_NAME = "maiscope";
+// The database is named for the payload shape it holds. v1's database
+// ("maiscope") held `/api/v1/catalog` bodies; a v1 body read as v2 would paint
+// v1 data into v2 code, and the revision alone cannot tell them apart (a v1
+// client running across the v2 deploy stores v1 data under the new revision).
+// A new shape gets a new name; the old database is deleted, best effort.
+const DB_NAME = "maiscope-catalog-v2";
+const RETIRED_DB_NAMES = ["maiscope"];
 const DB_VERSION = 1;
 const STORE = "catalog";
 const KEY = "current";
 
 export type CachedCatalog = {
-  /** `/sync/manifest` revision the catalog was fetched under. */
+  /** `/api/sync/manifest` revision the catalog was fetched under. */
   revision: number;
-  /** The `/catalog` response body, verbatim. */
+  /** The `/api/catalog` response body, verbatim. */
   raw: string;
   /** ISO timestamp, for a human reading the store in devtools. */
   storedAt: string;
@@ -102,6 +108,18 @@ export async function writeCatalog(
   } catch {
     // A failed write leaves the previous entry (or none); the next launch
     // fetches again. Nothing to do.
+  }
+}
+
+/** Delete the databases earlier payload shapes lived in. Best effort. */
+export function dropRetiredCaches(): void {
+  if (!hasIndexedDb()) return;
+  for (const name of RETIRED_DB_NAMES) {
+    try {
+      indexedDB.deleteDatabase(name);
+    } catch {
+      // Nothing to do: the old database only costs disk space.
+    }
   }
 }
 

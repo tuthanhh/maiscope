@@ -1,5 +1,5 @@
-import { $canonicalSheet, computeSheetExpr, validateNoteCounts } from '~/utils/sheet';
-import type { Data, Sheet } from '~/types';
+import { validateNoteCounts } from '~/utils/sheet';
+import type { Data, Sheet, Song } from '~/types';
 
 export function buildEmptyData(): Data {
   return {
@@ -7,91 +7,55 @@ export function buildEmptyData(): Data {
     sheets: [],
 
     categories: [],
-
     versions: [],
-
     types: [],
     difficulties: [],
-
     regions: [],
-
-    // mark the data as empty
-    updateTime: '0000-00-00',
   };
 }
 
-function resolveUrl(filePath: string | undefined, baseUrl: string) {
-  return filePath != null ? new URL(filePath, baseUrl).toString() : filePath;
+/** A song's cover on the asset host, or undefined when it has none. */
+export function coverUrl(imageName: string | undefined, dataSourceUrl: string): string | undefined {
+  return imageName != null ? new URL(imageName, `${dataSourceUrl}/img/cover/`).toString() : undefined;
 }
 
-function computeNotePercentages(noteCounts: Record<string, number | null> | undefined) {
-  return noteCounts != null ? Object.fromEntries(
-    Object.entries(noteCounts)
-      .map(([key, value]) => [
-        key,
-        value != null && noteCounts.total != null ? Number(value) / noteCounts.total : null,
-      ]),
-  ) : noteCounts;
+/** The client's identity for a sheet, built from minted parts only. */
+export function sheetKey(songId: string, type: string, difficulty: string): string {
+  return `${songId}/${type}/${difficulty}`;
 }
 
-// Per-sheet client-derived fields (contract: server sends raw fields only).
-// Used both by buildCatalog (full nested catalog) and by the search flow
-// (flat GET /sheets/search results) — the two places a raw server Sheet
-// becomes a display-ready Sheet.
-export function decorateSheetFields(sheet: Sheet, dataSourceUrl: string): void {
-  sheet[$canonicalSheet] = sheet;
-  sheet.imageUrl = resolveUrl(sheet.imageName, `${dataSourceUrl}/img/cover/`);
-  sheet.imageUrlM = resolveUrl(sheet.imageName, `${dataSourceUrl}/img/cover-m/`);
-  sheet.sheetExpr = computeSheetExpr(sheet);
-  sheet.notePercents = computeNotePercentages(sheet.noteCounts);
+/**
+ * Point a sheet at its song and give it its key. Shared by the Catalog and
+ * by the single-sheet fetch, the two places a wire sheet becomes a client one.
+ */
+export function attachSheet(sheet: Omit<Sheet, 'song' | 'key'>, song: Song): Sheet {
+  const attached = sheet as Sheet;
+  attached.song = song;
+  attached.key = sheetKey(song.id, sheet.type, sheet.difficulty);
+  return attached;
 }
 
-// Build the full catalog shape: computed fields, prototype-linked sheets,
-// final song/sheet ordering. Does NOT freeze — see freezeCatalog. Mutates
-// `data` in place (and returns nothing) so existing callers that relied on
-// preprocessData's in-place mutation keep working unchanged.
+// Build the client graph from a `/api/catalog` body, in place: each song gets
+// its cover URL, each sheet an explicit `song` and its `key`, and the flat
+// `sheets` list is assembled newest song first. Then freeze it: the graph is
+// replaced wholesale on a refresh, never edited.
 export function buildCatalog(data: Data, dataSourceUrl: string, gameCode: string): void {
-  let lastSongNo = 0;
   for (const song of data.songs) {
-    lastSongNo += 1;
-    song.songNo = lastSongNo;
-    song.imageUrl = resolveUrl(song.imageName, `${dataSourceUrl}/img/cover/`);
-    song.imageUrlM = resolveUrl(song.imageName, `${dataSourceUrl}/img/cover-m/`);
-
+    song.imageUrl = coverUrl(song.imageName, dataSourceUrl);
     for (const sheet of song.sheets) {
-      Object.setPrototypeOf(sheet, song);
-
-      decorateSheetFields(sheet, dataSourceUrl);
-
+      attachSheet(sheet, song);
       if (!validateNoteCounts(sheet, gameCode)) {
         // eslint-disable-next-line no-console
-        console.warn('Invalid note counts:', sheet.sheetExpr, sheet.noteCounts);
-      }
-
-      for (const regionOverride of Object.values(sheet.regionOverrides ?? {})) {
-        Object.setPrototypeOf(regionOverride, sheet);
+        console.warn('Invalid note counts:', sheet.key, sheet.noteCounts);
       }
     }
   }
 
   data.songs.reverse();
-
   // eslint-disable-next-line no-param-reassign
   data.sheets = data.songs.flatMap((song) => song.sheets);
-
-  for (const type of data.types) {
-    type.iconUrl = resolveUrl(type.iconUrl, `${dataSourceUrl}/img/`);
-  }
-  for (const difficulty of data.difficulties) {
-    difficulty.iconUrl = resolveUrl(difficulty.iconUrl!, `${dataSourceUrl}/img/`);
-  }
 }
 
-// Freeze the shape buildCatalog produced. Separate pass so buildCatalog's
-// output can be asserted on directly (e.g. in a future test) without hitting
-// frozen-object write errors, and so a future new computed field can never
-// silently land after its object's freeze call (there is no such call to
-// land after — freezing only happens here, once, at the end).
 export function freezeCatalog(data: Data): void {
   for (const song of data.songs) {
     for (const sheet of song.sheets) {
@@ -99,7 +63,6 @@ export function freezeCatalog(data: Data): void {
         Object.freeze(regionOverride);
       }
       Object.freeze(sheet.noteCounts);
-      Object.freeze(sheet.notePercents);
       Object.freeze(sheet.regions);
       Object.freeze(sheet.regionOverrides);
       Object.freeze(sheet);
@@ -108,20 +71,12 @@ export function freezeCatalog(data: Data): void {
     Object.freeze(song);
   }
 
-  for (const category of data.categories) Object.freeze(category);
-  for (const version of data.versions) Object.freeze(version);
-  for (const type of data.types) Object.freeze(type);
-  for (const difficulty of data.difficulties) Object.freeze(difficulty);
-  for (const region of data.regions) Object.freeze(region);
-
+  for (const list of [data.categories, data.versions, data.types, data.difficulties, data.regions]) {
+    for (const entry of list) Object.freeze(entry);
+    Object.freeze(list);
+  }
   Object.freeze(data.songs);
   Object.freeze(data.sheets);
-  Object.freeze(data.categories);
-  Object.freeze(data.versions);
-  Object.freeze(data.types);
-  Object.freeze(data.difficulties);
-  Object.freeze(data.regions);
-
   Object.freeze(data);
 }
 

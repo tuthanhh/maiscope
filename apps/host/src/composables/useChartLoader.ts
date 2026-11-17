@@ -3,14 +3,18 @@ import type { LocationQuery } from "vue-router";
 import { fetchChart, fetchSheetInfo, loadChart, pause, setSpeed } from "~/composables/useEngine";
 import type { Playback } from "~/composables/usePlayback";
 import { resumeAudio } from "~/utils/audioUnlock";
-import { GAME } from "~/app/game";
+import { sheetKey } from "~/utils/data";
 import type { Sheet } from "~/types";
 
-/** The full deep link (songId + type + difficulty), or null. */
-function deepLink(query: LocationQuery): { songId: string; type: string; difficulty: string } | null {
-    const { songId, type, difficulty } = query;
-    return typeof songId === "string" && typeof type === "string" && typeof difficulty === "string"
-        ? { songId, type, difficulty }
+/**
+ * The full deep link (`song` + `type` + `difficulty`), or null. `song` is the
+ * minted id and `difficulty` the code (contract §0). v1's `?songId=<title>`
+ * links do not resolve: a title is not an address in v2.
+ */
+function deepLink(query: LocationQuery): { song: string; type: string; difficulty: string } | null {
+    const { song, type, difficulty } = query;
+    return typeof song === "string" && typeof type === "string" && typeof difficulty === "string"
+        ? { song, type, difficulty }
         : null;
 }
 
@@ -40,13 +44,13 @@ export default function useChartLoader(playback: Playback): {
     // Last deep-linked sheet, so re-activating with the same query doesn't reload.
     let lastKey = "";
 
-    // Deep-link: /visualizer?songId=..&type=..&difficulty=.. (e.g. from the sheet
+    // Deep-link: /visualizer?song=..&type=..&difficulty=.. (e.g. from the sheet
     // dialog) auto-fetches that chart from the backend.
     async function autoLoad(query: LocationQuery): Promise<void> {
         const link = deepLink(query);
         if (!link) return;
-        const { songId, type, difficulty } = link;
-        const key = `${songId}|${type}|${difficulty}`;
+        const { song, type, difficulty } = link;
+        const key = sheetKey(song, type, difficulty);
         if (key === lastKey) return; // same chart already loaded
         lastKey = key;
 
@@ -59,22 +63,14 @@ export default function useChartLoader(playback: Playback): {
         // chart text (hasChart: false, the common case). Previously this was
         // awaited together with fetchChart via Promise.all, so a chart-fetch
         // failure (also common) rejected the whole thing and info never rendered.
-        fetchSheetInfo(key)
+        fetchSheetInfo(song, type, difficulty)
             .then((info) => {
-                // Resolve the cover URL the same way preprocessData would (the API
-                // sends only the raw imageName), so MvCover shows the real jacket.
-                if (info.imageName && info.imageUrl == null) {
-                    info.imageUrl = new URL(
-                        info.imageName,
-                        `${GAME.dataSourceUrl}/img/cover/`,
-                    ).toString();
-                }
                 if (key === lastKey) sheetInfo.value = info;
             })
             .catch(() => {});
 
         try {
-            const chart = await fetchChart(songId, type, difficulty);
+            const chart = await fetchChart(song, type, difficulty);
             simai.value = chart;
             await loadChart(chart);
             playback.loaded.value = true;

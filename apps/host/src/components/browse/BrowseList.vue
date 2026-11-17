@@ -23,21 +23,21 @@ function isBookmarked(sheet: Sheet): boolean {
     <div class="mv-list">
         <div
             v-for="(s, i) in sheets"
-            :key="s.sheetExpr ?? i"
+            :key="s.key ?? i"
             class="mv-row mv-btn"
             @click="emit('select', s)"
         >
             <div class="mv-row-art">
-                <MvCover :item="s" />
+                <MvCover :item="s.song" />
             </div>
             <span class="mv-row-level">{{ s.level }}</span>
             <div class="mv-row-main">
-                <div class="mv-row-title">{{ s.title }}</div>
-                <div class="mv-row-artist">{{ s.artist }}</div>
+                <div class="mv-row-title">{{ s.song.title }}</div>
+                <div class="mv-row-artist">{{ s.song.artist }}</div>
             </div>
-            <span class="mv-row-cat">{{ s.category }}</span>
+            <span class="mv-row-cat">{{ s.song.category }}</span>
             <span class="mv-row-type">{{ getTypeAbbr(s.type) }}</span>
-            <span class="mv-row-bpm">{{ s.bpm }} BPM</span>
+            <span class="mv-row-bpm">{{ s.song.bpm }} BPM</span>
             <button
                 type="button"
                 class="mv-btn mv-icon-btn mv-row-bm"

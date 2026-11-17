@@ -194,13 +194,19 @@ DATABASE_URL=postgres://postgres:postgres@localhost:5432/maiscope_test cargo tes
 
 ## Conventions
 
-**Cross-tier key.** `sheetExpr = ${songId}|${type}|${difficulty}`. Frontend:
-`utils/sheet.ts:computeSheetExpr`. Backend: the `sheet_expr` column. URL-encoded
-in paths (`|` → `%7C`).
+**Identity.** A song is its minted UUID (`songs.id`); a sheet is that id plus
+its type and difficulty *code* — `/api/songs/{id}/sheets/{type}/{code}` on the
+server, `sheet.key = ${id}/${type}/${code}` in the client
+(`utils/data.ts:sheetKey`). Nothing is keyed on a title
+([ADR-0026](docs/adr/0026-v2-api-carries-codes-and-read-fields-only.md)).
+`sheet_expr` survives only as the sync's upstream match key and in `/api/v1`
+until `api-rewrite` 07 deletes it.
 
-**Raw versus derived.** The server returns raw fields only; the frontend computes
-`songNo`, `imageUrl`, `sheetExpr`, `notePercents`, `$canonicalSheet` in
-`utils/data.ts:preprocessData`. Keep new endpoints on this split.
+**Raw versus derived.** The server returns raw fields a screen reads, nothing
+else; the client derives `imageUrl` and builds the explicit `sheet.song`
+reference and `sheet.key` in `utils/data.ts:preprocessData`. Names and colours
+are resolved through the reference tables, never sent per row. Keep new
+endpoints on this split.
 
 **Engine boundary.** JS↔Bevy goes through the mailbox in `engine/src/wasm_bridge.rs`,
 drained once per frame by `apply_commands`. Never call into Bevy synchronously.

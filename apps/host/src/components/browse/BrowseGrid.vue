@@ -17,20 +17,20 @@ function isBookmarked(sheet: Sheet): boolean {
     <div class="mv-grid">
         <div
             v-for="(s, i) in sheets"
-            :key="s.sheetExpr ?? i"
+            :key="s.key ?? i"
             class="mv-card mv-btn"
             @click="emit('select', s)"
         >
             <div class="mv-card-art">
-                <MvCover :item="s" />
+                <MvCover :item="s.song" />
                 <span class="mv-card-level">{{ s.level }}</span>
                 <span v-if="isBookmarked(s)" class="mv-card-bm">
                     <MvIcon name="bookmark" :size="15" filled />
                 </span>
             </div>
             <div class="mv-card-meta">
-                <div class="mv-card-title">{{ s.title }}</div>
-                <div class="mv-card-artist">{{ s.artist }}</div>
+                <div class="mv-card-title">{{ s.song.title }}</div>
+                <div class="mv-card-artist">{{ s.song.artist }}</div>
             </div>
         </div>
     </div>

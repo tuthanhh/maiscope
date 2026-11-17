@@ -37,7 +37,7 @@ const props = defineProps<{
     levelOptions: SelectOption[];
     regionOptions: SelectOption[];
     typeChips: { type: string }[];
-    difficultyChips: { difficulty: string; name?: string }[];
+    difficultyChips: { code: string; name?: string }[];
 }>();
 
 const emit = defineEmits<{ draw: []; reset: [] }>();
@@ -150,14 +150,14 @@ function toggle(list: string[], value: string): string[] {
                     <div class="mv-chip-row">
                         <MvChip
                             v-for="d in difficultyChips"
-                            :key="d.difficulty"
+                            :key="d.code"
                             :active="
-                                props.form.difficulties.includes(d.difficulty)
+                                props.form.difficulties.includes(d.code)
                             "
                             @click="
                                 props.form.difficulties = toggle(
                                     props.form.difficulties,
-                                    d.difficulty,
+                                    d.code,
                                 )
                             "
                         >

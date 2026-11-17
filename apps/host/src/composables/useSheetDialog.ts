@@ -18,7 +18,10 @@ const {
   drawSize: 1,
 });
 
-const currentSheet = computed(() => currentItems.value[0] ?? NULL_SHEET);
+// The drawer hands its items back as `readonly`; Catalog sheets are frozen at
+// runtime already, and `DeepReadonly` cannot follow the sheet → song → sheets
+// cycle, so the plain type is the accurate one here.
+const currentSheet = computed(() => (currentItems.value[0] as Sheet | undefined) ?? NULL_SHEET);
 const isStatic = computed(() => !isDrawing.value);
 
 function viewSheet(sheet: Sheet) {

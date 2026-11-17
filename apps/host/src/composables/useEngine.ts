@@ -8,7 +8,8 @@
 // shrinks it by orders of magnitude.
 
 import { GAME } from "~/app/game";
-import type { Sheet } from "~/types";
+import { attachSheet, coverUrl } from "~/utils/data";
+import type { Sheet, Song } from "~/types";
 
 type EngineModule = typeof import("~/wasm/engine.js");
 
@@ -104,32 +105,51 @@ export async function loadChart(chart: string): Promise<void> {
   chartLoaded = true;
 }
 
-// Fetch a sheet's simai from the global backend (apps/server). sheetExpr parts:
-// GET /sheets/{songId}/chart?type=..&difficulty=.. → raw simai text.
+/** A sheet's address on the v2 API: `/api/songs/{id}/sheets/{type}/{code}`. */
+function sheetUrl(songId: string, type: string, difficulty: string): string {
+  return (
+    `${GAME.apiBaseUrl}/songs/${encodeURIComponent(songId)}` +
+    `/sheets/${encodeURIComponent(type)}/${encodeURIComponent(difficulty)}`
+  );
+}
+
+// Fetch a sheet's simai from the global backend (apps/server) → raw simai
+// text. Errors are plain text too (contract §0).
 export async function fetchChart(
   songId: string,
   type: string,
   difficulty: string,
 ): Promise<string> {
-  const url =
-    `${GAME.apiBaseUrl}/sheets/${encodeURIComponent(songId)}/chart` +
-    `?type=${encodeURIComponent(type)}&difficulty=${encodeURIComponent(difficulty)}`;
-  const res = await fetch(url);
+  const res = await fetch(`${sheetUrl(songId, type, difficulty)}/chart`);
   if (!res.ok) {
     throw new Error(`chart fetch failed (${res.status}): ${await res.text()}`);
   }
   return res.text();
 }
 
-// Fetch a sheet's catalog metadata (title/artist/level/noteCounts/…) for display.
-// GET /sheets/{sheetExpr} where sheetExpr = songId|type|difficulty.
-export async function fetchSheetInfo(sheetExpr: string): Promise<Sheet> {
-  const url = `${GAME.apiBaseUrl}/sheets/${encodeURIComponent(sheetExpr)}`;
-  const res = await fetch(url);
+// Fetch a sheet with its song (title/artist/level/noteCounts/…) for display,
+// as the client shape: the song carries its cover URL and the sheet points at
+// it, as in the Catalog.
+export async function fetchSheetInfo(
+  songId: string,
+  type: string,
+  difficulty: string,
+): Promise<Sheet> {
+  const res = await fetch(sheetUrl(songId, type, difficulty));
   if (!res.ok) {
     throw new Error(`sheet fetch failed (${res.status}): ${await res.text()}`);
   }
-  return res.json() as Promise<Sheet>;
+  const { song, ...sheet } = (await res.json()) as Omit<Sheet, "song" | "key"> & {
+    song: Omit<Song, "sheets">;
+  };
+  const owner: Song = {
+    ...song,
+    sheets: [],
+    imageUrl: coverUrl(song.imageName, GAME.dataSourceUrl),
+  };
+  const attached = attachSheet(sheet, owner);
+  owner.sheets.push(attached);
+  return attached;
 }
 
 // ── Transport ────────────────────────────────────────────────────────────────

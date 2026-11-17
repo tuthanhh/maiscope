@@ -24,7 +24,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   PAGES_PROJECT: maiscope
-  API_BASE_URL: https://maiscope-api.fly.dev/api/v1
+  API_BASE_URL: https://maiscope-api.fly.dev/api
 
 jobs:
   deploy:

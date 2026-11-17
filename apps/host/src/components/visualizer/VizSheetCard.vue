@@ -48,14 +48,14 @@ function searchOnYouTube(): void {
         <!-- header: jacket + identity -->
         <div class="mv-card-head">
             <div class="mv-card-jacket">
-                <MvCover :item="sheet" />
+                <MvCover :item="sheet.song" />
             </div>
             <div class="mv-card-id">
                 <span class="mv-card-cat">{{
-                    sheet.category
+                    sheet.song.category
                 }}</span>
-                <div class="mv-card-title">{{ sheet.title }}</div>
-                <div class="mv-card-artist">{{ sheet.artist }}</div>
+                <div class="mv-card-title">{{ sheet.song.title }}</div>
+                <div class="mv-card-artist">{{ sheet.song.artist }}</div>
             </div>
         </div>
 
@@ -83,9 +83,9 @@ function searchOnYouTube(): void {
                     getTypeName(sheet.type)
                 }}</span>
             </div>
-            <div v-if="sheet.bpm" class="mv-stat">
+            <div v-if="sheet.song.bpm" class="mv-stat">
                 <span class="mv-stat-k">{{ t("term.bpm") }}</span>
-                <span class="mv-stat-v">{{ sheet.bpm }}</span>
+                <span class="mv-stat-v">{{ sheet.song.bpm }}</span>
             </div>
             <div v-if="totalNotes != null" class="mv-stat">
                 <span class="mv-stat-k">{{
@@ -115,15 +115,15 @@ function searchOnYouTube(): void {
                 }}</span>
                 <span>{{ sheet.noteDesigner }}</span>
             </div>
-            <div v-if="sheet.version" class="mv-meta">
+            <div v-if="sheet.song.version" class="mv-meta">
                 <span class="mv-label">{{ t("term.version") }}</span>
-                <span>{{ sheet.version }}</span>
+                <span>{{ sheet.song.version }}</span>
             </div>
-            <div v-if="sheet.releaseDate" class="mv-meta">
+            <div v-if="sheet.song.releaseDate" class="mv-meta">
                 <span class="mv-label">{{
                     t("term.releaseDate")
                 }}</span>
-                <span>{{ sheet.releaseDate }}</span>
+                <span>{{ sheet.song.releaseDate }}</span>
             </div>
         </div>
 

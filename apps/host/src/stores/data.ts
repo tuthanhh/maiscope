@@ -1,10 +1,16 @@
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import { defineStore } from "pinia";
 import LoadingStatus from "~/enums/LoadingStatus";
 import { GAME } from "~/app/game";
 import { buildEmptyData, preprocessData } from "~/utils";
 import { fetchJson, fetchText } from "~/utils/api";
-import { clearCatalog, readCatalog, writeCatalog } from "~/utils/catalogCache";
+import {
+  clearCatalog,
+  dropRetiredCaches,
+  readCatalog,
+  writeCatalog,
+} from "~/utils/catalogCache";
+import { readBookmarkKeys, writeBookmarkKeys } from "~/utils/bookmarks";
 import type { Data, Manifest, Sheet } from "~/types";
 
 // eslint-disable-next-line import/prefer-default-export
@@ -13,6 +19,14 @@ export const useDataStore = defineStore("data", () => {
   const currentLoadingStatus = ref<LoadingStatus>(LoadingStatus.PENDING);
   const currentLoadingErrorMessage = ref("");
   const currentSelectedSheets = ref<Sheet[]>([]);
+  // Keys of bookmarks not yet matched to a loaded sheet: what was persisted,
+  // until a Catalog arrives to resolve it.
+  let pendingBookmarkKeys = readBookmarkKeys();
+  watch(currentSelectedSheets, (sheets) => {
+    if (currentLoadingStatus.value === LoadingStatus.LOADED) {
+      writeBookmarkKeys(sheets.map((s) => s.key));
+    }
+  });
 
   // Lookup maps for the loaded data. Computed once per load and shared across
   // all consumers (rather than rebuilt inside every useGameData() call).
@@ -32,30 +46,33 @@ export const useDataStore = defineStore("data", () => {
     () => new Map(currentData.value.types.map((e, i) => [e.type, i])),
   );
   const difficultyMap = computed(
-    () => new Map(currentData.value.difficulties.map((e) => [e.difficulty, e])),
+    () => new Map(currentData.value.difficulties.map((e) => [e.code, e])),
   );
   const difficultyIndexMap = computed(
-    () =>
-      new Map(currentData.value.difficulties.map((e, i) => [e.difficulty, i])),
+    () => new Map(currentData.value.difficulties.map((e, i) => [e.code, i])),
   );
 
-  // Parse a `/catalog` body and make it the current catalog. Shape is
-  // byte-identical to the legacy CloudFront data.json, so preprocessData is
-  // unchanged; cover images/icons still live on dataSourceUrl. The graph is
-  // replaced wholesale (preprocessData freezes it), so selections that point
-  // into the old graph are re-resolved by sheetExpr, the cross-tier key.
+  // Parse a `/api/catalog` body and make it the current catalog; covers
+  // still live on dataSourceUrl. The graph is replaced wholesale
+  // (preprocessData freezes it), so bookmarks that point into the old graph
+  // — or were only persisted keys — are re-resolved by sheet key. A key whose
+  // sheet is gone (hidden upstream, ADR-0026) drops out.
   function install(raw: string): void {
     const data = JSON.parse(raw) as Data;
     preprocessData(data, GAME.dataSourceUrl, GAME.gameCode);
 
-    const bySheetExpr = new Map(data.sheets.map((s) => [s.sheetExpr, s]));
-    currentSelectedSheets.value = currentSelectedSheets.value.flatMap((old) => {
-      const sheet = bySheetExpr.get(old.sheetExpr);
-      return sheet ? [sheet] : [];
-    });
+    const byKey = new Map(data.sheets.map((s) => [s.key, s]));
+    const keys = currentLoadingStatus.value === LoadingStatus.LOADED
+      ? currentSelectedSheets.value.map((s) => s.key)
+      : pendingBookmarkKeys;
+    pendingBookmarkKeys = [];
 
     currentData.value = data;
     currentLoadingStatus.value = LoadingStatus.LOADED;
+    currentSelectedSheets.value = keys.flatMap((key) => {
+      const sheet = byKey.get(key);
+      return sheet ? [sheet] : [];
+    });
   }
 
   // Paint from IndexedDB if it holds a catalog. Returns the revision it was
@@ -73,13 +90,14 @@ export const useDataStore = defineStore("data", () => {
     }
   }
 
-  // Launch: read cache → paint → probe `/sync/manifest` → refetch only on a
+  // Launch: read cache → paint → probe `/api/sync/manifest` → refetch only on a
   // revision change → swap (web-delivery 02 stage 2). The network is the
   // source of truth; the cache is the first paint.
   async function loadData() {
     if (currentLoadingStatus.value !== LoadingStatus.PENDING) return;
     currentLoadingStatus.value = LoadingStatus.LOADING;
 
+    dropRetiredCaches();
     const cachedRevision = await paintFromCache();
 
     try {
@@ -91,7 +109,7 @@ export const useDataStore = defineStore("data", () => {
       }
 
       // `no-cache` makes the browser revalidate rather than serve its own
-      // copy: `/catalog` carries `max-age=3600`, and a manifest that says
+      // copy: `/api/catalog` carries `max-age=3600`, and a manifest that says
       // "changed" must not be answered from an HTTP cache that is up to an
       // hour behind it. Unchanged is a 304 and costs nothing.
       const raw = await fetchText(`${GAME.apiBaseUrl}/catalog`, {

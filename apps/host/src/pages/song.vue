@@ -23,7 +23,7 @@ const { viewSheet } = useSheetDialog();
 const song = computed(() => {
   const songId = route.query.id;
   const found =
-    dataStore.currentData.songs.find((s) => s.songId === songId) ?? null;
+    dataStore.currentData.songs.find((s) => s.id === songId) ?? null;
 
   if (
     songId !== undefined &&

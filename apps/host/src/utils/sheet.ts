@@ -1,141 +1,68 @@
 import catImageUrl from '~/assets/images/cat.png';
 import darkCatImageUrl from '~/assets/images/dark-cat.png';
-import type { Sheet } from '~/types';
+import type { RegionOverride, Sheet, Song } from '~/types';
 
-export const $canonicalSheet = Symbol('$canonicalSheet');
-
-export const NULL_SHEET: Sheet = {
-  songId: null,
-  songNo: 0,
-
-  category: '???',
-  title: 'ฅ•ω•ฅ',
-  artist: ':3',
-  imageUrl: catImageUrl,
-
-  version: undefined,
-  bpm: undefined,
-
-  type: '??',
-  difficulty: '?',
-  level: '',
-  levelValue: 0,
-
-  noteDesigner: undefined,
-  comment: 'Oops! Nothing here :3',
-
-  searchUrl: 'https://www.youtube.com/watch?v=W1nifh1OhI8',
-};
-
-export const VOID_SHEET: Sheet = {
-  songId: null,
-  songNo: -1,
-
-  category: '???',
-  title: 'ฅ-ω-ฅ',
-  artist: ';3',
-  imageUrl: darkCatImageUrl,
-
-  version: undefined,
-  bpm: undefined,
-
-  type: '??',
-  difficulty: '?',
-  level: '',
-  levelValue: 0,
-
-  noteDesigner: undefined,
-  comment: 'Oops! Nothing here ;3',
-
-  searchUrl: 'https://www.youtube.com/watch?v=C9PFVo1FEwU',
-};
-
-export function getRegionOverrideSheet(sheet: Sheet, region: string): Sheet {
-  return sheet.regionOverrides?.[region] ?? sheet;
-}
-
-export function getCanonicalSheet(sheet: Sheet): Sheet {
-  return sheet[$canonicalSheet] ?? sheet;
-}
-
-export function isCanonicalSheet(sheet: Sheet): boolean {
-  return sheet === getCanonicalSheet(sheet);
-}
-
-export function computeSheetExpr(sheet: Sheet) {
-  return `${sheet.songId}|${sheet.type}|${sheet.difficulty}`;
-}
-
-export function makeInvalidDummySheet(sheetExprMatches: string[]): Sheet {
-  const sheetExpr = sheetExprMatches.join('|');
-
-  return {
-    songId: null,
-    songNo: 0,
-
-    category: 'INVALID SHEET EXPR',
-    title: sheetExpr,
-    artist: undefined,
-    bpm: undefined,
-
-    imageName: undefined,
-    imageUrl: undefined,
-
-    version: undefined,
-    releaseDate: undefined,
-
+function placeholderSheet(song: Omit<Song, 'sheets'>, searchUrl: string): Sheet {
+  const owner: Song = { ...song, sheets: [] };
+  const sheet: Sheet = {
     type: '??',
-    difficulty: 'invalid',
-
-    level: undefined,
-    levelValue: undefined,
-
-    noteDesigner: undefined,
-    comment: 'This sheet expr is not in a valid format.',
-
-    searchUrl: null,
+    difficulty: '?',
+    level: '',
+    levelValue: 0,
+    hasChart: false,
+    song: owner,
+    key: `${song.id}/??/?`,
+    searchUrl,
   };
+  owner.sheets.push(sheet);
+  return sheet;
 }
 
-export function makeUnmatchedDummySheet(sheetExprMatches: string[]): Sheet {
-  const [songId, type, difficulty, level = undefined] = sheetExprMatches;
+/** Shown while the sheet dialog has nothing to show. */
+export const NULL_SHEET: Sheet = placeholderSheet(
+  {
+    id: 'null',
+    category: '???',
+    title: 'ฅ•ω•ฅ',
+    artist: ':3',
+    imageUrl: catImageUrl,
+    comment: 'Oops! Nothing here :3',
+  },
+  'https://www.youtube.com/watch?v=W1nifh1OhI8',
+);
 
+export const VOID_SHEET: Sheet = placeholderSheet(
+  {
+    id: 'void',
+    category: '???',
+    title: 'ฅ-ω-ฅ',
+    artist: ';3',
+    imageUrl: darkCatImageUrl,
+    comment: 'Oops! Nothing here ;3',
+  },
+  'https://www.youtube.com/watch?v=C9PFVo1FEwU',
+);
+
+/** The dialog's stand-ins: not Catalog sheets, so never bookmarked or played. */
+export function isPlaceholderSheet(sheet: Sheet): boolean {
+  return sheet === NULL_SHEET || sheet === VOID_SHEET;
+}
+
+/**
+ * The level and designer values a sheet shows in `region`: the region's
+ * override where it sets one, the sheet's own value otherwise. v1 swapped in
+ * an override object that inherited the rest through the prototype chain;
+ * this reads the same values without one.
+ */
+export function regionalValues(sheet: Sheet, region: string | null): Required<RegionOverride> {
+  const override: RegionOverride = (region != null ? sheet.regionOverrides?.[region] : undefined) ?? {};
   return {
-    songId,
-    songNo: 0,
-
-    category: 'UNMATCHED SHEET',
-    title: songId,
-    artist: undefined,
-    bpm: undefined,
-
-    imageName: undefined,
-    imageUrl: undefined,
-
-    version: undefined,
-    releaseDate: undefined,
-
-    type,
-    difficulty,
-
-    level,
-    levelValue: undefined,
-
-    noteDesigner: undefined,
-    comment: 'This sheet expr doesn\'t match with any sheets.',
-
-    searchUrl: null,
+    level: override.level ?? sheet.level!,
+    levelValue: override.levelValue ?? sheet.levelValue!,
+    internalLevel: override.internalLevel ?? sheet.internalLevel!,
+    internalLevelValue: override.internalLevelValue ?? sheet.internalLevelValue!,
+    noteDesigner: override.noteDesigner ?? sheet.noteDesigner!,
   };
-}
-
-export function makeDummySheet(sheetExpr: string): Sheet {
-  // eslint-disable-next-line no-console
-  console.warn(`Sheet for expr '${sheetExpr}' is not found.`);
-
-  const sheetExprMatches = sheetExpr.split('|');
-
-  if (sheetExprMatches.length < 3) return makeInvalidDummySheet(sheetExprMatches);
-  return makeUnmatchedDummySheet(sheetExprMatches);
 }
 
 export function validateNoteCounts(sheet: Sheet, gameCode: string | null | undefined) {

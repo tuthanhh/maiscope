@@ -1,9 +1,20 @@
-import { $canonicalSheet } from '~/utils';
 import type { Song } from './Song';
 
-export type Sheet = (Omit<Song, 'sheets'> & {
-  type?: string;
-  difficulty?: string;
+/** A region's partial override of a sheet's level and designer fields. */
+export type RegionOverride = {
+  level?: string;
+  levelValue?: number;
+  internalLevel?: string;
+  internalLevelValue?: number;
+  noteDesigner?: string;
+};
+
+// A sheet as the v2 API sends it, with its song as an explicit reference
+// instead of v1's prototype chain, and a stable `key` built from minted parts.
+export type Sheet = {
+  type: string;
+  /** `difficulties.code`: `master`, or `協` for a UTAGE sheet. */
+  difficulty: string;
 
   level?: string;
   levelValue?: number;
@@ -15,18 +26,16 @@ export type Sheet = (Omit<Song, 'sheets'> & {
   noteCounts?: Record<string, number | null>;
 
   regions?: Record<string, boolean>;
-  regionOverrides?: Record<string, Sheet>;
+  regionOverrides?: Record<string, RegionOverride>;
 
-  isSpecial?: boolean;
-
-  // from the global backend catalog: a simai chart exists for this sheet
-  hasChart?: boolean;
+  /** A simai chart exists for this sheet. */
+  hasChart: boolean;
 } & {
-  // added by preprocessing
-  [$canonicalSheet]?: Sheet;
-  sheetExpr?: string;
-  notePercents?: Record<string, number | null>;
+  // set on the client (utils/data.ts)
+  song: Song;
+  /** `${song.id}/${type}/${difficulty}`: the sheet's identity in the client. */
+  key: string;
 
-  // used by sheet placeholders
+  // placeholder sheets only (utils/sheet.ts)
   searchUrl?: string | null;
-});
+};
