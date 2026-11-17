@@ -12,6 +12,8 @@
       `/catalog` or `/sync/*`
 - [ ] §5's struck-audio note kept — it still applies, and ADR-0013 reaffirms it
 - [ ] `schema.md` moves the three tables out of "Planned tables"
+- [ ] `schema.md` drops `contributions` and `audit_log` from "Planned tables":
+      both belong to the moderation-queue design ADR-0013 superseded
 - [ ] `ROADMAP.md` collapses this feature to one line and marks it shipped
 - [ ] `server-contributions` confirmed `superseded`, with its tickets left in
       git as the record of the rejected design
