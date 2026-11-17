@@ -2368,6 +2368,13 @@ mod tests {
         let lost = apply(&pool, &songs_payload(&["A"])).await?;
         assert_eq!(lost.songs_vanished_ids, ["B"]);
         assert!(!lost.rename_signature());
+
+        // Both runs committed: B was inserted, then logged as vanished.
+        let logged: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM deleted_songs WHERE song_id = 'B'")
+                .fetch_one(&pool)
+                .await?;
+        assert_eq!(logged, 1);
         Ok(())
     }
 

@@ -48,3 +48,13 @@ true, the override becomes necessary again.
 Checked end to end on a throwaway database: sync, rename one `song_id` to
 fake an upstream correction, sync again (exit 3, both songs named, summary
 written), sync a third time (exit 0).
+
+**Known gaps, left as found (review, 2026-11-17).** Two cases go quiet. A
+rename that is later reverted (A to B, then B to A) does not trip on the
+revert: A's row still exists, so it returns as an update, not an insert,
+and the run sees one vanish and no insert. And re-running a failed sync
+workflow in GitHub turns it green, which hides the alarm that already
+fired. Catching the first would mean counting songs that come back from
+`deleted_songs`, which is detection logic the spec rules out; it is the
+maintainer's call. Failed and timed-out runs now write a one-line job
+summary too, so no run leaves the summary empty.

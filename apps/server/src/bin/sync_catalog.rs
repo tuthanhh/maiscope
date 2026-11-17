@@ -58,6 +58,9 @@ async fn main() {
         }
         Ok(Err(e)) => {
             eprintln!("sync_catalog: failed: {e}");
+            append_job_summary(&format!(
+                "### Catalog sync: failed, nothing written\n\n`{e}`\n"
+            ));
             std::process::exit(1);
         }
         Err(_) => {
@@ -67,6 +70,9 @@ async fn main() {
                  'applying' means the transaction was open and has been rolled \
                  back, so nothing was written."
             );
+            append_job_summary(&format!(
+                "### Catalog sync: timed out after {timeout_secs}s, nothing written\n"
+            ));
             std::process::exit(1);
         }
     }
@@ -76,9 +82,15 @@ async fn main() {
 /// "this broke".
 const RENAME_SIGNATURE_EXIT: i32 = 3;
 
-/// Append the run's counts to the GitHub job summary, when there is one. A
-/// failure to write it is reported but does not fail a sync that committed.
+/// Append the run's counts to the GitHub job summary.
 fn write_job_summary(stats: &SyncStats) {
+    append_job_summary(&stats.summary_markdown());
+}
+
+/// Append to the GitHub job summary, when there is one, so every run says
+/// what it did, failed runs included. A failure to write it is reported but
+/// does not change the exit code.
+fn append_job_summary(markdown: &str) {
     let Ok(path) = std::env::var("GITHUB_STEP_SUMMARY") else {
         return;
     };
@@ -87,7 +99,7 @@ fn write_job_summary(stats: &SyncStats) {
         .append(true)
         .create(true)
         .open(&path)
-        .and_then(|mut f| f.write_all(stats.summary_markdown().as_bytes()));
+        .and_then(|mut f| f.write_all(markdown.as_bytes()));
     if let Err(e) = written {
         eprintln!("sync_catalog: could not write the job summary to {path}: {e}");
     }
