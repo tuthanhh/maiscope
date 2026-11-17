@@ -20,10 +20,11 @@
   &:hover {
     border-color: var(--line-strong);
   }
-  &:focus,
-  &:focus-visible {
+  &:focus {
     background: var(--bg);
     border-color: var(--line-strong);
+  }
+  &:focus-visible {
     outline: 1px solid var(--focus);
     outline-offset: 2px;
   }

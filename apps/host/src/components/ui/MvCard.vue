@@ -31,7 +31,8 @@ defineEmits<{ bookmark: [] }>();
       <div class="mv-card-title t-strong">{{ title }}</div>
       <div class="mv-card-artist t-body t-muted">{{ artist }}</div>
       <div v-if="designer" class="mv-card-designer t-meta t-muted">
-        <MvIcon name="pen" :size="12" /> {{ designer }}
+        <MvIcon name="pen" :size="12" />
+        <span class="mv-card-designer-name">{{ designer }}</span>
       </div>
     </RouterLink>
     <button
@@ -48,7 +49,7 @@ defineEmits<{ bookmark: [] }>();
   </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
 .mv-card {
   position: relative;
   min-width: 0;
@@ -83,7 +84,7 @@ defineEmits<{ bookmark: [] }>();
 }
 .mv-card-title,
 .mv-card-artist,
-.mv-card-designer {
+.mv-card-designer-name {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -107,10 +108,10 @@ defineEmits<{ bookmark: [] }>();
   background: var(--bg);
   color: var(--fg);
   cursor: pointer;
-  opacity: 0.85;
   transition: opacity var(--dur);
 }
+// The worked example's 28px bookmark mark; otherwise an icon button.
 .mv-card-bookmark:hover {
-  opacity: 1;
+  opacity: 0.7;
 }
 </style>

@@ -19,7 +19,11 @@ const props = withDefaults(
   }>(),
   { kind: "ghost", filled: false, disabled: false, type: "button" },
 );
-defineEmits<{ click: [event: MouseEvent] }>();
+const emit = defineEmits<{ click: [event: MouseEvent] }>();
+
+if (import.meta.env.DEV && props.kind === "icon" && !props.label) {
+  console.warn("MvButton: an icon button needs a `label` for its accessible name");
+}
 </script>
 
 <template>
@@ -30,6 +34,7 @@ defineEmits<{ click: [event: MouseEvent] }>();
     :class="`mv-button--${kind}`"
     :aria-label="props.kind === 'icon' ? label : undefined"
     :title="props.kind === 'icon' ? label : undefined"
+    @click="emit('click', $event)"
   >
     <MvIcon v-if="icon" :name="icon" :size="16" :filled="filled" />
     <span v-if="kind !== 'icon'" class="mv-button-text"><slot /></span>
@@ -42,7 +47,7 @@ defineEmits<{ click: [event: MouseEvent] }>();
     :disabled="disabled"
     :aria-label="props.kind === 'icon' ? label : undefined"
     :title="props.kind === 'icon' ? label : undefined"
-    @click="$emit('click', $event)"
+    @click="emit('click', $event)"
   >
     <MvIcon v-if="icon" :name="icon" :size="16" :filled="filled" />
     <span v-if="kind !== 'icon'" class="mv-button-text"><slot /></span>
@@ -94,11 +99,6 @@ defineEmits<{ click: [event: MouseEvent] }>();
   background: var(--bg-panel);
 }
 
-.mv-button--text {
-  padding: 0;
-  height: auto;
-  min-height: var(--control-h);
-}
 .mv-button--text:not(:disabled):hover .mv-button-text {
   text-decoration: underline;
   text-underline-offset: 3px;

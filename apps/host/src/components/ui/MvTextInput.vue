@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { inject } from "vue";
+import { fieldKey } from "./fieldContext";
 import MvIcon from "./MvIcon.vue";
 import type { IconName } from "./icons";
 
@@ -16,17 +18,22 @@ const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 function onInput(event: Event): void {
   emit("update:modelValue", (event.target as HTMLInputElement).value);
 }
+
+// Inside an MvField: take its id and describing note.
+const field = inject(fieldKey, null);
 </script>
 
 <template>
   <div class="mv-input-wrap" :style="{ width: width != null ? `${width}px` : undefined }">
     <span v-if="icon" class="mv-input-icon"><MvIcon :name="icon" :size="15" /></span>
     <input
+      :id="field?.id"
+      :aria-describedby="field?.describedBy()"
       class="mv-input"
       :class="{ 'mv-input--icon': icon }"
       :value="modelValue"
       :placeholder="placeholder"
-      :aria-invalid="invalid || undefined"
+      :aria-invalid="invalid || field?.invalid() || undefined"
       :disabled="disabled"
       @input="onInput"
     />

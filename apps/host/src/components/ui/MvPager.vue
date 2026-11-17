@@ -8,6 +8,8 @@ const props = defineProps<{
   page: number;
   pageSize: number;
   total: number;
+  /** The pager's accessible name, e.g. "Pages". */
+  label: string;
   prevLabel: string;
   nextLabel: string;
   /** Formats the range line, e.g. (from, to, total) => `${from} – ${to} of ${total}`. */
@@ -16,8 +18,9 @@ const props = defineProps<{
 const emit = defineEmits<{ page: [page: number] }>();
 
 const pages = computed(() => Math.max(1, Math.ceil(props.total / props.pageSize)));
-// Thin-space thousands grouping, as the design's "1 038".
-const group = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+// Thousands grouped with a no-break space, as the design's "1 038", so a
+// narrow row never breaks inside a number.
+const group = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, "\u00a0");
 const range = computed(() => {
   const from = (props.page - 1) * props.pageSize + 1;
   const to = Math.min(props.total, props.page * props.pageSize);
@@ -26,7 +29,7 @@ const range = computed(() => {
 </script>
 
 <template>
-  <nav v-if="pages > 1" class="mv-pager t-meta">
+  <nav v-if="pages > 1" class="mv-pager t-meta" :aria-label="label">
     <span class="t-muted">{{ range }}</span>
     <span class="mv-pager-controls">
       <MvButton

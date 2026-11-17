@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { inject } from "vue";
+import { fieldKey } from "./fieldContext";
 import MvIcon from "./MvIcon.vue";
 
 export type SelectOption = { value: string; text: string };
@@ -15,11 +17,16 @@ const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 function onChange(event: Event): void {
   emit("update:modelValue", (event.target as HTMLSelectElement).value);
 }
+
+// Inside an MvField: take its id and describing note.
+const field = inject(fieldKey, null);
 </script>
 
 <template>
   <div class="mv-select-wrap" :style="{ width: width != null ? `${width}px` : undefined }">
     <select
+      :id="field?.id"
+      :aria-describedby="field?.describedBy()"
       class="mv-select"
       :class="{ 'mv-select--empty': modelValue === '' }"
       :value="modelValue"
