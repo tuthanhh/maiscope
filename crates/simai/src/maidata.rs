@@ -196,7 +196,10 @@ mod tests {
 
     #[test]
     fn a_missing_title_is_an_error() {
-        assert_eq!(parse("&artist=Someone\n&lv_5=12\n"), Err(MaidataError::MissingTitle));
+        assert_eq!(
+            parse("&artist=Someone\n&lv_5=12\n"),
+            Err(MaidataError::MissingTitle)
+        );
     }
 
     #[test]

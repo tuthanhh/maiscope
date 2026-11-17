@@ -344,9 +344,9 @@ fn resolve_utage(claim: &UtageClaim, index: &UtageIndex) -> UtageResolution {
 
     let plain = strip_level(strip_tag(title));
     let forms = [
-        join_tag(dir),            // `[X] 人マニア` → `[X]人マニア`
+        join_tag(dir),              // `[X] 人マニア` → `[X]人マニア`
         strip_tag(dir).to_string(), // `[光] Reach For The Stars` → the plain title
-        format!("[{tag}]{plain}"), // `[宴] WE'RE BACK!! [12+?]` → `[逆]WE'RE BACK!!`
+        format!("[{tag}]{plain}"),  // `[宴] WE'RE BACK!! [12+?]` → `[逆]WE'RE BACK!!`
         plain.to_string(),
     ];
 
@@ -414,7 +414,11 @@ fn strip_level(s: &str) -> &str {
         && let Some(open) = body.rfind('[')
     {
         let level = &body[open + 1..];
-        if !level.is_empty() && level.chars().all(|c| c.is_ascii_digit() || "+?*".contains(c)) {
+        if !level.is_empty()
+            && level
+                .chars()
+                .all(|c| c.is_ascii_digit() || "+?*".contains(c))
+        {
             return body[..open].trim_end();
         }
     }
@@ -464,10 +468,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // did before. ORDER BY keeps the candidate lists, and so the reports,
     // stable between runs.
     let mut catalog = Catalog::default();
-    let songs: Vec<(Uuid, String)> =
-        sqlx::query_as("SELECT id, title FROM songs WHERE title IS NOT NULL ORDER BY source_index, song_id")
-            .fetch_all(&pool)
-            .await?;
+    let songs: Vec<(Uuid, String)> = sqlx::query_as(
+        "SELECT id, title FROM songs WHERE title IS NOT NULL ORDER BY source_index, song_id",
+    )
+    .fetch_all(&pool)
+    .await?;
     for (id, title) in &songs {
         catalog.add_song(*id, title);
     }
@@ -493,10 +498,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let mut utage = UtageIndex::default();
-    let codes: Vec<(String, String)> =
-        sqlx::query_as("SELECT code, difficulty FROM difficulties")
-            .fetch_all(&pool)
-            .await?;
+    let codes: Vec<(String, String)> = sqlx::query_as("SELECT code, difficulty FROM difficulties")
+        .fetch_all(&pool)
+        .await?;
     for (code, difficulty) in &codes {
         utage.add_code(code, difficulty);
     }
@@ -592,8 +596,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 UtageResolution::NoSheet => {
                     unmatched_utage.push(format!("{dir_name}: '{title}' tag {tag}: no UTAGE sheet"))
                 }
-                UtageResolution::Ambiguous(exprs) => unmatched_utage
-                    .push(format!("{dir_name}: '{title}' could be any of {exprs:?}")),
+                UtageResolution::Ambiguous(exprs) => {
+                    unmatched_utage.push(format!("{dir_name}: '{title}' could be any of {exprs:?}"))
+                }
             }
             continue;
         }
@@ -786,7 +791,12 @@ mod tests {
         c.add_song(song(4), "Dup");
         c.add_sheet(song(4), "std", "master", sheet("Dup#4|std|master", "11"));
         c.add_song(song(5), "Retribution ～ Cycle ～");
-        c.add_sheet(song(5), "dx", "master", sheet("Retribution|dx|master", "14"));
+        c.add_sheet(
+            song(5),
+            "dx",
+            "master",
+            sheet("Retribution|dx|master", "14"),
+        );
         c.add_song(song(6), "\u{3000}");
         c.add_sheet(song(6), "dx", "master", sheet("blank|dx|master", "1"));
         c
@@ -925,18 +935,50 @@ mod tests {
         for tag in ["X", "光", "蔵", "協", "逆", "充"] {
             u.add_code(tag, &format!("【{tag}】"));
         }
-        u.add_sheet("[X]人マニア", "【X】", sheet("[X]人マニア|utage|【X】", "14?"));
-        u.add_sheet("Reach For The Stars", "【蔵】", sheet("(宴) Reach For The Stars|utage|【蔵】", "*"));
-        u.add_sheet("Reach For The Stars", "【光】", sheet("(宴) Reach For The Stars (2)|utage|【光】", "*"));
-        u.add_sheet("Love You", "【協】", sheet("(宴) Love You|utage|【協】", "*"));
-        u.add_sheet("[協]Love You", "【協】", sheet("[協]Love You|utage|【協】", "12?"));
-        u.add_sheet("[逆]WE'RE BACK!!", "【逆】", sheet("[逆]WE'RE BACK!!|utage|【逆】", "12+?"));
-        u.add_sheet("[充]エンジェル ドリーム", "【充】", sheet("[充]エンジェル ドリーム|utage|【充】", "11?"));
+        u.add_sheet(
+            "[X]人マニア",
+            "【X】",
+            sheet("[X]人マニア|utage|【X】", "14?"),
+        );
+        u.add_sheet(
+            "Reach For The Stars",
+            "【蔵】",
+            sheet("(宴) Reach For The Stars|utage|【蔵】", "*"),
+        );
+        u.add_sheet(
+            "Reach For The Stars",
+            "【光】",
+            sheet("(宴) Reach For The Stars (2)|utage|【光】", "*"),
+        );
+        u.add_sheet(
+            "Love You",
+            "【協】",
+            sheet("(宴) Love You|utage|【協】", "*"),
+        );
+        u.add_sheet(
+            "[協]Love You",
+            "【協】",
+            sheet("[協]Love You|utage|【協】", "12?"),
+        );
+        u.add_sheet(
+            "[逆]WE'RE BACK!!",
+            "【逆】",
+            sheet("[逆]WE'RE BACK!!|utage|【逆】", "12+?"),
+        );
+        u.add_sheet(
+            "[充]エンジェル ドリーム",
+            "【充】",
+            sheet("[充]エンジェル ドリーム|utage|【充】", "11?"),
+        );
         u
     }
 
     fn utage<'a>(title: &'a str, dir: &'a str, tag: &'a str) -> UtageClaim<'a> {
-        UtageClaim { title, dir_name: dir, tag }
+        UtageClaim {
+            title,
+            dir_name: dir,
+            tag,
+        }
     }
 
     fn utage_matched(expr: &str) -> UtageResolution {
@@ -983,7 +1025,10 @@ mod tests {
             utage_matched("(宴) Reach For The Stars (2)|utage|【光】")
         );
         assert_eq!(
-            resolve_utage(&utage("[宴] Reach For The Stars", "[蔵] Reach For The Stars", "蔵"), &utage_index()),
+            resolve_utage(
+                &utage("[宴] Reach For The Stars", "[蔵] Reach For The Stars", "蔵"),
+                &utage_index()
+            ),
             utage_matched("(宴) Reach For The Stars|utage|【蔵】")
         );
     }
@@ -1018,12 +1063,26 @@ mod tests {
     fn either_side_of_a_buddy_chart_is_set_aside() {
         let u = utage_index();
         assert_eq!(
-            resolve_utage(&utage("[宴/バディ/1P]エンジェル ドリーム [11?]", "[充] エンジェル ドリーム [1P]", "充"), &u),
+            resolve_utage(
+                &utage(
+                    "[宴/バディ/1P]エンジェル ドリーム [11?]",
+                    "[充] エンジェル ドリーム [1P]",
+                    "充"
+                ),
+                &u
+            ),
             UtageResolution::Buddy
         );
         // One sample folder spells it バティ; the folder suffix still says.
         assert_eq!(
-            resolve_utage(&utage("[宴/バティ/1P]エンジェル ドリーム", "[充] エンジェル ドリーム [1P]", "充"), &u),
+            resolve_utage(
+                &utage(
+                    "[宴/バティ/1P]エンジェル ドリーム",
+                    "[充] エンジェル ドリーム [1P]",
+                    "充"
+                ),
+                &u
+            ),
             UtageResolution::Buddy
         );
     }
@@ -1031,7 +1090,10 @@ mod tests {
     #[test]
     fn a_tag_that_is_no_difficulty_code_is_reported() {
         assert_eq!(
-            resolve_utage(&utage("[宴] 人マニア [14?]", "[X] 人マニア", "Y"), &utage_index()),
+            resolve_utage(
+                &utage("[宴] 人マニア [14?]", "[X] 人マニア", "Y"),
+                &utage_index()
+            ),
             UtageResolution::UnknownTag
         );
     }
@@ -1055,13 +1117,25 @@ mod tests {
     #[test]
     fn two_folders_on_one_utage_sheet_seed_neither() {
         let mut m: HashMap<String, Vec<(String, ChartToApply)>> = HashMap::new();
-        m.entry("a".into()).or_default().push(("A".into(), chart("a")));
-        m.entry("b".into()).or_default().push(("B1".into(), chart("b")));
-        m.entry("b".into()).or_default().push(("B2".into(), chart("b")));
+        m.entry("a".into())
+            .or_default()
+            .push(("A".into(), chart("a")));
+        m.entry("b".into())
+            .or_default()
+            .push(("B1".into(), chart("b")));
+        m.entry("b".into())
+            .or_default()
+            .push(("B2".into(), chart("b")));
 
         let (unique, colliding) = split_collisions(m);
 
-        assert_eq!(unique.iter().map(|c| c.sheet_expr.as_str()).collect::<Vec<_>>(), ["a"]);
+        assert_eq!(
+            unique
+                .iter()
+                .map(|c| c.sheet_expr.as_str())
+                .collect::<Vec<_>>(),
+            ["a"]
+        );
         assert_eq!(colliding, [r#"["B1", "B2"] all resolve to b"#]);
     }
 }
