@@ -35,3 +35,11 @@ filters set; no new SQL. The id is parsed by hand so a bad one is the JSON
 the router to prove axum decodes the segment, and the bracketed name and a
 lower-cased ASCII code both miss. Live against the dev database, an encoded
 UTAGE path returns its sheet with `"difficulty": "協"`.
+
+**2026-11-17 — review.** Applied: paths go through `routes::extract::ApiPath`,
+so even a segment that is not UTF-8 is the JSON `400`; only the canonical
+lowercase hyphenated UUID is a song id, so a song has one URL; quoted input
+is capped at 64 characters; both reads share a snapshot and the unreachable
+"sheet without its song" is an `Internal` error; `/api` has a JSON 404
+fallback. No dev sheet has a NULL type or difficulty, so every sheet is
+addressable.

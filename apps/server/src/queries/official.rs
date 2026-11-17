@@ -2,8 +2,12 @@
 //! (`api-rewrite` 03, 04). Two queries with optional filters serve the
 //! Catalog (no filter), one song (by id) and one sheet (by id, type and
 //! difficulty code), so the three payloads cannot drift apart.
+//!
+//! The `$n IS NULL OR …` filters cost the single-song paths their index once
+//! Postgres settles on a generic plan: a scan of ~7.5k sheets, milliseconds.
+//! Accepted for one query shape over three; split them if it ever shows.
 
-use sqlx::PgPool;
+use sqlx::PgConnection;
 use sqlx::types::Uuid;
 
 use crate::types::{OfficialSheetRow, OfficialSongRow};
@@ -15,7 +19,7 @@ type RegionOverridesJson =
 
 /// Every song, or the one with `id`, in `source_index` order.
 pub async fn fetch_official_songs(
-    pool: &PgPool,
+    conn: &mut PgConnection,
     id: Option<Uuid>,
 ) -> Result<Vec<OfficialSongRow>, sqlx::Error> {
     sqlx::query_as!(
@@ -27,7 +31,7 @@ pub async fn fetch_official_songs(
            ORDER BY source_index"#,
         id
     )
-    .fetch_all(pool)
+    .fetch_all(conn)
     .await
 }
 
@@ -35,7 +39,7 @@ pub async fn fetch_official_songs(
 /// meaning "any". In song then `source_index` order. The difficulty leaves as
 /// `difficulties.code`, the form URLs carry, not the stored key.
 pub async fn fetch_official_sheets(
-    pool: &PgPool,
+    conn: &mut PgConnection,
     song_id: Option<Uuid>,
     sheet: Option<(&str, &str)>,
 ) -> Result<Vec<OfficialSheetRow>, sqlx::Error> {
@@ -73,7 +77,7 @@ pub async fn fetch_official_sheets(
         r#type,
         difficulty_code
     )
-    .fetch_all(pool)
+    .fetch_all(conn)
     .await
 }
 
@@ -91,7 +95,7 @@ pub enum ChartText {
 /// The simai text for one sheet, addressed as the v2 routes address it. One
 /// statement, so the four outcomes come from one snapshot.
 pub async fn fetch_chart_text(
-    pool: &PgPool,
+    conn: &mut PgConnection,
     song_id: Uuid,
     r#type: &str,
     difficulty_code: &str,
@@ -106,7 +110,7 @@ pub async fn fetch_chart_text(
         r#type,
         difficulty_code
     )
-    .fetch_optional(pool)
+    .fetch_optional(conn)
     .await?;
     Ok(match row {
         None => ChartText::NoSheet,
@@ -116,4 +120,96 @@ pub async fn fetch_chart_text(
             None => ChartText::NotInline,
         },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Two songs and three sheets, each inserted out of `source_index` order,
+    /// so a missing `ORDER BY` shows. Returns (first song, second song).
+    async fn seed(pool: &sqlx::PgPool) -> sqlx::Result<(Uuid, Uuid)> {
+        crate::test_support::seed_difficulties(pool, &["master", "expert"]).await;
+        sqlx::query!(
+            "INSERT INTO difficulties (difficulty, name, code, ordinal)
+             VALUES ('【協】', '【協】', '協', 9)"
+        )
+        .execute(pool)
+        .await?;
+        let second = sqlx::query_scalar!(
+            "INSERT INTO songs (song_id, title, source_index) VALUES ('b', 'B', 1) RETURNING id"
+        )
+        .fetch_one(pool)
+        .await?;
+        let first = sqlx::query_scalar!(
+            "INSERT INTO songs (song_id, title, source_index) VALUES ('a', 'A', 0) RETURNING id"
+        )
+        .fetch_one(pool)
+        .await?;
+        sqlx::query!(
+            "INSERT INTO sheets (song_id_fk, sheet_expr, type, difficulty, source_index)
+             VALUES ($1, 'a|utage|【協】', 'utage', '【協】', 2),
+                    ($1, 'a|dx|master', 'dx', 'master', 1),
+                    ($1, 'a|dx|expert', 'dx', 'expert', 0),
+                    ($2, 'b|dx|master', 'dx', 'master', 0)",
+            first,
+            second
+        )
+        .execute(pool)
+        .await?;
+        Ok((first, second))
+    }
+
+    fn keys(rows: &[OfficialSheetRow]) -> Vec<(String, String)> {
+        rows.iter()
+            .map(|r| (r.r#type.clone().unwrap(), r.difficulty.clone().unwrap()))
+            .collect()
+    }
+
+    #[sqlx::test]
+    async fn songs_come_in_source_order_and_filter_by_id(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let (first, second) = seed(&pool).await?;
+        let mut conn = pool.acquire().await?;
+        let all = fetch_official_songs(&mut conn, None).await?;
+        assert_eq!(
+            all.iter().map(|s| s.id).collect::<Vec<_>>(),
+            [first, second]
+        );
+        let one = fetch_official_songs(&mut conn, Some(second)).await?;
+        assert_eq!(one.iter().map(|s| s.id).collect::<Vec<_>>(), [second]);
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn sheets_filter_by_song_then_by_type_and_code(pool: sqlx::PgPool) -> sqlx::Result<()> {
+        let (first, second) = seed(&pool).await?;
+        let mut conn = pool.acquire().await?;
+        let pair = |t: &str, d: &str| (t.to_string(), d.to_string());
+
+        let all = fetch_official_sheets(&mut conn, None, None).await?;
+        assert_eq!(all.len(), 4);
+
+        // Per song, in `source_index` order, UTAGE as its code.
+        let mine = fetch_official_sheets(&mut conn, Some(first), None).await?;
+        assert_eq!(
+            keys(&mine),
+            [
+                pair("dx", "expert"),
+                pair("dx", "master"),
+                pair("utage", "協")
+            ]
+        );
+
+        let one = fetch_official_sheets(&mut conn, Some(first), Some(("utage", "協"))).await?;
+        assert_eq!(keys(&one), [pair("utage", "協")]);
+        // The stored key is not an address; neither is another song's sheet.
+        assert!(
+            fetch_official_sheets(&mut conn, Some(first), Some(("utage", "【協】")))
+                .await?
+                .is_empty()
+        );
+        let theirs = fetch_official_sheets(&mut conn, Some(second), Some(("dx", "expert"))).await?;
+        assert!(theirs.is_empty());
+        Ok(())
+    }
 }

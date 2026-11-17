@@ -32,3 +32,11 @@ only through `AppError::Database`, so `?` on a query in this handler cannot
 leak. The chart lookup is one statement distinguishing no sheet, no chart
 row, blob-only and inline. A test renames `charts` mid-test to force a
 database error and finds the body is exactly `internal error`.
+
+**2026-11-17 — review.** Applied: migration `20261117140000` makes
+`(song_id_fk, type, difficulty)` unique — implied by `sheet_expr` already, now
+a guarantee and an index for the lookup; the chart route has a router test
+with an encoded code; the chart test round-trips multi-line CRLF UTF-8 text;
+the 404 and 501 bodies are asserted exactly; `PlainText` documents its
+fallback for `SnapshotRequired` and its `Retry-After` is tested; the contract
+says the text body carries no error code.

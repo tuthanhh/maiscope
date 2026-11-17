@@ -81,7 +81,8 @@ populated before any filter is applied:
 on `|`, any part may match), `version`, `type`, `difficulty`, `levelValue`,
 `internalLevelValue`, `bpm`, `noteDesigner`, `regions`. With "use region
 override" on and a region selected, the sheet's `regionOverrides[region]`
-supplies `level`, `internalLevel` and `noteDesigner` values for the checks.
+supplies `level`, `levelValue`, `internalLevel`, `internalLevelValue` and
+`noteDesigner` for the checks (the filter compares the numeric values).
 
 **Each result renders:**
 

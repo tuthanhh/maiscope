@@ -1,6 +1,7 @@
 mod auth;
 mod caching;
 mod catalog;
+mod extract;
 mod health;
 mod reference;
 mod songs;
@@ -93,7 +94,15 @@ pub fn router(state: AppState) -> Router {
     let api = Router::new()
         .merge(health::router())
         .merge(reads)
-        .merge(auth_routes);
+        .merge(auth_routes)
+        // An address that matches no route is the contract's 404, not axum's
+        // empty body.
+        .fallback(|uri: axum::http::Uri| async move {
+            crate::error::AppError::NotFound {
+                kind: "route",
+                key: extract::quoted(uri.path()),
+            }
+        });
 
     Router::new()
         .nest(
@@ -485,5 +494,37 @@ mod tests {
             .unwrap()
             .to_ascii_lowercase();
         assert!(methods.contains("delete"), "{methods}");
+    }
+
+    // Through the real stack: axum's own rejections and misses would answer
+    // in plain text or with an empty body; v2 answers in the contract's shape.
+    #[sqlx::test]
+    async fn v2_path_errors_and_misses_are_json(pool: PgPool) {
+        let app = router(test_state(pool));
+        for (path, status, code) in [
+            // Not UTF-8 once decoded: axum's `Path` rejection.
+            ("/api/songs/%FF", StatusCode::BAD_REQUEST, "bad_request"),
+            // A UUID, but not the canonical spelling.
+            (
+                "/api/songs/01A1E99A-0000-7000-8000-000000000000",
+                StatusCode::BAD_REQUEST,
+                "bad_request",
+            ),
+            ("/api/songs/x/sheets/dx", StatusCode::NOT_FOUND, "not_found"),
+            ("/api/nothing-here", StatusCode::NOT_FOUND, "not_found"),
+        ] {
+            let response = app
+                .clone()
+                .oneshot(get_from(path, "203.0.113.99"))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), status, "{path}");
+            let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            let body: serde_json::Value = serde_json::from_slice(&bytes)
+                .unwrap_or_else(|_| panic!("{path} did not answer JSON"));
+            assert_eq!(body["error"], code, "{path}");
+        }
     }
 }

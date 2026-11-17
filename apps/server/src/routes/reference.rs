@@ -9,7 +9,7 @@ use sqlx::PgPool;
 
 use crate::error::AppError;
 use crate::queries;
-use crate::routes::caching::{CATALOG_CACHE_CONTROL, Freshness};
+use crate::routes::caching::{CATALOG_CACHE_CONTROL, Freshness, snapshot};
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -20,14 +20,14 @@ pub fn router() -> Router<AppState> {
 // screen resolves names without the Catalog (ADR-0021). They change only with
 // the Catalog, so they share its validator and its caching.
 async fn reference(headers: HeaderMap, State(pool): State<PgPool>) -> Result<Response, AppError> {
-    // Validator before body, deliberately: a sync committing in between leaves
-    // a body newer than its ETag, which costs one extra 200 later. The other
-    // order would pin an old body under a new ETag until the next change.
-    let freshness = Freshness::load(&pool).await?;
+    // Validator and body from one snapshot, so the ETag always names the body
+    // it is sent with.
+    let mut tx = snapshot(&pool).await?;
+    let freshness = Freshness::load(&mut *tx).await?;
     if freshness.is_current_for(&headers) {
         return Ok(freshness.not_modified(CATALOG_CACHE_CONTROL));
     }
-    let reference = queries::fetch_reference(&pool).await?;
+    let reference = queries::fetch_reference(&mut tx).await?;
     Ok((freshness.headers(CATALOG_CACHE_CONTROL), Json(reference)).into_response())
 }
 
@@ -92,7 +92,8 @@ mod tests {
                 "types": [{ "type": "dx", "name": "DX", "abbr": "DX" }],
                 "difficulties": [
                     { "code": "master", "name": "MASTER", "color": "#9e45e2" },
-                    { "code": "協", "name": "【協】", "color": null }
+                    // A null colour is omitted, as every absent v2 field is.
+                    { "code": "協", "name": "【協】" }
                 ],
                 "regions": [{ "region": "jp", "name": "Japan" }]
             })

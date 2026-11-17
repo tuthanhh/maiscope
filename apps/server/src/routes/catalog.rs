@@ -11,7 +11,7 @@ use sqlx::PgPool;
 
 use crate::error::AppError;
 use crate::queries;
-use crate::routes::caching::{CATALOG_CACHE_CONTROL, Freshness};
+use crate::routes::caching::{CATALOG_CACHE_CONTROL, Freshness, snapshot};
 use crate::state::AppState;
 use crate::types::{OfficialCatalog, OfficialSheetFields, OfficialSong};
 
@@ -24,19 +24,22 @@ pub fn router() -> Router<AppState> {
 // list with an explicit `sheet.song`; the wire stays nested because flattening
 // repeats every song field per sheet.
 async fn catalog(headers: HeaderMap, State(pool): State<PgPool>) -> Result<Response, AppError> {
-    let freshness = Freshness::load(&pool).await?;
+    // ETag, songs, sheets and reference tables from one snapshot: a sync
+    // committing midway would otherwise cache a mixed Catalog for an hour.
+    let mut tx = snapshot(&pool).await?;
+    let freshness = Freshness::load(&mut *tx).await?;
     if freshness.is_current_for(&headers) {
         return Ok(freshness.not_modified(CATALOG_CACHE_CONTROL));
     }
 
     let mut sheets_by_song: HashMap<_, Vec<OfficialSheetFields>> = HashMap::new();
-    for row in queries::fetch_official_sheets(&pool, None, None).await? {
+    for row in queries::fetch_official_sheets(&mut tx, None, None).await? {
         sheets_by_song
             .entry(row.song_id)
             .or_default()
             .push(row.into());
     }
-    let songs = queries::fetch_official_songs(&pool, None)
+    let songs = queries::fetch_official_songs(&mut tx, None)
         .await?
         .into_iter()
         .map(|row| OfficialSong {
@@ -47,7 +50,7 @@ async fn catalog(headers: HeaderMap, State(pool): State<PgPool>) -> Result<Respo
 
     let catalog = OfficialCatalog {
         songs,
-        reference: queries::fetch_reference(&pool).await?,
+        reference: queries::fetch_reference(&mut tx).await?,
     };
     Ok((freshness.headers(CATALOG_CACHE_CONTROL), Json(catalog)).into_response())
 }
@@ -111,7 +114,10 @@ mod tests {
         .execute(pool)
         .await?;
         sqlx::query!(
-            "INSERT INTO sheet_region_overrides (sheet_id, region, level) VALUES ($1, 'intl', '13')",
+            "INSERT INTO sheet_region_overrides
+                 (sheet_id, region, level, level_value, internal_level,
+                  internal_level_value, note_designer)
+             VALUES ($1, 'intl', '13', 13.0, '13.2', 13.2, 'intl designer')",
             master
         )
         .execute(pool)
@@ -120,6 +126,12 @@ mod tests {
             "INSERT INTO charts (sheet_id, sheet_expr, format, content, hash)
              VALUES ($1, 'upstream-key|dx|master', 'maimai-simai', '&title=x', 'h')",
             master
+        )
+        .execute(pool)
+        .await?;
+        sqlx::query!(
+            "INSERT INTO versions (version, abbr, release_date, ordinal)
+             VALUES ('MAGiCAL', 'MAGiCAL', '2024-01-01', 0)"
         )
         .execute(pool)
         .await?;
@@ -167,7 +179,12 @@ mod tests {
                         "noteDesigner": "designer",
                         "noteCounts": { "total": 900 },
                         "regions": { "jp": true },
-                        "regionOverrides": { "intl": { "level": "13" } },
+                        // All five keys, so a swapped pair in the SQL fails.
+                        "regionOverrides": { "intl": {
+                            "level": "13", "levelValue": 13.0,
+                            "internalLevel": "13.2", "internalLevelValue": 13.2,
+                            "noteDesigner": "intl designer"
+                        } },
                         "hasChart": true
                     },
                     // A UTAGE sheet carries its code, not its bracketed name.
@@ -239,6 +256,7 @@ mod tests {
             );
         }
         // `releaseDate` is a song field, so it is checked where it is dropped.
+        assert!(!catalog["versions"].as_array().unwrap().is_empty());
         for version in catalog["versions"].as_array().unwrap() {
             assert!(version.get("releaseDate").is_none(), "{version}");
         }

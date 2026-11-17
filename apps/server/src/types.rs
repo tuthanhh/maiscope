@@ -340,6 +340,7 @@ pub struct ReferenceCategory {
 #[derive(Debug, Serialize)]
 pub struct ReferenceVersion {
     pub version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub abbr: Option<String>,
 }
 
@@ -347,6 +348,7 @@ pub struct ReferenceVersion {
 pub struct ReferenceType {
     pub r#type: String,
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub abbr: Option<String>,
 }
 
@@ -356,6 +358,7 @@ pub struct ReferenceType {
 pub struct ReferenceDifficulty {
     pub code: String,
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
 }
 
@@ -365,8 +368,8 @@ pub struct ReferenceRegion {
     pub name: String,
 }
 
-/// A row of `songs` with the fields the v2 payload carries. Positional for
-/// `query_as!`: the field order matches `queries::official`'s SELECT.
+/// A row of `songs` with the fields the v2 payload carries. `query_as!` maps
+/// columns to fields by name.
 pub struct OfficialSongRow {
     pub id: sqlx::types::Uuid,
     pub category: Option<String>,

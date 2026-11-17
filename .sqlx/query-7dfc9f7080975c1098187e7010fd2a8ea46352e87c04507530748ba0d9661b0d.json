@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO sheets (song_id_fk, sheet_expr, type, difficulty, source_index)\n             VALUES ($1, 'a|utage|【協】', 'utage', '【協】', 2),\n                    ($1, 'a|dx|master', 'dx', 'master', 1),\n                    ($1, 'a|dx|expert', 'dx', 'expert', 0),\n                    ($2, 'b|dx|master', 'dx', 'master', 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7dfc9f7080975c1098187e7010fd2a8ea46352e87c04507530748ba0d9661b0d"
+}

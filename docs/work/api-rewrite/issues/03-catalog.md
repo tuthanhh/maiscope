@@ -43,3 +43,14 @@ own SQL. The sheet query joins `difficulties` and emits `code`. Against the
 dev database the v2 Catalog matches v1's counts exactly (1879 songs, 7481
 sheets, 7065 with a chart), carries `協`-style codes on UTAGE sheets and no
 `songId`, and is 2.99 MB against v1's 3.13 MB.
+
+**2026-11-17 — review.** Applied: the handler reads the ETag, songs, sheets
+and reference tables inside one read-only `REPEATABLE READ` transaction
+(`caching::snapshot`), so a sync committing midway cannot leave a mixed body
+cached for an hour; reference `abbr`/`color` are omitted when absent, as every
+other v2 field; the mapping test pins all five region-override keys and seeds
+a version so the dropped-`releaseDate` check has something to check;
+`queries::official` has its own tests for each filter branch and for
+`source_index` ordering. The `IS NULL OR` filters cost the single-song paths
+their index under a generic plan; accepted and noted on the module. `null`
+values inside `noteCounts` are intended and now in the contract.

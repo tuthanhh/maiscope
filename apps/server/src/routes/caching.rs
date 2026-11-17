@@ -6,7 +6,7 @@
 
 use axum::http::{HeaderMap, HeaderName, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use sqlx::PgPool;
+use sqlx::{PgPool, Postgres, Transaction};
 
 use crate::error::AppError;
 
@@ -38,12 +38,12 @@ impl Freshness {
     /// /sync/manifest`) need a validator even then, so fall back to the same
     /// `0000-00-00` / revision-0 sentinel `queries::fetch_update_time` uses
     /// rather than erroring.
-    pub(crate) async fn load(pool: &PgPool) -> Result<Self, AppError> {
+    pub(crate) async fn load<'e>(executor: impl sqlx::PgExecutor<'e>) -> Result<Self, AppError> {
         let row = sqlx::query!(
             r#"SELECT to_char(update_time, 'YYYY-MM-DD') AS "update_time!", revision AS "revision!"
                FROM catalog_meta LIMIT 1"#
         )
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await?;
 
         let (update_time, revision) = match row {
@@ -87,6 +87,19 @@ impl Freshness {
     pub(crate) fn not_modified(&self, cache_control: &'static str) -> Response {
         (StatusCode::NOT_MODIFIED, self.headers(cache_control)).into_response()
     }
+}
+
+/// A read-only transaction that sees one snapshot for every statement in it.
+/// The v2 reads that take several queries — a validator and a body, or songs,
+/// sheets and reference tables — run in one, so a sync committing midway
+/// cannot produce a mixed body, or a body cached for an hour under an ETag it
+/// does not match.
+pub(crate) async fn snapshot(pool: &PgPool) -> Result<Transaction<'static, Postgres>, AppError> {
+    let mut tx = pool.begin().await?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        .execute(&mut *tx)
+        .await?;
+    Ok(tx)
 }
 
 fn catalog_hash(revision: i64, update_time: &str) -> String {

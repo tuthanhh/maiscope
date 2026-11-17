@@ -1,13 +1,11 @@
-use axum::{
-    Json, Router,
-    extract::{Path, State},
-    routing::get,
-};
+use axum::{Json, Router, extract::State, routing::get};
 use sqlx::PgPool;
 use sqlx::types::Uuid;
 
 use crate::error::{AppError, PlainText};
 use crate::queries;
+use crate::routes::caching::snapshot;
+use crate::routes::extract::{ApiPath, quoted};
 use crate::state::AppState;
 use crate::types::{OfficialSheet, OfficialSong};
 
@@ -18,31 +16,46 @@ pub fn router() -> Router<AppState> {
         .route("/songs/{id}/sheets/{type}/{difficulty}/chart", get(chart))
 }
 
-/// A song id from a path. Taken as a `String` and parsed here, so a malformed
-/// one is a `400` in the contract's JSON shape rather than axum's plain-text
-/// path rejection.
+/// A song id from a path. Only the canonical form — lowercase, hyphenated, 36
+/// characters — is an address, so a song has exactly one URL; `Uuid` would
+/// also accept upper case, braces and `urn:uuid:` prefixes.
 pub(crate) fn parse_song_id(raw: &str) -> Result<Uuid, AppError> {
-    Uuid::parse_str(raw).map_err(|_| AppError::BadRequest(format!("'{raw}' is not a song id")))
+    match Uuid::parse_str(raw) {
+        Ok(id) if id.to_string() == raw => Ok(id),
+        _ => Err(AppError::BadRequest(format!(
+            "'{}' is not a song id (a lowercase hyphenated UUID)",
+            quoted(raw)
+        ))),
+    }
+}
+
+/// The `404` for a sheet address, quoting each part capped.
+fn sheet_not_found(kind: &'static str, id: &str, r#type: &str, difficulty: &str) -> AppError {
+    AppError::NotFound {
+        kind,
+        key: format!("{}/{}/{}", quoted(id), quoted(r#type), quoted(difficulty)),
+    }
 }
 
 // GET /api/songs/{id} — one song with its sheets, shaped as an element of the
 // Catalog's `songs`: the song modal opened by a shared link, without the 3MB
 // snapshot.
 async fn song(
-    Path(id): Path<String>,
+    ApiPath(id): ApiPath<String>,
     State(pool): State<PgPool>,
 ) -> Result<Json<OfficialSong>, AppError> {
     let song_id = parse_song_id(&id)?;
-    let Some(row) = queries::fetch_official_songs(&pool, Some(song_id))
+    let mut tx = snapshot(&pool).await?;
+    let Some(row) = queries::fetch_official_songs(&mut tx, Some(song_id))
         .await?
         .pop()
     else {
         return Err(AppError::NotFound {
             kind: "song",
-            key: id,
+            key: quoted(&id),
         });
     };
-    let sheets = queries::fetch_official_sheets(&pool, Some(song_id), None)
+    let sheets = queries::fetch_official_sheets(&mut tx, Some(song_id), None)
         .await?
         .into_iter()
         .map(Into::into)
@@ -58,27 +71,24 @@ async fn song(
 // percent-decoded (`%E5%8D%94` → `協`). An unknown type or code is simply a
 // sheet that does not exist: the lookup is the validation.
 async fn sheet(
-    Path((id, r#type, difficulty)): Path<(String, String, String)>,
+    ApiPath((id, r#type, difficulty)): ApiPath<(String, String, String)>,
     State(pool): State<PgPool>,
 ) -> Result<Json<OfficialSheet>, AppError> {
     let song_id = parse_song_id(&id)?;
-    let not_found = || AppError::NotFound {
-        kind: "sheet",
-        key: format!("{id}/{type}/{difficulty}"),
-    };
+    let mut tx = snapshot(&pool).await?;
     let Some(sheet) =
-        queries::fetch_official_sheets(&pool, Some(song_id), Some((&r#type, &difficulty)))
+        queries::fetch_official_sheets(&mut tx, Some(song_id), Some((&r#type, &difficulty)))
             .await?
             .pop()
     else {
-        return Err(not_found());
+        return Err(sheet_not_found("sheet", &id, &r#type, &difficulty));
     };
-    let Some(song) = queries::fetch_official_songs(&pool, Some(song_id))
+    // `sheets.song_id_fk` is NOT NULL and references `songs`, and both reads
+    // share one snapshot, so a found sheet has its song.
+    let song = queries::fetch_official_songs(&mut tx, Some(song_id))
         .await?
         .pop()
-    else {
-        return Err(not_found());
-    };
+        .ok_or(AppError::Internal("sheet without its song"))?;
     Ok(Json(OfficialSheet {
         fields: sheet.into(),
         song: song.into(),
@@ -88,28 +98,28 @@ async fn sheet(
 // GET /api/songs/{id}/sheets/{type}/{difficulty}/chart — the simai text for
 // the engine. Errors are plain text because the engine reads this body as
 // text whatever the status; they are `AppError`s all the same, so a database
-// failure is "internal error", never the sqlx message v1's handler sent.
+// failure is "internal error", never the sqlx message v1's handler sent. The
+// path is taken as a `Result` so its rejection is rendered as text too.
 async fn chart(
-    Path((id, r#type, difficulty)): Path<(String, String, String)>,
+    path: Result<ApiPath<(String, String, String)>, AppError>,
     State(pool): State<PgPool>,
 ) -> Result<String, PlainText> {
+    let ApiPath((id, r#type, difficulty)) = path?;
     let song_id = parse_song_id(&id)?;
-    let key = || format!("{id}/{type}/{difficulty}");
-    match queries::fetch_chart_text(&pool, song_id, &r#type, &difficulty).await? {
+    let mut conn = pool.acquire().await?;
+    match queries::fetch_chart_text(&mut conn, song_id, &r#type, &difficulty).await? {
         queries::ChartText::Inline(text) => Ok(text),
-        queries::ChartText::NoSheet => Err(AppError::NotFound {
-            kind: "sheet",
-            key: key(),
+        queries::ChartText::NoSheet => {
+            Err(sheet_not_found("sheet", &id, &r#type, &difficulty).into())
         }
-        .into()),
-        queries::ChartText::NoChart => Err(AppError::NotFound {
-            kind: "chart",
-            key: key(),
+        queries::ChartText::NoChart => {
+            Err(sheet_not_found("chart", &id, &r#type, &difficulty).into())
         }
-        .into()),
         queries::ChartText::NotInline => Err(AppError::NotImplemented(format!(
-            "chart for '{}' has no inline simai content",
-            key()
+            "chart for '{}/{}/{}' has no inline simai content",
+            quoted(&id),
+            quoted(&r#type),
+            quoted(&difficulty)
         ))
         .into()),
     }
@@ -165,7 +175,7 @@ mod tests {
         code: &str,
     ) -> Result<Value, AppError> {
         sheet(
-            Path((id.to_string(), r#type.to_string(), code.to_string())),
+            ApiPath((id.to_string(), r#type.to_string(), code.to_string())),
             State(pool.clone()),
         )
         .await
@@ -175,7 +185,7 @@ mod tests {
     #[sqlx::test]
     async fn a_song_comes_with_its_sheets_as_in_the_catalog(pool: PgPool) -> sqlx::Result<()> {
         let id = seed(&pool).await?;
-        let body = value(song(Path(id.to_string()), State(pool)).await.unwrap());
+        let body = value(song(ApiPath(id.to_string()), State(pool)).await.unwrap());
         assert_eq!(body["id"], id.to_string());
         assert_eq!(body["title"], "Title");
         let codes: Vec<&str> = body["sheets"]
@@ -241,11 +251,13 @@ mod tests {
                 "{song_id}/{type}/{code}"
             );
         }
-        let error = song(Path(unknown), State(pool.clone())).await.unwrap_err();
+        let error = song(ApiPath(unknown), State(pool.clone()))
+            .await
+            .unwrap_err();
         assert_eq!(status(error), StatusCode::NOT_FOUND);
 
         for bad in ["not-a-uuid", "upstream-key"] {
-            let error = song(Path(bad.to_string()), State(pool.clone()))
+            let error = song(ApiPath(bad.to_string()), State(pool.clone()))
                 .await
                 .unwrap_err();
             assert_eq!(status(error), StatusCode::BAD_REQUEST, "{bad}");
@@ -276,7 +288,11 @@ mod tests {
 
     async fn get_chart(pool: &PgPool, id: &str, code: &str) -> axum::response::Response {
         match chart(
-            Path((id.to_string(), "utage".to_string(), code.to_string())),
+            Ok(ApiPath((
+                id.to_string(),
+                "utage".to_string(),
+                code.to_string(),
+            ))),
             State(pool.clone()),
         )
         .await
@@ -296,14 +312,18 @@ mod tests {
         .unwrap()
     }
 
+    /// Multi-line, CRLF, non-ASCII: the engine parses these exact bytes.
+    const CHART: &str = "&title=協奏曲\r\n&inote_7=\r\n(150){4}1,2,\nE\n";
+
     /// Chart rows for the seeded UTAGE sheets: inline text on `協`, a
     /// blob-only row on `X`.
     async fn seed_charts(pool: &PgPool, song: Uuid) -> sqlx::Result<()> {
         sqlx::query!(
             "INSERT INTO charts (sheet_id, sheet_expr, format, content, hash)
-             SELECT id, sheet_expr, 'maimai-simai', '&title=Title', 'h'
+             SELECT id, sheet_expr, 'maimai-simai', $2, 'h'
              FROM sheets WHERE song_id_fk = $1 AND difficulty = '【協】'",
-            song
+            song,
+            CHART
         )
         .execute(pool)
         .await?;
@@ -330,7 +350,11 @@ mod tests {
                 .unwrap()
                 .starts_with("text/plain")
         );
-        assert_eq!(text_of(response).await, "&title=Title");
+        assert_eq!(
+            text_of(response).await,
+            CHART,
+            "the text is served byte for byte"
+        );
         Ok(())
     }
 
@@ -342,24 +366,44 @@ mod tests {
 
         let blob_only = get_chart(&pool, &id, "X").await;
         assert_eq!(blob_only.status(), StatusCode::NOT_IMPLEMENTED);
+        assert!(
+            blob_only.headers()[axum::http::header::CONTENT_TYPE]
+                .to_str()
+                .unwrap()
+                .starts_with("text/plain")
+        );
+        assert_eq!(
+            text_of(blob_only).await,
+            format!("chart for '{id}/utage/X' has no inline simai content")
+        );
 
         // The master sheet exists and has no chart row; `即` is no sheet.
         let no_chart = chart(
-            Path((id.clone(), "dx".to_string(), "master".to_string())),
+            Ok(ApiPath((
+                id.clone(),
+                "dx".to_string(),
+                "master".to_string(),
+            ))),
             State(pool.clone()),
         )
         .await
         .unwrap_err()
         .into_response();
         assert_eq!(no_chart.status(), StatusCode::NOT_FOUND);
-        assert!(text_of(no_chart).await.starts_with("chart '"));
+        assert_eq!(
+            text_of(no_chart).await,
+            format!("chart '{id}/dx/master' not found")
+        );
         let no_sheet = get_chart(&pool, &id, "即").await;
         assert_eq!(no_sheet.status(), StatusCode::NOT_FOUND);
-        assert!(text_of(no_sheet).await.starts_with("sheet '"));
+        assert_eq!(
+            text_of(no_sheet).await,
+            format!("sheet '{id}/utage/即' not found")
+        );
 
         let bad_id = get_chart(&pool, "nope", "協").await;
         assert_eq!(bad_id.status(), StatusCode::BAD_REQUEST);
-        assert_eq!(text_of(bad_id).await, "'nope' is not a song id");
+        assert!(text_of(bad_id).await.starts_with("'nope' is not a song id"));
         Ok(())
     }
 
@@ -373,6 +417,23 @@ mod tests {
         let response = get_chart(&pool, &id.to_string(), "協").await;
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
         assert_eq!(text_of(response).await, "internal error");
+        Ok(())
+    }
+
+    // The chart route through the router, encoded as a browser sends it.
+    #[sqlx::test]
+    async fn the_chart_route_is_mounted_and_decodes_its_code(pool: PgPool) -> sqlx::Result<()> {
+        use tower::ServiceExt;
+        let id = seed(&pool).await?;
+        seed_charts(&pool, id).await?;
+        let app = router().with_state(test_support::state(pool, test_support::config()));
+        let request = axum::http::Request::builder()
+            .uri(format!("/songs/{id}/sheets/utage/%E5%8D%94/chart"))
+            .body(axum::body::Body::empty())
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(text_of(response).await, CHART);
         Ok(())
     }
 }

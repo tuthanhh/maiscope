@@ -104,6 +104,9 @@ type×difficulty). Mirrors `Sheet.ts` raw fields (`type`, `difficulty`, `level`,
 - `sheet_expr` — denormalized cross-tier key, `UNIQUE`; the lookup key for
   `GET /sheets/{sheetExpr}` and charts.
 - `source_index` — upstream ordering, as on `songs`.
+- `UNIQUE (song_id_fk, type, difficulty)` — the v2 address
+  (`/api/songs/{id}/sheets/{type}/{difficulty}`); implied by `sheet_expr`,
+  made explicit because the v2 lookups take the first row they find.
 
 > Note: this is **catalog metadata about a chart**, not the chart notes
 > themselves. The actual simai/ma2 data lives in the `charts` table, written

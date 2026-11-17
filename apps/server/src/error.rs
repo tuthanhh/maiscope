@@ -159,7 +159,8 @@ impl IntoResponse for AppError {
 }
 
 /// An [`AppError`] rendered as `text/plain`: the message alone, with the same
-/// status, headers and redaction as the JSON form. For the chart endpoint,
+/// status, headers and redaction as the JSON form. The one variant without a
+/// message, `SnapshotRequired`, falls back to its code. For the chart endpoint,
 /// whose success body is simai text the engine reads as text whatever the
 /// status (`api-rewrite` 05). Built from an `AppError`, so a handler cannot
 /// put a raw database error in front of the client by returning one.
@@ -361,6 +362,11 @@ mod tests {
 
         let response = PlainText(AppError::Unauthorized("missing bearer token")).into_response();
         assert_eq!(response.headers()[header::WWW_AUTHENTICATE], "Bearer");
+        let response = PlainText(AppError::RateLimited {
+            retry_after_secs: 7,
+        })
+        .into_response();
+        assert_eq!(response.headers()[header::RETRY_AFTER], "7");
 
         let response = PlainText(AppError::SnapshotRequired).into_response();
         assert_eq!(body_text(response).await, "snapshot_required");

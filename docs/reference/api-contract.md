@@ -67,7 +67,8 @@ lets any screen resolve names without the Catalog
   "regions":      [{ "region": "jp", "name": "日本版" }] }
 ```
 
-`abbr` and `color` may be `null`. The tables change only with the Catalog, so
+`abbr` and `color` are omitted when absent, as every absent v2 field is. The
+tables change only with the Catalog, so
 they share its `ETag` (`304` on `If-None-Match`) and its
 `Cache-Control: public, max-age=3600`.
 
@@ -96,7 +97,10 @@ five reference arrays of `GET /api/reference` beside `songs`:
 ```
 
 Songs and sheets are in upstream order. Absent fields are omitted, not `null`;
-`hasChart` is always present. Not sent: `songId`, `isNew`, `isSpecial`,
+`hasChart` is always present. Inside `noteCounts` a key may be `null`: the
+count is unknown for that note kind, which a screen shows differently from
+`0`. The songs, sheets, reference tables and `ETag` come from one database
+snapshot, so they always agree. Not sent: `songId`, `isNew`, `isSpecial`,
 `updateTime`, and every field the client derives (`imageUrl`, …). No
 `?region=` parameter: region filtering is the client's. `ETag`, `304` and
 `Cache-Control: public, max-age=3600` as v1's Catalog.
@@ -105,8 +109,9 @@ Songs and sheets are in upstream order. Absent fields are omitted, not `null`;
 
 One song with its sheets, shaped exactly as an element of the Catalog's
 `songs` — the song modal opened by a shared link, without the snapshot.
-`400 bad_request` when `{id}` is not a UUID; `404 not_found` for an unknown
-song.
+`400 bad_request` when `{id}` is not a UUID in its canonical spelling —
+lowercase, hyphenated — so a song has one URL; `404 not_found` for an
+unknown song.
 
 ### `GET /api/songs/{id}/sheets/{type}/{difficulty}`
 
@@ -133,7 +138,12 @@ statuses and the same redaction: `400` malformed id, `404` no such sheet
 (`sheet '…' not found`) or no chart for it (`chart '…' not found`), `501` a
 chart row without inline text, `500` with the body `internal error` and
 nothing more. v1's handler put a database error's own text in the body; this
-one cannot.
+one cannot. The body is the message alone — no `error` code — so the `501`
+reads `chart for '…' has no inline simai content`.
+
+Under `/api`, a path that matches no route is `404 not_found` in the §6
+envelope, and every path or parameter axum cannot parse is `400 bad_request`
+— never axum's plain-text defaults.
 
 ---
 
@@ -541,7 +551,8 @@ Status enum: `pending | approved | rejected | merged`.
   Exception: the chart endpoints — v1's `GET /sheets/{songId}/chart` (§2) and
   v2's `…/chart` (§0) — return plain-text errors. v2's are `AppError`s
   rendered as text: same status, same redaction, body the message alone.
-  `not_implemented` (`501`) is v2's code for a chart without inline text.
+  `not_implemented` (`501`) is the code a chart without inline text would
+  carry in the envelope; the chart endpoint's text body omits it.
 - **Pagination**: `?page` (1-based) + `?pageSize` (default 22, max 100). The
   total is returned as an **`X-Total-Count` response header**
   ([ADR-0015](../adr/0015-pagination-total-as-a-response-header.md)). It must
