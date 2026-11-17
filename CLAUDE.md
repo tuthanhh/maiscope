@@ -17,8 +17,8 @@ Conditionally relevant:
 ## What this is
 
 maiscope: a web app for browsing maimai songs and visualizing charts. Rust/TypeScript
-monorepo — one Cargo workspace (`apps/server`, `engine`) plus a pnpm-managed
-frontend under `apps/host`.
+monorepo — one Cargo workspace (`apps/server`, `crates/simai`, `engine`) plus a
+pnpm-managed frontend under `apps/host`.
 
 The frontend is a port of [zetaraku/arcade-songs](https://github.com/zetaraku/arcade-songs)
 (originally Nuxt 2 + Vuetify 2), rebuilt on native Vue 3 for maimai only.
@@ -111,8 +111,8 @@ pnpm build                         # vue-tsc --noEmit && vite build
 ### Workspace
 
 ```sh
-cargo build --workspace            # excludes the engine's wasm target
-cargo test --workspace
+cargo build -p server -p simai     # never --workspace: it would turn on simai's bevy feature
+cargo test -p server -p simai      # the engine is tested on its own: cargo test -p engine
 ```
 
 There is no lint or format config (no eslint/prettier). Do not assume `pnpm lint`
@@ -184,7 +184,7 @@ template. Keep a lean database for tests:
 
 ```sh
 docker exec maiscope-db psql -U postgres -c 'CREATE DATABASE maiscope_test'
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/maiscope_test cargo test --workspace
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/maiscope_test cargo test -p server
 ```
 
 ## Conventions
