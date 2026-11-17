@@ -12,7 +12,9 @@
 # every code change, which is a far worse inner loop than `cargo run`.
 services:
   db:
-    image: postgres:17
+    # Matches production: Neon serves Postgres 18. Migrations use 18-only
+    # features (`uuidv7()`), so an older local server cannot apply them.
+    image: postgres:18
     container_name: maiscope-db
     restart: unless-stopped
     environment:
@@ -22,7 +24,9 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - maiscope-pgdata:/var/lib/postgresql/data
+      # The 18 image keeps PGDATA in a versioned directory under this mount;
+      # the 17-era volume at .../data is left as it was, unused.
+      - maiscope-pgdata-18:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d maiscope"]
       interval: 5s
@@ -30,4 +34,4 @@ services:
       retries: 5
 
 volumes:
-  maiscope-pgdata:
+  maiscope-pgdata-18:
