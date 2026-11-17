@@ -278,7 +278,9 @@ mod tests {
     use sqlx::PgPool;
 
     /// `sheets.difficulty` references `difficulties` (catalog-difficulties
-    /// 02); seed the rows a fixture's sheets use.
+    /// 02); seed the rows a fixture's sheets use. A copy of the binary's
+    /// `test_support::seed_difficulties`: this module is in the library, and
+    /// the library cannot see a module mounted only in `main.rs`.
     async fn seed_difficulties(pool: &PgPool, difficulties: &[String]) {
         sqlx::query(
             "INSERT INTO difficulties (difficulty, name, code, ordinal) \

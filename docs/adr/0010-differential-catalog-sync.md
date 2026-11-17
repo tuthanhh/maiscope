@@ -1,6 +1,6 @@
 # ADR-0010 — Differential catalog sync, never deleting songs or sheets
 
-**Status:** accepted
+**Status:** accepted; the lookup-table scope clause is narrowed by [ADR-0022](0022-difficulties-derived-and-referenced.md)
 **Date:** 2026-09-14
 
 ## Context

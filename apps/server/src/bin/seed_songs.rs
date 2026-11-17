@@ -284,6 +284,21 @@ struct UtageClaim<'a> {
     tag: &'a str,
 }
 
+/// A slot-7 folder's claim and its chart text, or `None` when the folder has
+/// no slot-7 chart to seed.
+fn utage_claim<'a>(
+    kv: &'a HashMap<String, String>,
+    dir_name: &'a str,
+) -> Option<(UtageClaim<'a>, &'a String)> {
+    let inote = kv.get("inote_7").filter(|t| !t.trim().is_empty())?;
+    let claim = UtageClaim {
+        title: kv.get("title").map_or("", |t| t.trim()),
+        dir_name,
+        tag: kv.get("lv_7").map_or("", String::as_str),
+    };
+    Some((claim, inote))
+}
+
 #[derive(Debug, PartialEq)]
 enum UtageResolution {
     Matched(SheetRef),
@@ -368,20 +383,20 @@ fn split_collisions(
     (unique, colliding)
 }
 
+/// `[X] 人マニア` → (`[X]`, `人マニア`); `None` unless it opens with a bracket.
+fn split_tag(s: &str) -> Option<(&str, &str)> {
+    let end = s.strip_prefix('[').and(s.find(']'))?;
+    Some((&s[..=end], s[end + 1..].trim_start()))
+}
+
 /// `[X] 人マニア` → `人マニア`. Anything not opening with a bracket is unchanged.
 fn strip_tag(s: &str) -> &str {
-    match (s.starts_with('['), s.find(']')) {
-        (true, Some(end)) => s[end + 1..].trim_start(),
-        _ => s,
-    }
+    split_tag(s).map_or(s, |(_, rest)| rest)
 }
 
 /// `[X] 人マニア` → `[X]人マニア`: the catalog writes no space after the tag.
 fn join_tag(s: &str) -> String {
-    match (s.starts_with('['), s.find(']')) {
-        (true, Some(end)) => format!("{}{}", &s[..=end], s[end + 1..].trim_start()),
-        _ => s.to_string(),
-    }
+    split_tag(s).map_or_else(|| s.to_string(), |(tag, rest)| format!("{tag}{rest}"))
 }
 
 /// `人マニア [14?]` → `人マニア`. Only a trailing bracket that reads as a level
@@ -575,15 +590,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // Slot 7 is UTAGE. No sample folder mixes it with slots 2-6, so the
         // folder is done once its UTAGE chart is resolved.
         if kv.contains_key("lv_7") || kv.contains_key("inote_7") {
-            let Some(inote) = kv.get("inote_7").filter(|t| !t.trim().is_empty()) else {
+            let Some((claim, inote)) = utage_claim(&kv, &dir_name) else {
                 continue; // a level with no chart: nothing to seed
             };
-            let tag = kv.get("lv_7").map(String::as_str).unwrap_or("");
-            let claim = UtageClaim {
-                title,
-                dir_name: &dir_name,
-                tag,
-            };
+            let tag = claim.tag;
             match resolve_utage(&claim, &utage) {
                 UtageResolution::Matched(sheet) => utage_matches
                     .entry(sheet.sheet_expr.clone())
@@ -964,12 +974,25 @@ mod tests {
         )
     }
 
-    // Title mismatch: the folder writes `[X] 人マニア`, the catalog `[X]人マニア`.
-    // Label mismatch: `&lv_7=X` against the catalog's `【X】`.
+    /// The real file's header up to its first chart line, CRLF and all.
+    const MAIDATA_X: &str = "&title=[宴] 人マニア [14?]\r\n&artist=原口沙輔 feat.重音テト\r\n&first=0\r\n&des=\r\n&converter_7=miriiaa×HotIceCream\r\n&lv_7=X\r\n&inote_7=(150){1},,,\n{8}\n";
+    const MAIDATA_REACH: &str = "&title=[宴] Reach For The Stars\r\n&wholebpm=203\r\n&lv_7=光\r\n&inote_7=(203.0){1},\r\n{8}3b,2b,1b,8h[2:1],,7b,6b,5h[2:1],\r\n";
+    const MAIDATA_WE_RE: &str = "&title=[宴] WE'RE BACK!! [12+?]\r\n&artist=Zekk\r\n&first=-0.05\r\n&des=\r\n&demo_seek=42.77\n&lv_7=逆\r\n&inote_7=(185)\n{1},\n";
+
+    /// Parse a real header and resolve it the way the run does.
+    fn resolve_file(maidata: &str, dir: &str) -> UtageResolution {
+        let kv = parse_maidata(maidata);
+        let (claim, _) = utage_claim(&kv, dir).expect("a slot-7 chart");
+        resolve_utage(&claim, &utage_index())
+    }
+
+    // All three mismatches at once. Slot: the chart is `&inote_7=`. Label:
+    // `&lv_7=X` against the catalog's `【X】`. Title: the folder writes
+    // `[X] 人マニア`, the catalog `[X]人マニア`.
     #[test]
     fn a_folder_name_without_the_space_after_its_tag_is_the_catalog_title() {
         assert_eq!(
-            resolve_utage(&utage("[宴] 人マニア [14?]", "[X] 人マニア", "X"), &utage_index()),
+            resolve_file(MAIDATA_X, "[X] 人マニア"),
             utage_matched("[X]人マニア|utage|【X】")
         );
     }
@@ -978,13 +1001,12 @@ mod tests {
     // apart, and the standard "Reach For The Stars" is never a candidate.
     #[test]
     fn the_tag_picks_between_utage_charts_of_one_plain_title() {
-        let u = utage_index();
         assert_eq!(
-            resolve_utage(&utage("[宴] Reach For The Stars", "[光] Reach For The Stars", "光"), &u),
+            resolve_file(MAIDATA_REACH, "[光] Reach For The Stars"),
             utage_matched("(宴) Reach For The Stars (2)|utage|【光】")
         );
         assert_eq!(
-            resolve_utage(&utage("[宴] Reach For The Stars", "[蔵] Reach For The Stars", "蔵"), &u),
+            resolve_utage(&utage("[宴] Reach For The Stars", "[蔵] Reach For The Stars", "蔵"), &utage_index()),
             utage_matched("(宴) Reach For The Stars|utage|【蔵】")
         );
     }
@@ -994,9 +1016,15 @@ mod tests {
     #[test]
     fn the_maidata_title_without_its_prefix_and_level_also_matches() {
         assert_eq!(
-            resolve_utage(&utage("[宴] WE'RE BACK!! [12+?]", "[戻] WE_RE BACK!!", "逆"), &utage_index()),
+            resolve_file(MAIDATA_WE_RE, "[戻] WE_RE BACK!!"),
             utage_matched("[逆]WE'RE BACK!!|utage|【逆】")
         );
+    }
+
+    #[test]
+    fn a_folder_without_a_slot_7_chart_makes_no_claim() {
+        let kv = parse_maidata("&title=[宴] X\n&lv_7=X\n&inote_7=\n");
+        assert!(utage_claim(&kv, "[X] X").is_none());
     }
 
     // Two catalog charts carry 協 for "Love You", one under each title form,

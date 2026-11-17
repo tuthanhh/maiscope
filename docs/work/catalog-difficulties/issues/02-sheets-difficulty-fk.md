@@ -23,7 +23,7 @@ the constraint fails on existing rows.
 
 ## Comments
 
-**2026-11-17 — done.** `ON DELETE RESTRICT`, checked at the statement
+**2026-11-17: done.** `ON DELETE RESTRICT`, checked at the statement
 rather than deferred to commit, so a violation names the statement that
 caused it. The key ruled out the sync's wholesale `DELETE FROM
 difficulties`, so that table alone is now upserted and pruned of rows no

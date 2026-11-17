@@ -48,8 +48,7 @@ is becoming derived infrastructure rather than a dumb mirror anyway.
 The URL component is `code` — see [`api-rewrite`](../../api-rewrite/spec.md),
 which asked the same question separately and must not get a different answer.
 
-
-**2026-11-17 — done.** The sync derives one row per difficulty value that
+**2026-11-17: done.** The sync derives one row per difficulty value that
 upstream does not list, from the payload's sheets and the stored ones, so a
 sheet upstream stops listing keeps its row. Derived rows sort after the
 upstream rows by byte value rather than first-seen order: the lookup digest

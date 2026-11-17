@@ -29,7 +29,9 @@ representation means re-keying real chart text. 01 settles it first.
 - [x] Title matching handles the `[宴/…] X [13?]` form against `(宴) X` and
       `[好]X`. This is the hard part and may not be fully solvable — matching is
       already too strict (`prod-data-and-infra` issue 03), and a wrong match
-      attaches a chart to the wrong song, which is worse than skipping
+      attaches a chart to the wrong song, which is worse than skipping.
+      Buddy (`[宴/バディ/…]`) folders are set aside, not matched: see the
+      comment below and ADR-0022
 - [x] Unmatched UTAGE titles are *reported*, not silently skipped — the current
       behaviour hid 172 files
 - [x] Tests over real maidata fixtures for each of the three mismatches
@@ -52,7 +54,7 @@ no space (`[X]人マニア`), while the sample folder is `[X] 人マニア` and 
 space after the first `]` removed → title; `&lv_7=X` → `【X】`; slot 7 →
 that sheet. Buddy charts (`[宴/バディ/1P]`) have their own folders per side.
 
-**2026-11-17 — done.** Measured on dev against the 172 local slot-7 folders:
+**2026-11-17: done.** Measured on dev against the 172 local slot-7 folders:
 
 | Outcome | Folders |
 |---|---|

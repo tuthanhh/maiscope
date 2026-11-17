@@ -60,10 +60,10 @@ string (`category`/`version`/`type`/`difficulty`/`region`) is the PK.
 - `versions` — game versions (`abbr`, `release_date`) for the version filter/sort.
 - `types` — chart types (e.g. maimai std/DX). Carries `name`/`abbr` + raw
   `icon_url`/`icon_height` (client resolves the URL to absolute).
-- `difficulties` — every value `sheets.difficulty` holds, and **partly
+- `difficulties`: every value `sheets.difficulty` holds, and **partly
   derived**. Upstream lists five rows (basic/advanced/expert/master/re:master,
-  with `name`, `color`, icon); its UTAGE sheets use 50 bracketed tags (`【協】`)
-  it never lists. `bin/sync_catalog` derives a row for each such value, from
+  with `name`, `color`, icon); its UTAGE sheets use bracketed tags (`【協】`) it
+  never lists. `bin/sync_catalog` derives a row for each such value, from
   the payload's sheets and the stored ones alike, on every run. Derived rows
   follow the upstream rows, ordered by byte value, so the indexes of the
   upstream rows keep their meaning. They carry no colour or icon.
@@ -171,13 +171,14 @@ songs ─< sheets ─┬─< sheet_note_counts
                  ├─< sheet_regions
                  └─< sheet_region_overrides
 ```
-Lookups are standalone except `difficulties` (no FK from songs/sheets to the
-others — `Song.category` etc. are plain strings the client cross-references,
-matching the frontend's loose coupling). `sheets.difficulty` references
+Lookups are standalone except `difficulties`. Nothing in songs or sheets
+references the others: `Song.category` and the rest are plain strings the
+client cross-references, matching the frontend's loose coupling. `sheets.difficulty` references
 `difficulties.difficulty` `ON DELETE RESTRICT`: a sheet cannot hold a value
 the table does not know, and a row cannot go while a sheet uses it. That is
 why `bin/sync_catalog` upserts `difficulties` and prunes unused rows, where it
-replaces the other four wholesale, and why it writes them before the sheets. FKs
+replaces the other four wholesale, and why it writes them before the sheets.
+The decision and its alternatives: [ADR-0022](../adr/0022-difficulties-derived-and-referenced.md). FKs
 on the song→sheet→sub-table chain are `ON DELETE CASCADE`: drop a song → its
 sheets + sub-rows vanish — **and so does the chart text hanging off those
 sheets**, since `charts.sheet_id` cascades too. No code path deletes from

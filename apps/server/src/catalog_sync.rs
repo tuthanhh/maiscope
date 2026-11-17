@@ -60,7 +60,9 @@ impl SyncStats {
     }
 }
 
-/// The five wholesale-replaced lookup tables, all of which carry an `ordinal`.
+/// The five lookup tables, all of which carry an `ordinal`. Four are replaced
+/// wholesale each run; `difficulties` is upserted and pruned (see
+/// [`replace_lookups`]).
 const LOOKUP_TABLES: [&str; 5] = ["categories", "versions", "types", "difficulties", "regions"];
 
 pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Error> {
@@ -91,8 +93,8 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
     let revision = previous + 1;
     stats.revision = revision;
 
-    // The lookup tables are replaced wholesale, so unlike songs and sheets they
-    // have no per-row `IS DISTINCT FROM` guard to report a change. Digest them
+    // The lookup tables are rewritten without a per-row `IS DISTINCT FROM`
+    // guard, unlike songs and sheets, so nothing reports a change. Digest them
     // before and after: without this, a renamed category would be applied but
     // never advance `catalog_meta.revision`, so no client would refetch it.
     let digests_before = lookup_digests(&mut tx).await?;
@@ -249,8 +251,8 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
 // ── lookup tables ────────────────────────────────────────────────────────────
 
 /// md5 over each lookup table's whole contents, in `ordinal` order, in one round
-/// trip. Used only to compare the tables against themselves before and after a
-/// wholesale replace, so the exact row-text format does not matter — only that
+/// trip. Used only to compare the tables against themselves before and after
+/// they are rewritten, so the exact row-text format does not matter — only that
 /// it is stable within one transaction.
 async fn lookup_digests(conn: &mut PgConnection) -> Result<Vec<String>, sqlx::Error> {
     // A table name cannot be a bind parameter. Each name is one of the five
@@ -1981,7 +1983,7 @@ mod tests {
         ]
     }"##;
 
-    async fn difficulty_rows(pool: &PgPool) -> Vec<(String, String, String, i32)> {
+    async fn stored_difficulties(pool: &PgPool) -> Vec<(String, String, String, i32)> {
         sqlx::query_as("SELECT difficulty, name, code, ordinal FROM difficulties ORDER BY ordinal")
             .fetch_all(pool)
             .await
@@ -2021,7 +2023,7 @@ mod tests {
 
         let s = |v: &str| v.to_string();
         assert_eq!(
-            difficulty_rows(&pool).await,
+            stored_difficulties(&pool).await,
             vec![
                 (s("basic"), s("BASIC"), s("basic"), 0),
                 (s("master"), s("MASTER"), s("master"), 1),
@@ -2032,20 +2034,20 @@ mod tests {
         Ok(())
     }
 
-    // The sync replaces lookups wholesale; the derived rows have to come
-    // back every run, and come back identical, or every daily no-op sync
+    // The derived rows are rebuilt every run; they have to come back
+    // identical, or every daily no-op sync
     // would advance the revision and make every client refetch.
     #[sqlx::test]
     async fn derived_rows_are_rebuilt_identically_by_an_unchanged_resync(
         pool: PgPool,
     ) -> sqlx::Result<()> {
         apply(&pool, &payload(UTAGE_PAYLOAD)).await?;
-        let before = difficulty_rows(&pool).await;
+        let before = stored_difficulties(&pool).await;
 
         let stats = apply(&pool, &payload(UTAGE_PAYLOAD)).await?;
 
         assert!(!stats.revision_advanced);
-        assert_eq!(difficulty_rows(&pool).await, before);
+        assert_eq!(stored_difficulties(&pool).await, before);
         Ok(())
     }
 
@@ -2113,7 +2115,7 @@ mod tests {
         assert!(stats.revision_advanced);
         let s = |v: &str| v.to_string();
         assert_eq!(
-            difficulty_rows(&pool).await,
+            stored_difficulties(&pool).await,
             vec![
                 (s("basic"), s("BASIC"), s("basic"), 0),
                 (s("expert"), s("EXPERT"), s("expert"), 1),
@@ -2122,6 +2124,48 @@ mod tests {
                 (s("【協】"), s("【協】"), s("協"), 4),
             ]
         );
+        Ok(())
+    }
+
+    // Over the whole table, not the two rows above: every derived row's
+    // display form is its code inside the full-width brackets, so the two
+    // columns cannot drift apart.
+    #[sqlx::test]
+    async fn every_derived_row_is_its_code_in_brackets(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(UTAGE_PAYLOAD)).await?;
+
+        let drifted: Vec<(String, String)> = sqlx::query_as(
+            "SELECT name, code FROM difficulties \
+             WHERE code <> difficulty AND name <> '【' || code || '】'",
+        )
+        .fetch_all(&pool)
+        .await?;
+        let derived: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM difficulties WHERE code <> difficulty")
+                .fetch_one(&pool)
+                .await?;
+
+        assert_eq!(derived, 2, "the payload's two UTAGE tags are derived");
+        assert_eq!(drifted, Vec::<(String, String)>::new());
+        Ok(())
+    }
+
+    // `code` is a URL component, so two rows sharing one must stop the sync
+    // rather than leave a URL that names two difficulties. The transaction
+    // rolls back, so nothing half-applied is left behind.
+    #[sqlx::test]
+    async fn a_code_shared_by_two_difficulties_fails_the_sync(pool: PgPool) -> sqlx::Result<()> {
+        let clash = UTAGE_PAYLOAD.replace(
+            r##"{ "difficulty": "basic", "name": "BASIC", "color": "#22bb5b" },"##,
+            r##"{ "difficulty": "basic", "name": "BASIC", "color": "#22bb5b" },
+            { "difficulty": "協", "name": "KYOU" },"##,
+        );
+
+        assert!(apply(&pool, &payload(&clash)).await.is_err());
+        let songs: i64 = sqlx::query_scalar("SELECT count(*) FROM songs")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(songs, 0);
         Ok(())
     }
 }
