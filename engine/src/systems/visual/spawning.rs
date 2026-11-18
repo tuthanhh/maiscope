@@ -1,8 +1,8 @@
 use super::{
     NOTE_RADIUS,
     component::{
-        FanLanes, HoldNoteElement, NoteBpm, NoteHalo, NoteTiming, SlideArrow, SlideElement,
-        TouchElement, TouchHoldCountdown, TouchSpark,
+        FanLanes, HitTime, HoldNoteElement, NoteBpm, NoteHalo, NoteTiming, SlideArrow,
+        SlideElement, TouchElement, TouchHoldCountdown, TouchSpark,
     },
     note_colors,
     resources::{ButtonLayout, NoteAssets},
@@ -17,7 +17,6 @@ use super::{
     slide_path,
 };
 use crate::systems::{
-    GROWING,
     chart_playback::ChartPlayback,
     component::{ChartEvent, Note, NoteKind, SlideShape},
 };
@@ -48,7 +47,7 @@ pub fn next_event(
     //
     // .map() clones event data and releases the &mut borrow on chart,
     // so chart.chart_speed() / chart.note_speed() are accessible in the loop body.
-    while let Some((event, bpm)) = chart.advance().map(|e| (e.event.clone(), e.bpm)) {
+    while let Some((event, bpm, hit)) = chart.advance().map(|e| (e.event.clone(), e.bpm, e.time)) {
         if let ChartEvent::NoteGroup(notes) = event {
             spawned = true;
             for note in &notes {
@@ -67,8 +66,7 @@ pub fn next_event(
                     note,
                     is_paired,
                     bpm,
-                    chart.chart_speed(),
-                    chart.note_speed(),
+                    hit,
                     &note_assets,
                     &layout,
                 );
@@ -169,19 +167,17 @@ fn spawn_note(
     note: &Note,
     is_paired: bool,
     bpm: f32,
-    chart_speed: f32,
-    note_speed: f32,
+    hit: f64,
     assets: &NoteAssets,
     layout: &ButtonLayout,
 ) {
-    // Travel is faster with both play speed and note speed:
-    // duration ∝ 1 / (chart_speed · note_speed).
-    let growing_time = GROWING as f32 / (chart_speed * note_speed);
-
+    // The timer is a placeholder: `update_movement` sets the phase from the
+    // chart clock on the note's first frame.
     let mut e = commands.spawn((
         note.kind.clone(),
-        NoteTiming::Growing(Timer::from_seconds(growing_time, TimerMode::Once)),
+        NoteTiming::Growing(Timer::default()),
         NoteBpm(bpm),
+        HitTime(hit),
     ));
 
     match &note.kind {

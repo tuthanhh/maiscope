@@ -2,6 +2,10 @@
 
 use bevy::prelude::*;
 
+use super::schedule::{Phase, PhaseAt};
+
+/// The phase a note is in, with a timer saying how far through. Set each
+/// frame from the chart clock (`schedule::phase_at`), never ticked.
 #[derive(Component)]
 pub enum NoteTiming {
     Growing(Timer),
@@ -11,6 +15,37 @@ pub enum NoteTiming {
     Sliding(Timer),
     Dying(Timer),
 }
+
+impl NoteTiming {
+    pub fn phase(&self) -> Phase {
+        match self {
+            NoteTiming::Growing(_) => Phase::Growing,
+            NoteTiming::Moving(_) => Phase::Moving,
+            NoteTiming::Holding(_) => Phase::Holding,
+            NoteTiming::Waiting(_) => Phase::Waiting,
+            NoteTiming::Sliding(_) => Phase::Sliding,
+            NoteTiming::Dying(_) => Phase::Dying,
+        }
+    }
+
+    pub fn at(now: PhaseAt) -> Self {
+        let mut timer = Timer::from_seconds(now.duration, TimerMode::Once);
+        timer.set_elapsed(std::time::Duration::from_secs_f32(now.elapsed));
+        match now.phase {
+            Phase::Growing => NoteTiming::Growing(timer),
+            Phase::Moving => NoteTiming::Moving(timer),
+            Phase::Holding => NoteTiming::Holding(timer),
+            Phase::Waiting => NoteTiming::Waiting(timer),
+            Phase::Sliding => NoteTiming::Sliding(timer),
+            Phase::Dying => NoteTiming::Dying(timer),
+        }
+    }
+}
+
+/// The chart time (seconds) a note is hit at: with its kind, speed and bpm,
+/// all `schedule::phase_at` needs to place it.
+#[derive(Component, Clone, Copy)]
+pub struct HitTime(pub f64);
 
 // ------------------------
 // Special visual element
@@ -57,8 +92,6 @@ pub struct SlidePath {
     /// `(cumulative_trace_time, cumulative_distance)` at each segment end.
     /// Drives the time→distance mapping for the tracing star.
     pub breakpoints: Vec<(f32, f32)>,
-    /// Seconds the slide waits (Waiting phase) before the trace begins.
-    pub wait_secs: f32,
 }
 
 /// A chevron arrow sitting at `distance_along_path` units along the slide track.

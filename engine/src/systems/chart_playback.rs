@@ -118,19 +118,6 @@ impl ChartPlayback {
         self.is_playing = false;
     }
 
-    /// How far the note animations advance this frame: the wall-clock frame
-    /// time while playing, nothing while paused. The per-note phase timers
-    /// are already sized for the chart speed when each phase begins, so they
-    /// tick in wall time; pausing must stop them with the chart clock, or
-    /// notes on screen keep moving after pause.
-    pub fn visual_delta(&self, wall: std::time::Duration) -> std::time::Duration {
-        if self.is_playing {
-            wall
-        } else {
-            std::time::Duration::ZERO
-        }
-    }
-
     pub fn resume(&mut self) {
         self.is_playing = true;
     }
@@ -221,17 +208,6 @@ impl ChartPlayback {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
-
-    #[test]
-    fn visual_time_stops_while_paused() {
-        let mut chart = ChartPlayback::default();
-        chart.pause();
-        assert_eq!(
-            chart.visual_delta(Duration::from_millis(16)),
-            Duration::ZERO
-        );
-    }
 
     #[test]
     fn unload_empties_the_chart_and_keeps_the_user_speeds() {
@@ -246,18 +222,5 @@ mod tests {
         assert!(!chart.is_playing());
         assert_eq!(chart.chart_speed(), 1.5);
         assert_eq!(chart.note_speed(), 8.0);
-    }
-
-    #[test]
-    fn visual_time_runs_at_wall_speed_while_playing() {
-        // Phase durations are already divided by chart_speed when each phase
-        // starts, so the timers tick in wall time, not chart time.
-        let mut chart = ChartPlayback::default();
-        chart.set_chart_speed(2.0);
-        chart.resume();
-        assert_eq!(
-            chart.visual_delta(Duration::from_millis(16)),
-            Duration::from_millis(16)
-        );
     }
 }

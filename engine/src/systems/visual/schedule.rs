@@ -6,9 +6,6 @@
 //! — and how far through — is a function of the chart clock alone. Pause,
 //! speed changes and seeking follow from that with no per-note bookkeeping.
 
-// Until update_movement reads it (visualizer-majdata 06).
-#![allow(dead_code)]
-
 use crate::systems::component::NoteKind;
 use crate::systems::visual::slide_path::slide_span_secs;
 use crate::systems::{GROWING, MOVING};
@@ -33,7 +30,7 @@ pub struct PhaseAt {
 }
 
 /// A tap's or a slide star's pop after the hit.
-const TAP_DYING: f64 = 0.25;
+pub const TAP_DYING: f64 = 0.25;
 /// A touch's flash on the hit, then its burst.
 const TOUCH_HOLDING: f64 = 0.05;
 const TOUCH_DYING: f64 = 0.25;
@@ -100,6 +97,7 @@ pub fn phase_at(kind: &NoteKind, hit: f64, bpm: f32, note_speed: f32, t: f64) ->
 }
 
 /// The chart time a note hit at `hit` finishes its last phase.
+#[allow(dead_code)] // until the timeline reads it (visualizer-majdata 07)
 pub fn note_end(kind: &NoteKind, hit: f64, bpm: f32) -> f64 {
     hit + after_hit(kind, bpm)
         .iter()
@@ -195,8 +193,7 @@ mod tests {
                 panic!("{chart}: a slide");
             };
             let path = build_slide_trace(&segments, head_button, 120.0, shared_duration, &layout);
-            let (wait, total) = slide_span_secs(&segments, shared_duration, 120.0);
-            assert!(close(wait, path.wait_secs), "{chart}: wait");
+            let (_, total) = slide_span_secs(&segments, shared_duration, 120.0);
             assert!(close(total, trace_total_secs(&path)), "{chart}: total");
         }
     }

@@ -5,16 +5,15 @@
 use super::spawning::spawn_touch_spark;
 use super::{RADIUS, component::NoteTiming, resources::ButtonLayout, resources::NoteAssets};
 use crate::systems::{
-    MOVING,
     chart_playback::ChartPlayback,
     component::NoteKind,
     visual::{
         component::{
-            FanLanes, HoldHalo, HoldNoteElement, NoteBpm, NoteHalo, SlideArrow, SlideElement,
-            SlidePath, TouchElement, TouchHoldCountdown, TouchSpark,
+            FanLanes, HitTime, HoldHalo, HoldNoteElement, NoteBpm, NoteHalo, SlideArrow,
+            SlideElement, SlidePath, TouchElement, TouchHoldCountdown, TouchSpark,
         },
+        schedule::{Phase, TAP_DYING, phase_at},
         shapes::{hexagon_sprite, hold_halo_sprite, touch_just_sprite},
-        slide_path,
     },
 };
 use bevy::prelude::*;
@@ -176,6 +175,7 @@ pub fn update_movement(
         Option<&NoteBpm>,
         Option<&SlidePath>,
         Option<&FanLanes>,
+        &HitTime,
     )>,
     mut triangles: TriangleQuery,
     mut hold_elements: HoldElementQuery,
@@ -187,23 +187,13 @@ pub fn update_movement(
     mut touch_sparks: TouchSparkQuery,
     chart: Res<ChartPlayback>,
     layout: Res<ButtonLayout>,
-    time: Res<Time>,
     assets: Res<NoteAssets>,
 ) {
-    // Travel is faster with both play speed and note speed; hold/slide musical
-    // durations follow the play tempo (/ chart_speed), so effective bpm is
-    // bpm × chart_speed.
+    // Every note is placed from the chart clock (visualizer-majdata 06):
+    // paused, the clock stands and so does everything on screen; a seek is a
+    // jump of the clock.
     let note_speed = chart.note_speed();
-    let chart_speed = chart.chart_speed();
-    let move_duration = MOVING as f32 / (chart_speed * note_speed);
-    // Paused, nothing on screen advances (visualizer-majdata 01). Nothing runs
-    // either: each phase's first-frame setup (a hold's halo, a touch's burst)
-    // keys on `timer.elapsed().is_zero()`, which stays true while the timers
-    // stand still, and would re-run on every paused frame.
-    let dt = chart.visual_delta(time.delta());
-    if dt.is_zero() {
-        return;
-    }
+    let now_secs = chart.elapsed_time();
 
     for (
         entity,
@@ -216,13 +206,105 @@ pub fn update_movement(
         note_bpm,
         slide_path_data,
         fan_lanes,
+        hit,
     ) in entity_query.iter_mut()
     {
-        match &mut *timing {
-            NoteTiming::Growing(timer) => {
-                timer.tick(dt);
-                let t = timer.fraction();
+        let bpm = note_bpm.map(|b| b.0).unwrap_or(0.0);
+        let Some(now) = phase_at(kind, hit.0, bpm, note_speed, now_secs) else {
+            commands.entity(entity).despawn();
+            continue;
+        };
 
+        // Entering a later phase runs the entry work of every phase crossed,
+        // in order: one per frame in play, several at once after a seek.
+        let current = timing.phase();
+        for phase in [Phase::Moving, Phase::Holding, Phase::Waiting, Phase::Dying] {
+            if phase <= current || phase > now.phase {
+                continue;
+            }
+            match phase {
+                Phase::Moving => {
+                    if matches!(kind, NoteKind::Touch { .. } | NoteKind::TouchHold { .. }) {
+                        *visibility = Visibility::Visible;
+                    }
+                }
+                // Skipped on the way to Dying: Dying's despawn sees only the
+                // children that already exist, and the halo would outlive it.
+                Phase::Holding if now.phase != Phase::Dying => match kind {
+                    // Hold notes: glowing halo around the head, to make it
+                    // visually distinct from a regular tap.
+                    NoteKind::TapHold { .. } | NoteKind::TouchHold { .. } => {
+                        commands.entity(entity).with_children(|parent| {
+                            parent.spawn((hold_halo_sprite(&assets), HoldHalo));
+                        });
+                    }
+                    // Touch: flash `TouchJust` as a new child for the brief
+                    // Holding phase; the converged approach triangles stay put
+                    // (all are cleared together when Dying begins).
+                    NoteKind::Touch { .. } => {
+                        commands.entity(entity).with_children(|parent| {
+                            parent.spawn((
+                                touch_just_sprite(&assets),
+                                Transform::from_xyz(0.0, 0.0, 0.5),
+                            ));
+                        });
+                    }
+                    _ => {}
+                },
+                Phase::Waiting if is_slide(kind) => {
+                    hide_slide_head(children, &mut slide_elements);
+                    // Pop effect where the head star lands on the ring: a tap
+                    // hit with the slide, so the clock runs it as a pop. Not
+                    // re-created by a seek that lands after it ended.
+                    if let NoteKind::Slide { head_button, .. } = kind
+                        && now_secs - hit.0 < TAP_DYING
+                    {
+                        let pos = layout.tap[head_button - 1] * RADIUS;
+                        commands.spawn((
+                            hexagon_sprite(&assets),
+                            Transform::from_translation(pos.extend(2.5)),
+                            Visibility::Visible,
+                            NoteKind::Tap(*head_button),
+                            NoteTiming::Growing(Timer::default()),
+                            HitTime(hit.0),
+                        ));
+                    }
+                }
+                Phase::Dying => {
+                    // Morph into the death effect. Guide sounds do not fire
+                    // from here — `audio::schedule_guide_sounds` fires them
+                    // from the chart clock.
+                    if let Some(children) = children {
+                        for child in children.iter() {
+                            commands.entity(child).despawn();
+                        }
+                    }
+                    if matches!(kind, NoteKind::Touch { .. }) {
+                        // Hide the centre sprite; the burst plays out as child entities.
+                        if let Some(sprite) = sprite.as_deref_mut() {
+                            set_alpha(sprite, 0.0);
+                        }
+                        commands
+                            .entity(entity)
+                            .with_children(|p| spawn_touch_spark(p, &assets));
+                    } else if let Some(sprite) = sprite.as_deref_mut() {
+                        // Tap / SlideStar carry their own sprite: swap it in place for
+                        // the hexagon pop effect.
+                        *sprite = hexagon_sprite(&assets);
+                    } else if matches!(kind, NoteKind::TouchHold { .. } | NoteKind::TapHold { .. })
+                    {
+                        // Hold parents have no sprite of their own — attach the pop.
+                        commands.entity(entity).insert(hexagon_sprite(&assets));
+                    }
+                }
+                _ => {}
+            }
+        }
+        *timing = NoteTiming::at(now);
+
+        match &*timing {
+            NoteTiming::Growing(timer) => {
+                let t = timer.fraction();
                 if !is_slide(kind) {
                     transform.scale = Vec3::splat(t);
                     scale_note_halo(&transform, children, &mut note_halos);
@@ -235,19 +317,13 @@ pub fn update_movement(
                         &mut note_halos,
                     );
                 }
-
-                if timer.just_finished() {
-                    *timing =
-                        NoteTiming::Moving(Timer::from_seconds(move_duration, TimerMode::Once));
-                    if matches!(kind, NoteKind::Touch { .. } | NoteKind::TouchHold { .. }) {
-                        *visibility = Visibility::Visible;
-                    }
-                }
             }
             NoteTiming::Moving(timer) => {
-                timer.tick(dt);
                 let t = timer.fraction();
-
+                if !is_slide(kind) {
+                    // A note entered mid-way (a seek) skipped Growing.
+                    transform.scale = Vec3::ONE;
+                }
                 move_tap(&mut transform, kind, t, &layout);
                 scale_note_halo(&transform, children, &mut note_halos);
                 move_triangles(kind, t, children, &mut triangles);
@@ -262,91 +338,23 @@ pub fn update_movement(
                 move_taphold(
                     kind,
                     t,
-                    note_bpm.map(|b| b.0).unwrap_or(0.0),
+                    bpm,
                     note_speed,
                     children,
                     &mut transform,
                     &mut hold_elements,
                     &layout,
                 );
-
-                if timer.just_finished() {
-                    match kind {
-                        // Touch flashes `TouchJust` for a brief Holding phase, then
-                        // bursts in Dying.
-                        NoteKind::Touch { .. } => {
-                            *timing =
-                                NoteTiming::Holding(Timer::from_seconds(0.05, TimerMode::Once));
-                        }
-                        NoteKind::Tap(_) | NoteKind::SlideStar { .. } => {
-                            *timing = NoteTiming::Dying(Timer::from_seconds(0.25, TimerMode::Once));
-                        }
-                        NoteKind::TapHold { duration, .. }
-                        | NoteKind::TouchHold { duration, .. } => {
-                            if let Some(NoteBpm(bpm)) = note_bpm {
-                                *timing = NoteTiming::Holding(Timer::from_seconds(
-                                    duration.hold_secs(*bpm) / chart_speed,
-                                    TimerMode::Once,
-                                ));
-                            }
-                        }
-                        NoteKind::Slide { .. } | NoteKind::HeadlessSlide { .. } => {
-                            hide_slide_head(children, &mut slide_elements);
-                            // Pop effect where the head star lands on the ring.
-                            if let NoteKind::Slide { head_button, .. } = kind {
-                                let pos = layout.tap[head_button - 1] * RADIUS;
-                                commands.spawn((
-                                    hexagon_sprite(&assets),
-                                    Transform::from_translation(pos.extend(2.5)),
-                                    Visibility::Visible,
-                                    NoteKind::Tap(*head_button),
-                                    NoteTiming::Dying(Timer::from_seconds(0.25, TimerMode::Once)),
-                                ));
-                            }
-                            // Musical timing → follows the play tempo (/ chart_speed).
-                            let wait =
-                                slide_path_data.map(|p| p.wait_secs).unwrap_or(0.0) / chart_speed;
-                            *timing =
-                                NoteTiming::Waiting(Timer::from_seconds(wait, TimerMode::Once));
-                        }
-                    }
-                }
             }
             NoteTiming::Holding(timer) => {
-                if timer.elapsed().is_zero() {
-                    match kind {
-                        // Hold notes: glowing halo around the head, to make it
-                        // visually distinct from a regular tap.
-                        NoteKind::TapHold { .. } | NoteKind::TouchHold { .. } => {
-                            commands.entity(entity).with_children(|parent| {
-                                parent.spawn((hold_halo_sprite(&assets), HoldHalo));
-                            });
-                        }
-                        // Touch: flash `TouchJust` as a new child for the brief
-                        // Holding phase; the converged approach triangles stay put
-                        // (all are cleared together when Dying begins).
-                        NoteKind::Touch { .. } => {
-                            commands.entity(entity).with_children(|parent| {
-                                parent.spawn((
-                                    touch_just_sprite(&assets),
-                                    Transform::from_xyz(0.0, 0.0, 0.5),
-                                ));
-                            });
-                        }
-                        _ => {}
-                    }
-                }
-                timer.tick(dt);
-
                 let t = timer.fraction();
-
                 match kind {
                     NoteKind::TapHold { .. } => {
                         hold_tap(
                             kind,
                             t,
                             timer,
-                            note_bpm.map(|b| b.0).unwrap_or(0.0),
+                            bpm,
                             note_speed,
                             children,
                             &mut hold_elements,
@@ -359,31 +367,11 @@ pub fn update_movement(
                     }
                     _ => {}
                 }
-
-                if timer.just_finished() {
-                    // Touch plays the two-sub-phase burst, so it needs the longer
-                    // Dying timer; hold notes just pop briefly.
-                    let dying_secs = match kind {
-                        NoteKind::Touch { .. } => 0.25,
-                        _ => 0.1,
-                    };
-                    *timing = NoteTiming::Dying(Timer::from_seconds(dying_secs, TimerMode::Once));
-                }
             }
             NoteTiming::Waiting(timer) => {
-                timer.tick(dt);
                 wait_slide(timer.fraction(), children, &mut slide_elements);
-                if timer.just_finished() {
-                    // Musical timing → follows the play tempo (/ chart_speed).
-                    let total = slide_path_data
-                        .map(slide_path::trace_total_secs)
-                        .unwrap_or(0.0)
-                        / chart_speed;
-                    *timing = NoteTiming::Sliding(Timer::from_seconds(total, TimerMode::Once));
-                }
             }
             NoteTiming::Sliding(timer) => {
-                timer.tick(dt);
                 if let Some(fan) = fan_lanes {
                     fan_trace(
                         timer.fraction(),
@@ -403,49 +391,10 @@ pub fn update_movement(
                         &mut commands,
                     );
                 }
-                if timer.just_finished() {
-                    // Slides have no death visual (shapeless container), so Dying
-                    // just despawns children + self on its first frame.
-                    *timing = NoteTiming::Dying(Timer::from_seconds(0.0, TimerMode::Once));
-                }
             }
             NoteTiming::Dying(timer) => {
-                let is_touch = matches!(kind, NoteKind::Touch { .. });
-
-                // On the very first frame: morph into the death effect. Guide
-                // sounds no longer fire from here — `audio::schedule_guide_sounds`
-                // fires them from the chart clock, ahead of the visual by the
-                // configured lead, so the sprite's timer is purely visual now.
-                if timer.elapsed().is_zero() && !is_slide(kind) {
-                    // Despawn all children (slide stars, hold bodies, touch triangles).
-                    if let Some(children) = children {
-                        for child in children.iter() {
-                            commands.entity(child).despawn();
-                        }
-                    }
-                    if is_touch {
-                        // Hide the centre sprite; the burst plays out as child entities.
-                        if let Some(sprite) = sprite.as_deref_mut() {
-                            set_alpha(sprite, 0.0);
-                        }
-                        commands
-                            .entity(entity)
-                            .with_children(|p| spawn_touch_spark(p, &assets));
-                    } else if let Some(sprite) = sprite.as_deref_mut() {
-                        // Tap / SlideStar carry their own sprite: swap it in place for
-                        // the hexagon pop effect (alpha-animated below this frame).
-                        *sprite = hexagon_sprite(&assets);
-                    } else if matches!(kind, NoteKind::TouchHold { .. } | NoteKind::TapHold { .. })
-                    {
-                        // Hold parents have no sprite of their own — attach the pop.
-                        commands.entity(entity).insert(hexagon_sprite(&assets));
-                    }
-                }
-
-                timer.tick(dt);
                 let t = timer.fraction();
-
-                if is_touch {
+                if matches!(kind, NoteKind::Touch { .. }) {
                     // Burst children are spawned via command, so `children` only
                     // includes them from the second frame onward.
                     animate_touch_spark(t, children, &mut touch_sparks);
@@ -457,10 +406,6 @@ pub fn update_movement(
                         set_alpha(sprite, wave);
                     }
                 }
-
-                if timer.just_finished() {
-                    commands.entity(entity).despawn();
-                }
             }
         }
     }
@@ -469,24 +414,21 @@ pub fn update_movement(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::systems::visual::component::HitTime;
 
-    fn hold_kind() -> NoteKind {
-        simai::parse_chart("(120){4}1h[4:1],E")
+    fn first_kind(chart: &str) -> NoteKind {
+        simai::parse_chart(chart)
             .unwrap()
             .into_iter()
             .find_map(|event| match event {
                 simai::ChartEvent::NoteGroup(notes) => Some(notes[0].kind.clone()),
                 _ => None,
             })
-            .expect("a hold in the chart")
+            .expect("a note in the chart")
     }
 
-    /// A hold caught by pause on the frame it starts holding: its first-frame
-    /// setup (the halo) must run once, not on every paused frame — `dt` is
-    /// zero while paused, so `timer.elapsed()` stays zero (final review,
-    /// visualizer-majdata piece 1).
-    #[test]
-    fn a_paused_hold_spawns_its_halo_once() {
+    /// A paused chart at `elapsed`, with `update_movement` and nothing else.
+    fn app_at(elapsed: f64) -> App {
         let mut app = App::new();
         app.add_plugins((MinimalPlugins, AssetPlugin::default()))
             .init_asset::<Image>()
@@ -494,22 +436,89 @@ mod tests {
             .init_resource::<ButtonLayout>()
             .init_resource::<ChartPlayback>()
             .add_systems(Update, update_movement);
-        app.world_mut().resource_mut::<ChartPlayback>().pause();
-        app.world_mut().spawn((
-            Sprite::default(),
-            Transform::default(),
-            NoteTiming::Holding(Timer::from_seconds(1.0, TimerMode::Once)),
-            hold_kind(),
-            Visibility::default(),
-        ));
+        let mut chart = app.world_mut().resource_mut::<ChartPlayback>();
+        chart.pause();
+        chart.sync_to_audio_position(elapsed);
+        app
+    }
+
+    /// A note as `spawn_note` leaves it: fresh, in its first phase.
+    fn spawn(app: &mut App, kind: NoteKind, hit: f64) -> Entity {
+        app.world_mut()
+            .spawn((
+                Sprite::default(),
+                Transform::default(),
+                NoteTiming::Growing(Timer::from_seconds(0.1, TimerMode::Once)),
+                kind,
+                Visibility::default(),
+                HitTime(hit),
+                NoteBpm(120.0),
+            ))
+            .id()
+    }
+
+    fn count<C: Component>(app: &mut App) -> usize {
+        app.world_mut()
+            .query_filtered::<(), With<C>>()
+            .iter(app.world())
+            .count()
+    }
+
+    /// A hold caught by pause on the frame it starts holding: its first-frame
+    /// setup (the halo) must run once, not on every paused frame (final
+    /// review, visualizer-majdata piece 1).
+    #[test]
+    fn a_paused_hold_spawns_its_halo_once() {
+        let mut app = app_at(0.0);
+        spawn(&mut app, first_kind("(120){4}1h[4:1],E"), 0.0);
         for _ in 0..5 {
             app.update();
         }
-        let halos = app
-            .world_mut()
-            .query_filtered::<(), With<HoldHalo>>()
-            .iter(app.world())
-            .count();
+        let halos = count::<HoldHalo>(&mut app);
         assert!(halos <= 1, "{halos} halos spawned while paused");
+    }
+
+    #[test]
+    fn a_note_sits_where_the_clock_puts_it() {
+        // Note speed 7: Moving lasts 2/7 s and ends at the hit, so half-way
+        // through it is 1/7 s before the hit.
+        let mut app = app_at(2.0 - 1.0 / 7.0);
+        let tap = spawn(&mut app, first_kind("(120){4}1,E"), 2.0);
+        app.update();
+        match app.world().get::<NoteTiming>(tap).unwrap() {
+            NoteTiming::Moving(timer) => assert!((timer.fraction() - 0.5).abs() < 1e-3),
+            _ => panic!("not moving"),
+        }
+    }
+
+    #[test]
+    fn a_paused_note_stays_put() {
+        let mut app = app_at(2.0 - 1.0 / 7.0);
+        let tap = spawn(&mut app, first_kind("(120){4}1,E"), 2.0);
+        app.update();
+        let first = *app.world().get::<Transform>(tap).unwrap();
+        for _ in 0..3 {
+            app.update();
+            assert_eq!(*app.world().get::<Transform>(tap).unwrap(), first);
+        }
+    }
+
+    #[test]
+    fn a_note_past_its_end_is_gone() {
+        let mut app = app_at(3.0);
+        let tap = spawn(&mut app, first_kind("(120){4}1,E"), 2.0);
+        app.update();
+        assert!(app.world().get_entity(tap).is_err());
+    }
+
+    /// Review Focus 1 (piece 2): a hold reached mid-way, as a seek leaves it.
+    #[test]
+    fn a_hold_entered_mid_way_shows_one_halo() {
+        let mut app = app_at(1.0);
+        spawn(&mut app, first_kind("(120){4}1h[1:1],E"), 0.0);
+        for _ in 0..3 {
+            app.update();
+        }
+        assert_eq!(count::<HoldHalo>(&mut app), 1);
     }
 }
