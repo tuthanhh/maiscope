@@ -852,4 +852,38 @@ mod tests {
         app.update();
         assert!(!app.world().resource::<ChartPlayback>().is_playing());
     }
+
+    /// Final review, piece 2: raising the note speed shortens the approach,
+    /// so notes already spawned can fall out of view — and must come back
+    /// when they are due, not be lost behind the spawn cursor.
+    #[test]
+    fn a_faster_note_speed_does_not_lose_notes() {
+        let mut app = app_with_chart("(120){16}1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,E");
+        app.add_systems(
+            Update,
+            crate::systems::visual::update_movement.after(next_event),
+        );
+        {
+            let mut chart = app.world_mut().resource_mut::<ChartPlayback>();
+            chart.set_note_speed(3.0);
+            chart.pause();
+            chart.seek(0.0);
+        }
+        app.update();
+        app.world_mut()
+            .resource_mut::<ChartPlayback>()
+            .set_note_speed(9.0);
+        app.update();
+        {
+            let mut chart = app.world_mut().resource_mut::<ChartPlayback>();
+            chart.tick(0.8);
+            chart.resume();
+        }
+        app.update();
+        app.update();
+        let on_screen = hits(&mut app);
+        for due in [0.875, 1.0, 1.125] {
+            assert!(on_screen.contains(&due), "{due} missing from {on_screen:?}");
+        }
+    }
 }

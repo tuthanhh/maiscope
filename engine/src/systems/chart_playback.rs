@@ -137,10 +137,15 @@ impl ChartPlayback {
     pub fn seek(&mut self, t: f64) {
         let t = t.clamp(0.0, self.length);
         self.elapsed_time = t;
+        self.respawn_at(t);
+        self.audio_target = Some(t);
+    }
+
+    /// Put on screen what is visible at `t`, and spawn on from there.
+    fn respawn_at(&mut self, t: f64) {
         let window = t + self.approach_time();
         self.next_spawn_index = self.timed_events.partition_point(|e| e.time <= window);
         self.respawn = Some(t);
-        self.audio_target = Some(t);
     }
 
     /// The pending seek target, once: the notes visible there are to spawn.
@@ -183,7 +188,14 @@ impl ChartPlayback {
         self.chart_speed = rate;
     }
 
+    /// The approach length follows the note speed, so the notes on screen are
+    /// placed again: a faster speed would otherwise drop notes already spawned
+    /// behind the spawn cursor, where they never come back.
     pub fn set_note_speed(&mut self, rate: f32) {
+        if rate != self.note_speed && self.has_events() {
+            self.note_speed = rate;
+            self.respawn_at(self.elapsed_time);
+        }
         self.note_speed = rate;
     }
 
