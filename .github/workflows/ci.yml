@@ -189,6 +189,11 @@ jobs:
         working-directory: apps/host
         run: pnpm install --frozen-lockfile
 
+      # Vitest unit tests (src/**/*.test.ts); they need no wasm bindings.
+      - name: pnpm test
+        working-directory: apps/host
+        run: pnpm test
+
       # vue-tsc --noEmit && vite build
       - name: pnpm build
         working-directory: apps/host
