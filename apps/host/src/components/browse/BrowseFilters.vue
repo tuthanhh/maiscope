@@ -1,8 +1,6 @@
 <script setup lang="ts">
-import { ref } from "vue";
 import useI18n from "~/composables/useI18n";
 import useGameData from "~/composables/useGameData";
-import MvIcon from "~/components/ui/MvIcon.vue";
 import MvChip from "~/components/ui/MvChip.vue";
 import MvField from "~/components/ui/MvField.vue";
 import MvTextInput from "~/components/ui/MvTextInput.vue";
@@ -27,6 +25,9 @@ export type BrowseForm = {
     useInternalLevel: boolean;
 };
 
+// The drawer's fields: everything the browse surface does not carry
+// (design-direction "Browse"). Toggles are filter chips. Each control writes
+// the form directly, so filtering is live.
 defineOptions({ name: "BrowseFilters" });
 
 const props = defineProps<{
@@ -34,283 +35,136 @@ const props = defineProps<{
     categoryOptions: SelectOption[];
     versionOptions: SelectOption[];
     designerOptions: SelectOption[];
-    levelOptions: SelectOption[];
     regionOptions: SelectOption[];
     typeChips: { type: string }[];
-    difficultyChips: { code: string; name?: string }[];
 }>();
-
-const emit = defineEmits<{ draw: []; reset: [] }>();
 
 const { t } = useI18n();
 const { getTypeAbbr } = useGameData();
 
-const advOpen = ref(true);
-
-// Toggle a value in/out of a multi-select array (chip groups).
-function toggle(list: string[], value: string): string[] {
-    return list.includes(value)
-        ? list.filter((v) => v !== value)
-        : [...list, value];
+function toggleType(type: string): void {
+    const types = props.form.types;
+    props.form.types = types.includes(type)
+        ? types.filter((v) => v !== type)
+        : [...types, type];
 }
 </script>
 
 <template>
-    <div class="mv-adv">
-        <button
-            type="button"
-            class="mv-btn mv-adv-head"
-            @click="advOpen = !advOpen"
-        >
-            <span class="mv-adv-title">
-                <MvIcon name="sliders" :size="15" />
-                <span>{{ t("page.songs.advancedSearch") }}</span>
-            </span>
-            <span class="mv-adv-chevron" :class="{ closed: !advOpen }">
-                <MvIcon name="chevron" :size="13" />
-            </span>
-        </button>
-
-        <div v-if="advOpen" class="mv-adv-body">
-            <div class="mv-fields">
-                <MvField :label="t('term.title')">
-                    <label class="mv-check">
-                        <input type="checkbox" v-model="props.form.matchExactTitle" />
-                        {{ t("page.songs.exactMatch") }}
-                    </label>
-                </MvField>
-                <MvField :label="t('term.artist')">
-                    <MvTextInput
-                        v-model="props.form.artist"
-                        placeholder="—"
-                        :width="150"
-                    />
-                    <label class="mv-check">
-                        <input type="checkbox" v-model="props.form.matchExactArtist" />
-                        {{ t("page.songs.exactMatch") }}
-                    </label>
-                </MvField>
-                <MvField :label="t('term.noteDesigner')">
-                    <MvSelect
-                        v-model="props.form.designer"
-                        :options="designerOptions"
-                        :placeholder="t('ui.all')"
-                        :width="160"
-                    />
-                </MvField>
-                <MvField :label="t('term.category')">
-                    <MvSelect
-                        v-model="props.form.category"
-                        :options="categoryOptions"
-                        :placeholder="t('ui.all')"
-                        :width="160"
-                    />
-                </MvField>
-                <MvField :label="t('term.version')">
-                    <MvSelect
-                        v-model="props.form.version"
-                        :options="versionOptions"
-                        :placeholder="t('ui.all')"
-                        :width="160"
-                    />
-                </MvField>
-                <MvField :label="t('term.region')">
-                    <MvSelect
-                        v-model="props.form.region"
-                        :options="regionOptions"
-                        :placeholder="t('ui.all')"
-                        :width="140"
-                    />
-                    <label class="mv-check">
-                        <input type="checkbox" v-model="props.form.useRegionOverride" />
-                        {{ t("page.songs.useRegionOverride") }}
-                    </label>
-                </MvField>
-            </div>
-
-            <div class="mv-fields mv-fields--wide">
-                <MvField :label="t('term.type')">
-                    <div class="mv-chip-row">
-                        <MvChip
-                            v-for="ty in typeChips"
-                            :key="ty.type"
-                            :active="props.form.types.includes(ty.type)"
-                            @click="
-                                props.form.types = toggle(
-                                    props.form.types,
-                                    ty.type,
-                                )
-                            "
-                        >
-                            {{ getTypeAbbr(ty.type) }}
-                        </MvChip>
-                    </div>
-                </MvField>
-                <MvField :label="t('term.difficulty')">
-                    <div class="mv-chip-row">
-                        <MvChip
-                            v-for="d in difficultyChips"
-                            :key="d.code"
-                            :active="
-                                props.form.difficulties.includes(d.code)
-                            "
-                            @click="
-                                props.form.difficulties = toggle(
-                                    props.form.difficulties,
-                                    d.code,
-                                )
-                            "
-                        >
-                            {{ d.name }}
-                        </MvChip>
-                    </div>
-                </MvField>
-                <MvField :label="t('term.level')">
-                    <div class="mv-range">
-                        <MvSelect
-                            v-model="props.form.levelMin"
-                            :options="levelOptions"
-                            :placeholder="t('page.songs.min')"
-                            :width="90"
-                        />
-                        <span class="mv-dash">–</span>
-                        <MvSelect
-                            v-model="props.form.levelMax"
-                            :options="levelOptions"
-                            :placeholder="t('page.songs.max')"
-                            :width="90"
-                        />
-                    </div>
-                    <label class="mv-check">
-                        <input type="checkbox" v-model="props.form.useInternalLevel" />
-                        {{ t("page.songs.useInternalLevel") }}
-                    </label>
-                </MvField>
-                <MvField :label="t('term.bpm')">
-                    <div class="mv-range">
-                        <MvTextInput
-                            v-model="props.form.bpmMin"
-                            :placeholder="t('page.songs.min')"
-                            :width="80"
-                        />
-                        <span class="mv-dash">–</span>
-                        <MvTextInput
-                            v-model="props.form.bpmMax"
-                            :placeholder="t('page.songs.max')"
-                            :width="80"
-                        />
-                    </div>
-                </MvField>
-            </div>
-
-            <div class="mv-adv-actions">
-                <button
-                    type="button"
-                    class="mv-btn mv-action-primary"
-                    @click="emit('draw')"
-                >
-                    ⤮ {{ t("page.songs.drawRandom") }}
-                </button>
-                <button
-                    type="button"
-                    class="mv-btn mv-action-ghost"
-                    @click="emit('reset')"
-                >
-                    {{ t("page.songs.reset") }}
-                </button>
-            </div>
-        </div>
-    </div>
+    <MvField :label="t('term.title')" group>
+        <span class="mv-filter-chips">
+            <MvChip
+                :active="form.matchExactTitle"
+                @click="form.matchExactTitle = !form.matchExactTitle"
+            >
+                {{ t("page.songs.exactMatch") }}
+            </MvChip>
+        </span>
+    </MvField>
+    <MvField :label="t('term.artist')">
+        <MvTextInput v-model="form.artist" class="mv-filter-control" />
+        <span class="mv-filter-chips">
+            <MvChip
+                :active="form.matchExactArtist"
+                @click="form.matchExactArtist = !form.matchExactArtist"
+            >
+                {{ t("page.songs.exactMatch") }}
+            </MvChip>
+        </span>
+    </MvField>
+    <MvField :label="t('term.noteDesigner')">
+        <MvSelect
+            v-model="form.designer"
+            class="mv-filter-control"
+            :options="designerOptions"
+            :placeholder="t('ui.all')"
+        />
+    </MvField>
+    <MvField :label="t('term.category')">
+        <MvSelect
+            v-model="form.category"
+            class="mv-filter-control"
+            :options="categoryOptions"
+            :placeholder="t('ui.all')"
+        />
+    </MvField>
+    <MvField :label="t('term.version')">
+        <MvSelect
+            v-model="form.version"
+            class="mv-filter-control"
+            :options="versionOptions"
+            :placeholder="t('ui.all')"
+        />
+    </MvField>
+    <MvField :label="t('term.region')">
+        <MvSelect
+            v-model="form.region"
+            class="mv-filter-control"
+            :options="regionOptions"
+            :placeholder="t('ui.all')"
+        />
+        <span class="mv-filter-chips">
+            <MvChip
+                :active="form.useRegionOverride"
+                @click="form.useRegionOverride = !form.useRegionOverride"
+            >
+                {{ t("page.songs.useRegionOverride") }}
+            </MvChip>
+        </span>
+    </MvField>
+    <MvField :label="t('term.type')" group>
+        <span class="mv-filter-chips">
+            <MvChip
+                v-for="ty in typeChips"
+                :key="ty.type"
+                :active="form.types.includes(ty.type)"
+                @click="toggleType(ty.type)"
+            >
+                {{ getTypeAbbr(ty.type) }}
+            </MvChip>
+        </span>
+    </MvField>
+    <MvField :label="t('term.level')" group>
+        <span class="mv-filter-chips">
+            <MvChip
+                :active="form.useInternalLevel"
+                @click="form.useInternalLevel = !form.useInternalLevel"
+            >
+                {{ t("page.songs.useInternalLevel") }}
+            </MvChip>
+        </span>
+    </MvField>
+    <MvField :label="t('term.bpm')" group>
+        <span class="mv-filter-range">
+            <MvTextInput
+                v-model="form.bpmMin"
+                :placeholder="t('page.songs.min')"
+                :label="t('page.songs.min')"
+                :width="96"
+            />
+            <span class="t-muted" aria-hidden="true">–</span>
+            <MvTextInput
+                v-model="form.bpmMax"
+                :placeholder="t('page.songs.max')"
+                :label="t('page.songs.max')"
+                :width="96"
+            />
+        </span>
+    </MvField>
 </template>
 
 <style scoped>
-.mv-adv {
-    border: 1px solid var(--mv-bd);
-    border-radius: 5px;
-    margin-bottom: 18px;
-}
-.mv-adv-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+.mv-filter-control {
     width: 100%;
-    background: none;
-    border: none;
-    color: var(--mv-fg);
-    padding: 12px 14px;
 }
-.mv-adv-title {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 12px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-}
-.mv-adv-chevron {
-    color: var(--mv-mut);
-    transition: transform 0.15s;
-}
-.mv-adv-chevron.closed {
-    transform: rotate(-90deg);
-}
-.mv-adv-body {
-    padding: 4px 14px 16px;
-    border-top: 1px solid var(--mv-bd2);
-}
-.mv-fields {
+.mv-filter-chips {
     display: flex;
     flex-wrap: wrap;
-    gap: 16px;
-    margin-top: 14px;
+    gap: var(--s-2);
 }
-.mv-fields--wide {
-    gap: 24px;
-    align-items: flex-end;
-}
-.mv-chip-row {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-}
-.mv-range {
+.mv-filter-range {
     display: flex;
     align-items: center;
-    gap: 6px;
-}
-.mv-dash {
-    color: var(--mv-mut);
-}
-.mv-check {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 11px;
-    color: var(--mv-mut);
-    margin-top: 6px;
-    cursor: pointer;
-}
-.mv-adv-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 18px;
-}
-.mv-action-primary {
-    background: var(--mv-invbg);
-    color: var(--mv-inv);
-    border: none;
-    border-radius: 3px;
-    font-size: 11px;
-    font-weight: 700;
-    padding: 8px 16px;
-    letter-spacing: 0.08em;
-}
-.mv-action-ghost {
-    background: none;
-    color: var(--mv-mut);
-    border: 1px solid var(--mv-bd);
-    border-radius: 3px;
-    font-size: 11px;
-    padding: 8px 16px;
+    gap: var(--s-2);
 }
 </style>

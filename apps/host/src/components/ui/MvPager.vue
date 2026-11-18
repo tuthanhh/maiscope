@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { groupThousands as group } from "~/utils/format";
 import MvButton from "./MvButton.vue";
 
 // design-direction "Pager": `1 – 22 of 1 038` at the left; previous, `3 / 48`
@@ -18,9 +19,6 @@ const props = defineProps<{
 const emit = defineEmits<{ page: [page: number] }>();
 
 const pages = computed(() => Math.max(1, Math.ceil(props.total / props.pageSize)));
-// Thousands grouped with a no-break space, as the design's "1 038", so a
-// narrow row never breaks inside a number.
-const group = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, "\u00a0");
 const range = computed(() => {
   const from = (props.page - 1) * props.pageSize + 1;
   const to = Math.min(props.total, props.page * props.pageSize);

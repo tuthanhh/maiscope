@@ -9,6 +9,8 @@ defineProps<{
   modelValue: string;
   options: SelectOption[];
   placeholder?: string;
+  /** The accessible name when no Field labels this control. */
+  label?: string;
   width?: number;
   disabled?: boolean;
 }>();
@@ -26,6 +28,7 @@ const field = inject(fieldKey, null);
   <div class="mv-select-wrap" :style="{ width: width != null ? `${width}px` : undefined }">
     <select
       :id="field?.id"
+      :aria-label="field ? undefined : label"
       :aria-describedby="field?.describedBy()"
       class="mv-select"
       :class="{ 'mv-select--empty': modelValue === '' }"

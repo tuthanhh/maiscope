@@ -7,6 +7,8 @@ import type { IconName } from "./icons";
 defineProps<{
   modelValue: string;
   placeholder?: string;
+  /** The accessible name when no Field labels this control. */
+  label?: string;
   width?: number;
   /** A leading icon in `--fg-muted`, e.g. search. */
   icon?: IconName;
@@ -28,6 +30,7 @@ const field = inject(fieldKey, null);
     <span v-if="icon" class="mv-input-icon"><MvIcon :name="icon" :size="15" /></span>
     <input
       :id="field?.id"
+      :aria-label="field ? undefined : label"
       :aria-describedby="field?.describedBy()"
       class="mv-input"
       :class="{ 'mv-input--icon': icon }"

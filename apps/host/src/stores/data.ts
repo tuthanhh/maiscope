@@ -104,7 +104,9 @@ export const useDataStore = defineStore("data", () => {
   // revision change → swap (web-delivery 02 stage 2). The network is the
   // source of truth; the cache is the first paint.
   async function loadData() {
-    if (currentLoadingStatus.value !== LoadingStatus.PENDING) return;
+    // From ERROR too: the browse error state retries through here.
+    const status = currentLoadingStatus.value;
+    if (status !== LoadingStatus.PENDING && status !== LoadingStatus.ERROR) return;
     currentLoadingStatus.value = LoadingStatus.LOADING;
 
     dropRetiredCaches();
