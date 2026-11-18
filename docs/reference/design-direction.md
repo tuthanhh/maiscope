@@ -140,7 +140,7 @@ The card title is `strong` set in the display face. On phones `title`
 drops to 20 and `display` to 52 / 56; nothing else changes.
 Numbers are always mono, including inside sans lines ("174 BPM" sets the
 figure in mono). Japanese text takes `font-feature-settings: "palt"` in
-the sans roles so proportional kana does not gap.
+the sans and display roles so proportional kana does not gap.
 
 ### Component tokens
 

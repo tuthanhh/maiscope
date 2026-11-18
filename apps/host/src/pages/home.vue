@@ -19,7 +19,15 @@ const heroes = import.meta.glob<string>("../assets/home/home-hero.{webp,avif,png
   query: "?url",
   import: "default",
 });
-const hero = Object.values(heroes)[0] ?? null;
+// One picture is expected; with several, this order decides (the README's).
+const ORDER = ["webp", "avif", "png", "jpg", "jpeg"];
+const heroPath = Object.keys(heroes).sort(
+  (a, b) => ORDER.indexOf(a.split(".").pop()!) - ORDER.indexOf(b.split(".").pop()!),
+)[0];
+if (import.meta.env.DEV && Object.keys(heroes).length > 1) {
+  console.warn(`assets/home holds ${Object.keys(heroes).length} home-hero files; showing ${heroPath}`);
+}
+const hero = heroPath ? heroes[heroPath] : null;
 
 usePageTitle(() => ({
   titleTemplate: "%s",
@@ -59,9 +67,11 @@ usePageTitle(() => ({
     min-height: calc(100dvh - 44px - var(--nav-h) - env(safe-area-inset-bottom));
   }
 }
+// A fixed height, whatever the picture's shape, so nothing below moves
+// when it loads; `contain` keeps it whole inside that box.
 .mv-home-hero {
-  max-width: min(100%, 420px);
-  max-height: 280px;
+  width: min(100%, 420px);
+  height: min(280px, 36vh);
   object-fit: contain;
   border-radius: var(--r);
   margin-bottom: var(--s-4);

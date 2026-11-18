@@ -30,3 +30,17 @@ corrupt one; the maintainer can drop the original over the file. The
 maskable and Apple icons put the logo on white inside the platforms' safe
 zone; the others keep its transparency. Dark mode still does not persist
 across a reload — it never did — and is outside this ticket.
+
+**2026-11-18 — review.** Applied: the hero box has a fixed height, so the
+picture loading moves nothing; with several `home-hero` files the README's
+order decides and development warns; the service worker precaches `avif`
+and `jpg` too, so any accepted picture works offline; the unused Space
+Grotesk 500 weight is no longer requested; the `palt` note names the
+display roles; `index.html` says `favicon.svg` is a copy of the logo.
+Kept: the hero is decorative (`alt=""`) — the page's heading names it —
+and the subtitle stays in `heading`, as asked ("the font is quite
+small"). Open, for the maintainer: the logo's handle (`#3B4A54`) is about
+2.3:1 on the dark theme's black; a dark-theme variant with a lighter
+handle is theirs to approve. Not new: the webfonts (Inter and JetBrains
+Mono too) come from Google Fonts and are not cached for offline use;
+self-hosting them is its own change.

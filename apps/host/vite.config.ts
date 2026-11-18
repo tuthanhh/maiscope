@@ -60,7 +60,7 @@ export default defineConfig(async () => ({
         // No `html` in the pattern, on purpose: precaching index.html is what
         // makes a bad deploy permanent. It is served by the NetworkFirst
         // navigation rule below instead. No `wasm` either — see globIgnores.
-        globPatterns: ["**/*.{js,css,ico,png,svg,webp,woff2}"],
+        globPatterns: ["**/*.{js,css,ico,png,svg,webp,avif,jpg,jpeg,woff2}"],
         // Belt and braces. The engine bundle is ~20MB release / 74MB debug, and
         // precaching it would charge every catalog visitor for a page most of
         // them never open.
