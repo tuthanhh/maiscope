@@ -2,6 +2,7 @@
 import { computed, inject, nextTick, ref, useId, watch } from "vue";
 import { fieldKey } from "./fieldContext";
 import MvIcon from "./MvIcon.vue";
+import type { IconName } from "./icons";
 
 // A text input with a list of known values (ARIA 1.2 combobox, list
 // autocomplete). Focus or click drops the whole list open, like a select;
@@ -18,6 +19,8 @@ const props = withDefaults(
     limit?: number;
     /** Shown under a capped list, e.g. "Type to narrow". */
     moreLabel?: string;
+    /** A leading icon in `--fg-muted`, e.g. search. */
+    icon?: IconName;
   }>(),
   { limit: 200, moreLabel: "…" },
 );
@@ -117,11 +120,15 @@ function clear(): void {
 
 <template>
   <div class="mv-combobox">
+    <span v-if="icon" class="mv-combobox-icon" aria-hidden="true">
+      <MvIcon :name="icon" :size="15" />
+    </span>
     <input
       :id="field?.id"
       :aria-describedby="field?.describedBy()"
       :aria-label="field ? undefined : label"
       class="mv-combobox-input"
+      :class="{ 'mv-combobox-input--icon': icon }"
       role="combobox"
       aria-autocomplete="list"
       :aria-expanded="expanded"
@@ -193,6 +200,18 @@ function clear(): void {
   @include control.control;
   width: 100%;
   padding-right: calc(var(--control-px) + 22px);
+}
+.mv-combobox-input--icon {
+  padding-left: calc(var(--control-px) + 15px + var(--s-2));
+}
+.mv-combobox-icon {
+  position: absolute;
+  left: var(--control-px);
+  top: calc(var(--control-h) / 2);
+  transform: translateY(-50%);
+  display: flex;
+  color: var(--fg-muted);
+  pointer-events: none;
 }
 .mv-combobox-chevron,
 .mv-combobox-clear {

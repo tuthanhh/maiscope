@@ -25,7 +25,7 @@ import MvError from "~/components/ui/MvError.vue";
 import MvField from "~/components/ui/MvField.vue";
 import MvPager from "~/components/ui/MvPager.vue";
 import MvSelect, { type SelectOption } from "~/components/ui/MvSelect.vue";
-import MvTextInput from "~/components/ui/MvTextInput.vue";
+import MvCombobox from "~/components/ui/MvCombobox.vue";
 import SongModal from "~/components/dialogs/SongModal.vue";
 import BrowseFilters from "~/components/browse/BrowseFilters.vue";
 import BrowseList from "~/components/browse/BrowseList.vue";
@@ -68,6 +68,12 @@ const levelOptions = computed(() => toSelectOptions(options.value.levels));
 const regionOptions = computed(() => toSelectOptions(options.value.regions));
 
 const typeChips = computed(() => data.value.types);
+// Each title once, sorted, for the search box's list.
+const titleOptions = computed(() =>
+    [...new Set(data.value.songs.map((s) => s.title).filter((a): a is string => !!a))].sort(
+        (a, b) => a.localeCompare(b),
+    ),
+);
 // Each artist once, in the order a reader looks for them.
 const artistOptions = computed(() =>
     [...new Set(data.value.songs.map((s) => s.artist).filter((a): a is string => !!a))].sort(
@@ -206,12 +212,14 @@ function retry(): void {
 
         <template v-else>
             <div class="mv-browse-search">
-                <MvTextInput
+                <MvCombobox
                     v-model="form.title"
                     class="mv-browse-search-input"
                     icon="search"
+                    :options="titleOptions"
                     :label="t('ui.search') as string"
                     :placeholder="t('page.songs.searchPlaceholder') as string"
+                    :more-label="t('page.songs.typeToNarrow') as string"
                 />
                 <MvButton
                     icon="sliders"

@@ -47,8 +47,10 @@ that now has uploads, accounts and a second library.
 | 13 | [Copy and locales](issues/13-copy-and-locales.md) | Last | done; community strings moved to 05 |
 | 14 | [About page](issues/14-about-page.md) | Found by the feature review; outside 07–13 | todo |
 | 15 | [Display face, logo and Home](issues/15-type-and-home.md) | Maintainer's asks, 2026-11-18 | done |
-| 16 | [Filters dialog and artist picker](issues/16-filters-dialog-and-artist.md) | Maintainer's asks, 2026-11-18 | todo |
-| 17 | [List view](issues/17-list-view.md) | Reverses "grid only", 2026-11-18 | todo |
+| 16 | [Filters dialog and artist picker](issues/16-filters-dialog-and-artist.md) | Maintainer's asks, 2026-11-18 | done |
+| 17 | [List view](issues/17-list-view.md) | Reverses "grid only", 2026-11-18 | done |
+| 18 | [Title as a searchable list](issues/18-title-picker.md) | Maintainer's ask, 2026-11-18 | done |
+| 19 | [Icon set, app icon refresh, dark logo](issues/19-icons.md) | Maintainer's ask, 2026-11-18 | todo |
 
 Issue 04 turned out to be two jobs: reading the new API, done with issue 02,
 and the visual and structural redesign `design-direction.md` describes, too

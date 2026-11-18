@@ -243,8 +243,8 @@ Help or error text under the control in `meta`, `--fg-muted` for help,
 
 ### Combobox
 
-A text input over a list of known values (`MvCombobox`): the drawer's
-Artist. Focus or a click drops the whole list open, as a select would;
+A text input over a list of known values (`MvCombobox`): Browse's title
+search and the drawer's Artist. Focus or a click drops the whole list open, as a select would;
 typing narrows it, names that start with the text first; arrows and Enter
 choose, Escape closes the list and not the dialog around it. Free text
 stays valid. The list is `--bg` with a `--line-strong` hairline, the active
