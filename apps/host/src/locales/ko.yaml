@@ -75,6 +75,8 @@ page:
     load: 불러오기
     loading: 불러오는 중…
     chartText: 채보 텍스트
+    fullscreen: '전체 화면'
+    exitFullscreen: '전체 화면 종료'
     share: 공유
     otherDifficulties: 다른 난이도
     notes: 노트 {count}개

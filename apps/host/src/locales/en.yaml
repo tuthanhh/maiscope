@@ -75,6 +75,8 @@ page:
     load: Load
     loading: loading…
     chartText: Chart text
+    fullscreen: 'Fullscreen'
+    exitFullscreen: 'Exit fullscreen'
     share: Share
     otherDifficulties: Other difficulties
     notes: '{count} notes'

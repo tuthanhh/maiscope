@@ -9,9 +9,7 @@ import {
     ensureEngine,
     mountEngineCanvas,
     detachEngineCanvas,
-    hasChart,
-    pause,
-    restart,
+    unloadChart,
     setMsaa,
     setRenderScale,
     setAudioLeadMs,
@@ -20,6 +18,7 @@ import useAutoLead from "~/composables/useAutoLead";
 import useDebugOverlay from "~/composables/useDebugOverlay";
 import usePlayback, { NOTE_SPEED, SPEED } from "~/composables/usePlayback";
 import useChartLoader, { hasDeepLink } from "~/composables/useChartLoader";
+import useFullscreen from "~/composables/useFullscreen";
 import VizStage from "~/components/visualizer/VizStage.vue";
 import VizTransport from "~/components/visualizer/VizTransport.vue";
 import VizSlider from "~/components/visualizer/VizSlider.vue";
@@ -38,7 +37,15 @@ const lead = useAutoLead(route);
 const overlay = useDebugOverlay(route, lead);
 const playback = usePlayback();
 const { loaded, playing, speed, noteSpeed } = playback;
-const { sheetInfo, simai, loading, errorMsg, autoLoad, loadPasted } = useChartLoader(playback);
+const {
+    sheetInfo,
+    simai,
+    loading,
+    errorMsg,
+    autoLoad,
+    loadPasted,
+    dispose: disposeLoader,
+} = useChartLoader(playback);
 
 // A/B toggles, query-only and applied once the engine is up:
 //   ?msaa=4   MSAA back on (the engine now defaults to off)
@@ -61,6 +68,9 @@ function applyRenderToggles(): void {
 // mount, park it off-screen on unmount — the wasm engine stays attached without
 // re-instantiating. Boot the engine once; subsequent mounts just reattach.
 const stage = ref<InstanceType<typeof VizStage> | null>(null);
+// The stage element (canvas, transport, sliders) is what goes fullscreen.
+const stageEl = ref<HTMLElement | null>(null);
+const fullscreen = useFullscreen(stageEl);
 
 onMounted(async () => {
     try {
@@ -70,13 +80,7 @@ onMounted(async () => {
         overlay.start();
         applyRenderToggles();
         lead.start();
-        // Replay any already-loaded chart from the start on each open. A deep-link
-        // (autoLoad) reloads its own chart and supersedes this.
-        if (hasChart() && !hasDeepLink(route.query)) {
-            restart();
-            loaded.value = true;
-            playing.value = true;
-        }
+        // Play opens empty unless the URL names a chart (visualizer-majdata 03).
         await autoLoad(route.query);
     } catch (err: unknown) {
         status.value = "error";
@@ -84,10 +88,12 @@ onMounted(async () => {
     }
 });
 
-// Leaving the route: pause audio/visuals and park the canvas so it survives the
-// unmount (the engine keeps running on the detached canvas).
+// Leaving the route: drop the chart, its notes and its music, and park the
+// canvas so it survives the unmount (the engine keeps running, empty, on the
+// detached canvas). A download still in flight is dropped too.
 onUnmounted(() => {
-    if (loaded.value) pause();
+    disposeLoader();
+    void unloadChart();
     detachEngineCanvas();
     overlay.stop();
     lead.stop();
@@ -171,7 +177,7 @@ usePageTitle(() => ({ title: t("page-title.visualizer") as string }));
 
 <template>
     <div class="mv-viz">
-        <div class="mv-viz-stage">
+        <div ref="stageEl" class="mv-viz-stage">
             <!-- engine canvas: the Bevy app renders the chart here -->
             <VizStage
                 ref="stage"
@@ -185,8 +191,11 @@ usePageTitle(() => ({ title: t("page-title.visualizer") as string }));
             <VizTransport
                 :loaded="loaded"
                 :playing="playing"
+                :fullscreen-supported="fullscreen.supported"
+                :fullscreen="fullscreen.active.value"
                 @restart="playback.restartFromTop"
                 @toggle="playback.togglePlay"
+                @fullscreen="fullscreen.toggle"
             />
 
             <!-- speed controls: stepped sliders with -/+ steppers -->
@@ -265,6 +274,24 @@ usePageTitle(() => ({ title: t("page-title.visualizer") as string }));
 .mv-viz-stage {
     grid-area: stage;
     min-width: 0;
+}
+// Fullscreen (visualizer-majdata 04): the stage alone, centred on the page
+// background, the canvas as large as the screen allows above the controls
+// (its box is 1000:800, so its width is 1.25 × the height it may take).
+.mv-viz-stage:fullscreen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--s-6);
+    overflow: auto;
+    background: var(--bg);
+}
+.mv-viz-stage:fullscreen .mv-canvas-wrap {
+    width: min(100%, calc((100vh - 240px) * 1.25));
+}
+.mv-viz-stage:fullscreen .mv-sliders {
+    width: min(100%, 640px);
 }
 .mv-viz-info {
     grid-area: info;

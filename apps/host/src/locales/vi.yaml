@@ -75,6 +75,8 @@ page:
     load: Tải
     loading: đang tải…
     chartText: Nội dung chart
+    fullscreen: 'Toàn màn hình'
+    exitFullscreen: 'Thoát toàn màn hình'
     share: Chia sẻ
     otherDifficulties: Độ khó khác
     notes: '{count} nốt'

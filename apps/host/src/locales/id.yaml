@@ -75,6 +75,8 @@ page:
     load: Muat
     loading: memuat…
     chartText: Teks chart
+    fullscreen: 'Layar penuh'
+    exitFullscreen: 'Keluar dari layar penuh'
     share: Bagikan
     otherDifficulties: Tingkat kesulitan lain
     notes: '{count} not'

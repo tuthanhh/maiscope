@@ -1,9 +1,20 @@
 <script setup lang="ts">
 import MvIcon from "~/components/ui/MvIcon.vue";
 
-// Restart and play/pause. Disabled until a chart is loaded.
-defineProps<{ loaded: boolean; playing: boolean }>();
-defineEmits<{ restart: []; toggle: [] }>();
+import useI18n from "~/composables/useI18n";
+
+// Restart and play/pause, disabled until a chart is loaded; and the
+// fullscreen toggle (visualizer-majdata 04), shown only where the browser
+// supports it and usable with or without a chart.
+defineProps<{
+    loaded: boolean;
+    playing: boolean;
+    fullscreenSupported: boolean;
+    fullscreen: boolean;
+}>();
+defineEmits<{ restart: []; toggle: []; fullscreen: [] }>();
+
+const { t } = useI18n();
 </script>
 
 <template>
@@ -24,6 +35,17 @@ defineEmits<{ restart: []; toggle: [] }>();
         >
             <MvIcon :name="playing ? 'pause' : 'play'" filled />
         </button>
+        <button
+            v-if="fullscreenSupported"
+            type="button"
+            class="mv-btn mv-ctl mv-ctl--fullscreen"
+            :aria-label="(fullscreen ? t('page.viz.exitFullscreen') : t('page.viz.fullscreen')) as string"
+            :title="(fullscreen ? t('page.viz.exitFullscreen') : t('page.viz.fullscreen')) as string"
+            :aria-pressed="fullscreen"
+            @click="$emit('fullscreen')"
+        >
+            <MvIcon :name="fullscreen ? 'minimize' : 'maximize'" />
+        </button>
     </div>
 </template>
 
@@ -35,7 +57,7 @@ defineEmits<{ restart: []; toggle: [] }>();
     gap: 8px;
     margin-top: 16px;
 }
-.mv-transport--off {
+.mv-transport--off .mv-ctl:not(.mv-ctl--fullscreen) {
     opacity: 0.5;
 }
 .mv-ctl {

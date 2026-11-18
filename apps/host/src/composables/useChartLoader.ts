@@ -1,6 +1,13 @@
 import { ref, type Ref } from "vue";
 import type { LocationQuery } from "vue-router";
-import { fetchChart, fetchSheetInfo, loadChart, pause, setSpeed } from "~/composables/useEngine";
+import {
+    fetchChart,
+    fetchSheetInfo,
+    loadChart,
+    pause,
+    setNoteSpeed,
+    setSpeed,
+} from "~/composables/useEngine";
 import type { Playback } from "~/composables/usePlayback";
 import { resumeAudio } from "~/utils/audioUnlock";
 import { sheetKey } from "~/utils/data";
@@ -34,6 +41,7 @@ export default function useChartLoader(playback: Playback): {
     errorMsg: Ref<string>;
     autoLoad: (query: LocationQuery) => Promise<void>;
     loadPasted: () => Promise<void>;
+    dispose: () => void;
 } {
     // Catalog metadata for the loaded sheet (null for a manually pasted chart).
     const sheetInfo = ref<Sheet | null>(null);
@@ -43,12 +51,27 @@ export default function useChartLoader(playback: Playback): {
 
     // Last deep-linked sheet, so re-activating with the same query doesn't reload.
     let lastKey = "";
+    // Set when the page is left (visualizer-majdata 03): a download still in
+    // flight then must not reach the engine, or the chart would play behind
+    // whatever page the user went to and reappear on the next visit.
+    let disposed = false;
+    function dispose(): void {
+        disposed = true;
+    }
+
+    // The engine keeps its speeds across charts and pages, while the sliders
+    // start fresh with each page: after every load, the engine takes what the
+    // sliders show.
+    function syncSpeeds(): void {
+        setSpeed(playback.speed.value);
+        setNoteSpeed(playback.noteSpeed.value);
+    }
 
     // Deep-link: /visualizer?song=..&type=..&difficulty=.. (e.g. from the sheet
     // dialog) auto-fetches that chart from the backend.
     async function autoLoad(query: LocationQuery): Promise<void> {
         const link = deepLink(query);
-        if (!link) return;
+        if (!link || disposed) return;
         const { song, type, difficulty } = link;
         const key = sheetKey(song, type, difficulty);
         if (key === lastKey) return; // same chart already loaded
@@ -66,16 +89,17 @@ export default function useChartLoader(playback: Playback): {
         // failure (also common) rejected the whole thing and info never rendered.
         fetchSheetInfo(song, type, difficulty)
             .then((info) => {
-                if (key === lastKey) sheetInfo.value = info;
+                if (key === lastKey && !disposed) sheetInfo.value = info;
             })
             .catch(() => {
-                if (key === lastKey) sheetInfo.value = null;
+                if (key === lastKey && !disposed) sheetInfo.value = null;
             });
 
         try {
             const chart = await fetchChart(song, type, difficulty);
-            // A later deep link superseded this one while it was in flight.
-            if (key !== lastKey) return;
+            // A later deep link superseded this one while it was in flight,
+            // or the page was left.
+            if (key !== lastKey || disposed) return;
             simai.value = chart;
             await loadChart(chart);
 
@@ -90,7 +114,7 @@ export default function useChartLoader(playback: Playback): {
                 pause();
                 playback.markLoaded(false);
             }
-            if (playback.speed.value !== 1) setSpeed(playback.speed.value);
+            syncSpeeds();
         } catch (err: unknown) {
             if (key === lastKey) errorMsg.value = err instanceof Error ? err.message : String(err);
         } finally {
@@ -112,7 +136,7 @@ export default function useChartLoader(playback: Playback): {
             // the link itself changes, never over pasted text.
             sheetInfo.value = null; // pasted chart has no catalog metadata
             resumeAudio(); // this click is a gesture — unlock sound
-            if (playback.speed.value !== 1) setSpeed(playback.speed.value);
+            syncSpeeds();
         } catch (err: unknown) {
             errorMsg.value = err instanceof Error ? err.message : String(err);
         } finally {
@@ -120,5 +144,5 @@ export default function useChartLoader(playback: Playback): {
         }
     }
 
-    return { sheetInfo, simai, loading, errorMsg, autoLoad, loadPasted };
+    return { sheetInfo, simai, loading, errorMsg, autoLoad, loadPasted, dispose };
 }

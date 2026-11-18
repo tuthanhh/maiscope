@@ -45,6 +45,9 @@ pub enum EngineCommand {
     Pause,
     Resume,
     Restart,
+    /// Clear the chart, every note on screen and the music
+    /// (visualizer-majdata 02): the Play page sends it when it is left.
+    Unload,
     SetSongSpeed(f32),
     SetNoteSpeed(f32),
     /// Diagnostics: MSAA sample count on the main camera (1 = off, 2, 4, 8).
@@ -80,6 +83,21 @@ pub fn resume() {
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn restart() {
     push_command(EngineCommand::Restart);
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn unload() {
+    request_unload();
+}
+
+/// Songs and commands drain from separate queues, so the order of the JS
+/// calls between them is lost. A chart still queued when the page is left
+/// (it arrived while the engine was booting) is dropped here, or it could
+/// load after the unload and play behind the next page.
+pub fn request_unload() {
+    INBOX.lock().unwrap().clear();
+    COMMANDS.lock().unwrap().push(EngineCommand::Unload);
 }
 
 /// Set the playback speed multiplier (affects both the audio rate and the chart
@@ -152,4 +170,26 @@ pub fn publish_frame_stats(json: String) {
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn frame_stats() -> String {
     FRAME_STATS.lock().unwrap().clone()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A chart queued while the engine boots, then the page is left: the
+    /// unload must win, whatever order the two queues drain in that frame
+    /// (final review, visualizer-majdata piece 1).
+    #[test]
+    fn unload_drops_a_chart_still_queued() {
+        INBOX.lock().unwrap().push(SongPayload {
+            chart: "(120){4}1,E".into(),
+            audio: None,
+        });
+        request_unload();
+        assert!(take_songs().is_empty());
+        assert!(matches!(
+            take_commands().as_slice(),
+            [EngineCommand::Unload]
+        ));
+    }
 }

@@ -133,10 +133,12 @@ pub fn register_systems(app: &mut App) {
             Startup,
             (visual::spawn_judgement_ring, audio::load_guide_sfx),
         )
-        .add_systems(Update, visual::apply_commands)
-        // Runs in every state: the first chart loads during `Loading`, and later
-        // re-loads (switching songs) arrive while already `Playing`.
-        .add_systems(Update, ingest_songs)
+        // ingest_songs runs in every state: the first chart loads during
+        // `Loading`, and later re-loads (switching songs) arrive while already
+        // `Playing`. Commands go first, so an `Unload` sent before a new chart
+        // in the same frame cannot wipe it (`wasm_bridge::request_unload`
+        // covers the opposite order).
+        .add_systems(Update, (visual::apply_commands, ingest_songs).chain())
         .add_systems(Update, check_if_ready.run_if(in_state(AppState::Loading)))
         .add_systems(OnEnter(AppState::Playing), audio::start_bgm)
         // tick_clock must advance the clock before next_event / metronome /
