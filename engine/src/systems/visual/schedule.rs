@@ -34,6 +34,8 @@ pub const TAP_DYING: f64 = 0.25;
 /// A touch's flash on the hit, then its burst.
 const TOUCH_HOLDING: f64 = 0.05;
 const TOUCH_DYING: f64 = 0.25;
+/// How far before its spawn time a note still counts as spawned (seconds).
+const SPAWN_EDGE: f64 = 1e-9;
 /// A hold's pop at its release.
 const HOLD_DYING: f64 = 0.1;
 
@@ -82,6 +84,11 @@ pub fn phase_at(kind: &NoteKind, hit: f64, bpm: f32, note_speed: f32, t: f64) ->
         second,
     ];
     let mut start = hit - (GROWING + MOVING) / speed;
+    // The spawn cursor counts a note due at `t + approach` as spawned; in
+    // floating point `hit - approach` can land a hair after `t`.
+    if t < start && t >= start - SPAWN_EDGE {
+        start = t;
+    }
     for (phase, length) in spans {
         let end = start + length;
         if t >= start && t < end {
@@ -194,6 +201,24 @@ mod tests {
             let path = build_slide_trace(&segments, head_button, 120.0, shared_duration, &layout);
             let (_, total) = slide_span_secs(&segments, shared_duration, 120.0);
             assert!(close(total, trace_total_secs(&path)), "{chart}: total");
+        }
+    }
+
+    /// A note due at the very edge of the spawn window must be live there:
+    /// the seek counts it as spawned (final review M3).
+    #[test]
+    fn a_note_at_the_window_edge_is_live() {
+        let tap = first_kind("(120){4}1,E");
+        for speed in [3.0_f32, 5.5, 7.0, 8.5, 9.0] {
+            let approach = (crate::systems::GROWING + crate::systems::MOVING) / speed as f64;
+            for k in 0..20_000 {
+                let t = k as f64 * 0.0137;
+                let hit = t + approach;
+                assert!(
+                    phase_at(&tap, hit, 120.0, speed, t).is_some(),
+                    "speed {speed}, t {t}"
+                );
+            }
         }
     }
 }

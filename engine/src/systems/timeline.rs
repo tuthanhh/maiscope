@@ -100,6 +100,22 @@ pub fn chart_length(events: &[TimedEvent]) -> f64 {
         .fold(0.0, f64::max)
 }
 
+/// The longest a note stays on screen after its hit (chart seconds).
+pub fn longest_tail(events: &[TimedEvent]) -> f64 {
+    events
+        .iter()
+        .filter_map(|e| match &e.event {
+            ChartEvent::NoteGroup(notes) => Some(
+                notes
+                    .iter()
+                    .map(|n| note_end(&n.kind, e.time, e.bpm) - e.time)
+                    .fold(0.0, f64::max),
+            ),
+            _ => None,
+        })
+        .fold(0.0, f64::max)
+}
+
 pub fn build_timeline(events: &[TimedEvent]) -> Timeline {
     let length = chart_length(events);
     let mut measures = Vec::new();

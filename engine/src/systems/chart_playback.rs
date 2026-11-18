@@ -21,6 +21,8 @@ pub struct ChartPlayback {
     elapsed_time: f64,
     /// When the last note finishes (chart seconds): where a seek stops.
     length: f64,
+    /// The longest a note stays on screen after its hit (chart seconds).
+    longest_tail: f64,
     /// A seek's target, until `next_event` has put its notes on screen.
     respawn: Option<f64>,
     /// A seek's target, until the music reports a position near it.
@@ -41,6 +43,7 @@ impl Default for ChartPlayback {
             is_playing: true,
             elapsed_time: 0.0,
             length: 0.0,
+            longest_tail: 0.0,
             respawn: None,
             audio_target: None,
         }
@@ -93,6 +96,7 @@ impl ChartPlayback {
         }
 
         self.length = crate::systems::timeline::chart_length(&timed);
+        self.longest_tail = crate::systems::timeline::longest_tail(&timed);
         self.timed_events = timed;
         self.next_spawn_index = 0;
     }
@@ -131,6 +135,7 @@ impl ChartPlayback {
         self.elapsed_time = 0.0;
         self.is_playing = false;
         self.length = 0.0;
+        self.longest_tail = 0.0;
         self.respawn = None;
         self.audio_target = None;
     }
@@ -150,6 +155,18 @@ impl ChartPlayback {
         let window = t + self.approach_time();
         self.next_spawn_index = self.timed_events.partition_point(|e| e.time <= window);
         self.respawn = Some(t);
+    }
+
+    /// The events whose notes can be on screen at `t`: hit no longer ago than
+    /// the longest note lasts, and no further ahead than the approach.
+    pub fn live_events(&self, t: f64) -> &[TimedEvent] {
+        let from = self
+            .timed_events
+            .partition_point(|e| e.time < t - self.longest_tail - 1e-6);
+        let to = self
+            .timed_events
+            .partition_point(|e| e.time <= t + self.approach_time());
+        &self.timed_events[from..to.max(from)]
     }
 
     /// The pending seek target, once: the notes visible there are to spawn.
@@ -350,5 +367,17 @@ mod tests {
         assert_eq!(chart.take_respawn(), None);
         chart.sync_to_audio_position(0.25);
         assert_eq!(chart.elapsed_time(), 0.25);
+    }
+
+    /// A seek looks only at the events that can be on screen at its time,
+    /// not the whole chart from the top (final review M4).
+    #[test]
+    fn the_events_live_at_a_time_are_a_short_slice() {
+        let chart = loaded(&format!("(120){{4}}{}1h[1:1],E", "1,".repeat(40)));
+        let live = chart.live_events(10.0);
+        assert!(live.first().unwrap().time >= 10.0 - 2.1 - 1e-9);
+        assert!(live.last().unwrap().time <= 10.0 + chart.approach_time());
+        // The hold at 20.0 is reachable from late in its hold.
+        assert!(chart.live_events(21.0).iter().any(|e| e.time == 20.0));
     }
 }

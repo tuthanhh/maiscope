@@ -46,9 +46,8 @@ pub fn next_event(
         for entity in &on_screen {
             commands.entity(entity).despawn();
         }
-        let window = t + chart.approach_time();
         let note_speed = chart.note_speed();
-        for event in chart.timed_events().iter().take_while(|e| e.time <= window) {
+        for event in chart.live_events(t) {
             let ChartEvent::NoteGroup(notes) = &event.event else {
                 continue;
             };
