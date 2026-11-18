@@ -28,7 +28,9 @@
 
 ## Decisions this plan makes (the maintainer may overrule)
 
-1. **Licence identifier: `GPL-3.0-only`** (the maintainer's choice, 2026-11-18, over `GPL-3.0-or-later`). This matches MajdataPlay's terms.
+1. **Licence identifier: `GPL-3.0-or-later`** for maiscope's own code.
+   - Why: it is the FSF's usual form. MajdataPlay's files stay under their own GPL-3.0 terms, and the bundle as a whole is distributed under GPL-3.0.
+   - Alternative: `GPL-3.0-only`.
 2. **Layout data is a plain text file** (`slides.txt`), embedded with `include_str!` and parsed once at startup.
    - Rejected: generated Rust source, which would put GPL data inside `engine/src/`.
    - Rejected: serde, which the engine does not use.
@@ -71,8 +73,8 @@ Tests for 1–4 live in Tasks 2–4 (marked). Task 4's browser and phone step co
   - `LICENSE-THIRD-PARTY`
   - `apps/host/public/THIRD_PARTY_NOTICES.txt`
   - `README.md` (§License)
-  - `apps/host/package.json`: `"license": "GPL-3.0-only"` (there is no root `package.json`)
-  - every `[package]` `Cargo.toml` (`apps/server`, `crates/simai`, `engine`): `license = "GPL-3.0-only"`
+  - `apps/host/package.json`: `"license": "GPL-3.0-or-later"` (there is no root `package.json`)
+  - every `[package]` `Cargo.toml` (`apps/server`, `crates/simai`, `engine`): `license = "GPL-3.0-or-later"`
   - `scripts/build-wasm.sh`: also sync `engine/assets/majdata` to `apps/host/public/assets/majdata`
 
 **Interfaces:**
@@ -105,8 +107,8 @@ Tests for 1–4 live in Tasks 2–4 (marked). Task 4's browser and phone step co
 - [ ] **Step 4: Run the script** against a sparse checkout at the pin (`Assets/Prefabs/Game/Slides`, `Assets/StreamingAssets/Skins/default`, `Assets/Sprites/Game/EffectSprites`). Commit its output.
   - Expected: `slides.txt` lists 43 prefabs. `Star_Line_5`'s bars start near `(-1.58, -3.82)`, run in child order, and every angle is 67.5.
 - [ ] **Step 5: Relicence**, as in Global Constraints.
-  - ADR 0027 records why (MajdataPlay's art ships in the app). It also records the two rejected options from the spec (keep MIT with a GPL folder; imitate the look with our own art) and the `-only` decision.
-  - `README.md` §License says GPL-3.0-only and points at `LICENSE-THIRD-PARTY`.
+  - ADR 0027 records why (MajdataPlay's art ships in the app). It also records the two rejected options from the spec (keep MIT with a GPL folder; imitate the look with our own art) and the `-or-later` decision.
+  - `README.md` §License says GPL-3.0-or-later and points at `LICENSE-THIRD-PARTY`.
 - [ ] **Step 6: Run** `python3 -m unittest scripts/test_extract_majdata.py`, `./scripts/build-wasm.sh` (then check that `apps/host/public/assets/majdata/skin/TapSkins/tap.png` exists), and `pnpm build`. Expected: PASS.
 - [ ] **Step 7: Commit** — `feat: MajdataPlay assets and slide layouts; maiscope is GPL-3.0 (visualizer-majdata 12)`
 
