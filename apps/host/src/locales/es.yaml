@@ -1,33 +1,28 @@
-# Test entry
-hello: ¡Hola Mundo!
+# maiscope UI strings. Keys are read with t("section.key"); `{name}` is an
+# interpolation, so a literal brace is written {'{'} — see page.viz.pastePlaceholder.
+# Every locale carries every key en.yaml has (frontend-redesign 13).
 
-# Page titles
 page-title:
-  home: Página principal
-  song: Datos de la canción
   songs: Lista de canciones
-  timeline: Línea de tiempo
-  gallery: Lista de pistas
+  visualizer: Visualizador
   about: Acerca de
   bug-report: Reporta un problema
   source-code: Código fuente
-
-# General UIs
+  community: Comunidad
+nav:
+  songs: Canciones
+  community: Comunidad
+  play: Jugar
+  menu: Menú
+  theme: Tema
+  language: Idioma
+community:
+  coming: Los charts de fans llegan con la biblioteca de la comunidad.
 ui:
-  ok: OK
-  cancel: Cancelar
   close: Cerrar
   search: Buscar
-  preview: Vista previa
-  download: Descargar
-  goBack: Atrás
   all: TODAS
-  default: Predeterminado
-  sort-asc: Orden ascendente
-  sort-desc: Orden descendente
-  showAll: Mostrar todo
-
-# Terminologies
+  retry: Reintentar
 term:
   category: Categoría
   title: Título
@@ -35,111 +30,59 @@ term:
   version: Versión
   releaseDate: Fecha de publicación
   bpm: PPM
-  minBPM: PPM mínimas
-  maxBPM: PPM máximas
-  sheets: Mapas
+  sheets: Charts
   type: Tipo
   difficulty: Dificultad
   level: Nivel
-  minLevel: Nivel mínimo
-  maxLevel: Nivel máximo
-  internalLevel: Nivel interno
-  minInternalLevel: Nivel mínimo interno
-  maxInternalLevel: Nivel máximo interno
   noteDesigner: Diseñador del mapa
   totalNotes: TOTAL
   region: Región
-  comment: Comentario
-
-# Descriptions & Tooltips
 description:
-  pending: Pendiente
   loading: Cargando datos…
-  newSong: ¡Nueva canción!
-  unlockNeeded: Hay que desbloquear esta canción
-  unavailableInRegion: 'No disponible en {region}'
+  unavailableInRegion: No disponible en {region}
   copied: ¡Copiado al portapapeles!
-  invalidNoteCounts: Recuentos de NOTA no válidos
-  filterResultEmpty: No se encuentra ningún mapa que cumpla el filtro.
-  myListEmpty: Haga clic con el botón derecho del ratón o mantenga pulsada un mapa para añadirlo a MI LISTA y, a continuación, podrás ver aquí los mapas seleccionados.
-  drawPoolEmpty: El recipiente de extracción actual está vacío.
-  clearMyList: Borrar MI LISTA
-  pickOneFromFilter: ¡ELIGE UNO DEL FILTRO!
-  noMoreSheetsToPick: No hay más gráficos para seleccionar.
-
-# Pages
+  filterResultEmpty: Ningún chart coincide con estos filtros.
+  myListEmpty: Tu lista está vacía.
 page:
-  index:
-    description: Busca canciones de tus juegos musicales favoritos, ¡ahora todo en uno!
-  gallery:
-    selectList: Seleccionar lista de canciones
-    # loadExternalGalleryConfirmation: "You are about to load an external gallery from {srcType}:\n\n{src}\n\nContinue?"
-    # externalGalleryDisclaimer: |
-    #   You are currently viewing an external gallery from {source}.{br}
-    #   The content is not created or managed by this site.
-    # thisUrl: this URL
-    # thisFile: this File
-    # yourLocalFile: your local file
+  viz:
+    awaiting: esperando chart
+    pastePlaceholder: (120){'{'}4{'}'}1,2,3,4,...
+    pasteHint: 'Pega simai sin formato: tus charts o los de la wiki de simai.'
+    noteSpeed: Velocidad de notas
+    playSpeed: Velocidad de juego
+    booting: iniciando motor…
+    load: Cargar
+    loading: cargando…
+    chartText: Texto del chart
+    share: Compartir
+    otherDifficulties: Otras dificultades
+    notes: '{count} notas'
   songs:
-    sheetData: Datos de mapa
-    exactMatch: Exact match
-    useInternalLevel: Use internal level
-    useRegionOverride: Use region override
+    searchPlaceholder: Buscar título…
+    drawRandom: Al azar
+    reset: Restablecer
+    myList: Mi lista
+    filters: Filtros
+    pages: Páginas
+    previousPage: Página anterior
+    nextPage: Página siguiente
+    range: '{from} – {to} de {total}'
+    loadFailed: No se pudo cargar la lista de canciones
+    bookmark: Guardar
+    play: Jugar
+    noChart: Aún sin chart
+    notFound: Canción no encontrada
+    notFoundMessage: Ninguna canción tiene este enlace.
+    songLoadFailed: No se pudo cargar la canción
+    songLoadFailedMessage: Revisa la conexión e inténtalo de nuevo.
+    song: Canción
+    noSheets: Esta canción no tiene charts.
+    min: mín
+    max: máx
+    exactMatch: Coincidencia exacta
+    useInternalLevel: Usar nivel interno
+    useRegionOverride: Usar valores de la región
   about:
     author: Autor
-    dataSource: Origen de los datos
-    songInfo: Información de la canción
-    sheetInfo: Información del mapa
-    sheetInfoOf: 'Información del mapa de {region}'
-    sheetInfoDescription: ¡Muchas gracias a todos los jugadores que aportan los datos!
     openSource: Código fuente del proyecto
-    openSourceDescription: |
-      Este proyecto está sujeto a la <a
-        href="https://es.wikipedia.org/wiki/Licencia_MIT"
-        target="_blank"
-        class="text-decoration-none"
-      >Licencia MIT</a>, y se puede encontrar el código fuente completo aquí.
-      Si te interesa, ¡también puedes unirte a nosotros para mejorar el proyecto! ⭐ :)
-    updateRecord: Registro de actualizaciones
     disclaimer: Aviso de los derechos de autor
-  error:
-    error: Fallo
-    notFound: Página no encontrada
-    backToHome: Volver al inicio
-
-# Components
-sfc:
-  DataInfoBar:
-    updateTime: 'Tiempo de actualización de los datos: {time}'
-    loadFailed: Error al cargar los datos.
-  SheetFilter:
-    exactMatch: Concordancia exacta
-    useInternalLevel: Utilizar el nivel interno
-    useRegionOverride: Sobrescribir con información de región
-  ModeSelector:
-    gridMode: Vista en cuadrícula
-    tableMode: Vista detallada
-    chartMode: Vista resumida
-    filterMode: Modo filtrado
-    myListMode: MI LISTA
-    copyFilterLink: Copiar los filtros actuales como enlace
-    noFilterWarn: Seleccione primero al menos un filtro.
-    exportMyList: Exportar MI LISTA a un archivo
-    myListEmptyWarn: "¡MI LISTA está vacía!\nNo hay nada que exportar."
-    importMyList: Importar MI LISTA desde un archivo
-    sheetsLoaded: 'Importados {n} mapas con éxito.'
-  SheetDrawerPanel:
-    drawRandomSheet: ¡Sacar mapa al azar!
-    drawRandomSheetCombo: ¡Sacar conjunto de mapas al azar!
-  FilterInfoBar:
-    sheetsCount: '{n} mapas'
-    songsCount: '{n} canciones'
-  SheetDialog:
-    searchOnYouTube: Buscar en YouTube
-    tryAgain: INTENTAR DE NUEVO
-  SheetComboDialog:
-    drawResults: Resultados de la extracción
-    noDuplicate: Sin duplicados
-    changeDrawSize: Cambiar tamaño de dibujo
-    allowDuplicate: Permitir duplicado
-    blindfoldMode: Modo aleatorio

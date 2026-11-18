@@ -1,33 +1,28 @@
-# Test entry
-hello: 哈囉世界！
+# maiscope UI strings. Keys are read with t("section.key"); `{name}` is an
+# interpolation, so a literal brace is written {'{'} — see page.viz.pastePlaceholder.
+# Every locale carries every key en.yaml has (frontend-redesign 13).
 
-# Page titles
 page-title:
-  home: 首頁
-  song: 歌曲資料
   songs: 歌曲一覽
-  timeline: 時間軸
-  gallery: 段位歌單
+  visualizer: 譜面預覽
   about: 關於本站
   bug-report: 回報問題
   source-code: 專案原始碼
-
-# General UIs
+  community: 社群
+nav:
+  songs: 樂曲
+  community: 社群
+  play: 遊玩
+  menu: 選單
+  theme: 主題
+  language: 語言
+community:
+  coming: 同人譜面將隨社群譜面庫一同上線。
 ui:
-  ok: 確定
-  cancel: 取消
   close: 關閉
   search: 搜尋
-  preview: 預覽
-  download: 下載
-  goBack: 返回
   all: 全部
-  default: 預設
-  sort-asc: 升序
-  sort-desc: 降序
-  showAll: 顯示全部
-
-# Terminologies
+  retry: 重試
 term:
   category: 分類
   title: 曲名
@@ -35,111 +30,59 @@ term:
   version: 版本
   releaseDate: 追加日期
   bpm: BPM
-  minBPM: 最低 BPM
-  maxBPM: 最高 BPM
   sheets: 譜面
   type: 類型
   difficulty: 難易度
   level: 等級
-  minLevel: 最低等級
-  maxLevel: 最高等級
-  internalLevel: 譜面定數
-  minInternalLevel: 最低譜面定數
-  maxInternalLevel: 最高譜面定數
   noteDesigner: 譜面製作者
   totalNotes: 總計
   region: 地區
-  comment: 備註
-
-# Descriptions & Tooltips
 description:
-  pending: 等待中
   loading: 資料載入中…
-  newSong: 新歌曲！
-  unlockNeeded: 需要解禁的歌曲
   unavailableInRegion: '{region} 未收錄'
   copied: 已複製到剪貼簿！
-  invalidNoteCounts: 無效的 NOTE 數量
-  filterResultEmpty: 找不到符合當前篩選條件的譜面。
-  myListEmpty: 右鍵點擊或長按譜面將譜面加入【我的歌單】後，就能在這裡看到你選擇的譜面。
-  drawPoolEmpty: 當前的譜面池是空的。
-  clearMyList: 清空【我的歌單】
-  pickOneFromFilter: 從篩選結果中選取一個！
-  noMoreSheetsToPick: 已經沒有可選取的譜面。
-
-# Pages
+  filterResultEmpty: 沒有符合這些篩選條件的譜面。
+  myListEmpty: 你的清單是空的。
 page:
-  index:
-    description: 在這裡搜尋你最喜歡的音樂遊戲歌曲！
-  gallery:
-    selectList: 選擇歌曲列表
-    loadExternalGalleryConfirmation: "你正在從{srcType}載入一個外部的歌曲列表：\n\n{src}\n\n要繼續嗎？"
-    externalGalleryDisclaimer: |
-      你正在觀看由 {source} 載入的外部歌曲列表。{br}
-      請注意此歌曲列表之內容並非由本網站所製作或管理。
-    thisUrl: 這個網址
-    thisFile: 這個檔案
-    yourLocalFile: 你的本地檔案
+  viz:
+    awaiting: 等待譜面
+    pastePlaceholder: (120){'{'}4{'}'}1,2,3,4,...
+    pasteHint: 貼上 simai 原文——你的譜面或 simai wiki 上的譜面。
+    noteSpeed: 音符速度
+    playSpeed: 播放速度
+    booting: 正在啟動引擎…
+    load: 載入
+    loading: 載入中…
+    chartText: 譜面文字
+    share: 分享
+    otherDifficulties: 其他難度
+    notes: '{count} 個音符'
   songs:
-    sheetData: 譜面資料
-    exactMatch: Exact match
-    useInternalLevel: Use internal level
-    useRegionOverride: Use region override
+    searchPlaceholder: 搜尋標題…
+    drawRandom: 隨機
+    reset: 重設
+    myList: 我的清單
+    filters: 篩選
+    pages: 分頁
+    previousPage: 上一頁
+    nextPage: 下一頁
+    range: 共 {total} 項，第 {from} – {to} 項
+    loadFailed: 無法載入樂曲列表
+    bookmark: 收藏
+    play: 遊玩
+    noChart: 暫無譜面
+    notFound: 找不到樂曲
+    notFoundMessage: 沒有對應此連結的樂曲。
+    songLoadFailed: 無法載入樂曲
+    songLoadFailedMessage: 請檢查網路連線後重試。
+    song: 樂曲
+    noSheets: 這首樂曲沒有譜面。
+    min: 最小
+    max: 最大
+    exactMatch: 完全符合
+    useInternalLevel: 使用定數
+    useRegionOverride: 使用地區數值
   about:
     author: 作者
-    dataSource: 資料來源
-    songInfo: 歌曲資訊
-    sheetInfo: 譜面資訊
-    sheetInfoOf: '{region} 譜面資訊'
-    sheetInfoDescription: 在此特別感謝所有貢獻譜面資訊的玩家們！
     openSource: 專案原始碼
-    openSourceDescription: |
-      本專案以 <a
-        href="https://zh.wikipedia.org/wiki/MIT%E8%A8%B1%E5%8F%AF%E8%AD%89"
-        target="_blank"
-        class="text-decoration-none"
-      >MIT授權條款</a> 授權開源，你可以在這邊找到完整的原始碼。
-      如果你有興趣，也可以一起來改善這個專案！ ⭐ :)
-    updateRecord: 更新記錄
     disclaimer: 版權聲明
-  error:
-    error: 錯誤
-    notFound: 頁面不存在
-    backToHome: 回首頁
-
-# Components
-sfc:
-  DataInfoBar:
-    updateTime: '資料更新日期：{time}'
-    loadFailed: 資料讀取失敗。
-  SheetFilter:
-    exactMatch: 完全一致
-    useInternalLevel: 使用譜面定數
-    useRegionOverride: 使用地區資訊覆寫
-  ModeSelector:
-    gridMode: 格狀檢視
-    tableMode: 詳細檢視
-    chartMode: 彙總檢視
-    filterMode: 篩選模式
-    myListMode: 我的歌單
-    copyFilterLink: 將當前篩選條件複製成連結
-    noFilterWarn: 請先指定至少一個篩選條件。
-    exportMyList: 匯出我的歌單到檔案
-    myListEmptyWarn: "「我的歌單」是空的！\n沒有可以匯出的項目。"
-    importMyList: 從檔案匯入我的歌單
-    sheetsLoaded: '成功匯入 {n} 譜面。'
-  SheetDrawerPanel:
-    drawRandomSheet: 隨機抽取譜面！
-    drawRandomSheetCombo: 隨機抽取組曲！
-  FilterInfoBar:
-    sheetsCount: '{n} 譜面'
-    songsCount: '{n} 歌曲'
-  SheetDialog:
-    searchOnYouTube: 在 YouTube 上搜尋
-    tryAgain: 再抽一次
-  SheetComboDialog:
-    drawResults: 抽選結果
-    noDuplicate: 不重複
-    changeDrawSize: 變更抽選數量
-    allowDuplicate: 允許重複
-    blindfoldMode: 盲抽模式

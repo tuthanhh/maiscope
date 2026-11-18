@@ -1,33 +1,28 @@
-# Test entry
-hello: Xin chào thế giới!
+# maiscope UI strings. Keys are read with t("section.key"); `{name}` is an
+# interpolation, so a literal brace is written {'{'} — see page.viz.pastePlaceholder.
+# Every locale carries every key en.yaml has (frontend-redesign 13).
 
-# Page titles
 page-title:
-  home: Trang chủ
-  song: Dữ liệu Bài hát
   songs: Danh sách Bài
-  timeline: Dòng thời gian
-  gallery: Tập hợp Bài
+  visualizer: Trình mô phỏng
   about: Về chúng tôi
   bug-report: Báo cáo Sự cố
   source-code: Mã Nguồn
-
-# General UIs
+  community: Cộng đồng
+nav:
+  songs: Bài hát
+  community: Cộng đồng
+  play: Chơi
+  menu: Menu
+  theme: Giao diện
+  language: Ngôn ngữ
+community:
+  coming: Chart do người hâm mộ làm sẽ có cùng thư viện cộng đồng.
 ui:
-  ok: OK
-  cancel: Hủy
   close: Đóng
   search: Tìm kiếm
-  preview: Xem trước
-  download: Tải xuống
-  goBack: Quay về
   all: TẤT CẢ
-  default: Mặc định
-  sort-asc: Tăng dần
-  sort-desc: Giảm dần
-  showAll: Hiển thị tất cả
-
-# Terminologies
+  retry: Thử lại
 term:
   category: Phân loại
   title: Tiêu đề
@@ -35,111 +30,59 @@ term:
   version: Phiên bản
   releaseDate: Ngày phát hành
   bpm: BPM
-  minBPM: BPM thấp nhất
-  maxBPM: BPM cao nhất
-  sheets: Bản nhạc
+  sheets: Chart
   type: Loại
   difficulty: Độ khó
   level: Cấp độ
-  minLevel: Cấp độ thấp nhất
-  maxLevel: Cấp độ cao nhất
-  internalLevel: Cấp độ nội bộ
-  minInternalLevel: Cấp độ nội bộ thấp nhất
-  maxInternalLevel: Cấp độ nội bộ cao nhất
   noteDesigner: Charter
   totalNotes: TỔNG
   region: Khu vực
-  comment: Bình luận
-
-# Descriptions & Tooltips
 description:
-  pending: Đang xử lý
   loading: Đang tải dữ liệu…
-  newSong: Bài hát mới!
-  unlockNeeded: Bài hát này cần phải được mở khoá
-  unavailableInRegion: 'Hiện không khả dụng ở {region}'
+  unavailableInRegion: Hiện không khả dụng ở {region}
   copied: Đã sao chép vào bộ nhớ tạm!
-  invalidNoteCounts: Số lượng NOTE không hợp lệ
-  filterResultEmpty: Không thể tìm thấy bản nhạc nào thỏa mãn với bộ lọc.
-  myListEmpty: Nhấn chuột phải hoặc nhấn giữ một bản nhạc để lưu vào DANH SÁCH CỦA TÔI, và bạn có thể xem các bản nhạc đã lựa chọn ở đây.
-  drawPoolEmpty: Danh sách rút thăm chọn bài hiện tại đang trống.
-  clearMyList: Dọn dẹp DANH SÁCH CỦA TÔI
-  pickOneFromFilter: CHỌN MỘT BÀI TRONG BỘ LỌC!
-  noMoreSheetsToPick: Không còn bản nhạc nào để lựa chọn.
-
-# Pages
+  filterResultEmpty: Không có chart nào khớp với bộ lọc này.
+  myListEmpty: Danh sách của bạn đang trống.
 page:
-  index:
-    description: Tìm kiếm nhạc trong tựa game âm nhạc yêu thích của bạn, tất cả đều ở đây!
-  gallery:
-    selectList: Chọn Danh Sách Bài Hát
-    loadExternalGalleryConfirmation: "Bạn sắp tải một thư viện bên ngoài từ {srcType}:\n\n{src}\n\nTiếp tục?"
-    externalGalleryDisclaimer: |
-      Hiện tại bạn đang xem thư viện ảnh bên ngoài từ {source}.{br}
-      Nội dung này không do trang web này tạo ra hoặc quản lý.
-    thisUrl: URL này
-    thisFile: Tệp này
-    yourLocalFile: thư mục cục bộ của bạn
+  viz:
+    awaiting: đang chờ chart
+    pastePlaceholder: (120){'{'}4{'}'}1,2,3,4,...
+    pasteHint: Dán simai thô — chart của bạn hoặc từ wiki simai.
+    noteSpeed: Tốc độ nốt
+    playSpeed: Tốc độ phát
+    booting: đang khởi động…
+    load: Tải
+    loading: đang tải…
+    chartText: Nội dung chart
+    share: Chia sẻ
+    otherDifficulties: Độ khó khác
+    notes: '{count} nốt'
   songs:
-    sheetData: Dữ Liệu Bản Nhạc
-    exactMatch: Exact match
-    useInternalLevel: Use internal level
-    useRegionOverride: Use region override
+    searchPlaceholder: Tìm tên bài…
+    drawRandom: Ngẫu nhiên
+    reset: Đặt lại
+    myList: Danh sách của tôi
+    filters: Bộ lọc
+    pages: Trang
+    previousPage: Trang trước
+    nextPage: Trang sau
+    range: '{from} – {to} trên {total}'
+    loadFailed: Không tải được danh sách bài hát
+    bookmark: Lưu
+    play: Chơi
+    noChart: Chưa có chart
+    notFound: Không tìm thấy bài hát
+    notFoundMessage: Không có bài hát nào có liên kết này.
+    songLoadFailed: Không tải được bài hát
+    songLoadFailedMessage: Kiểm tra kết nối rồi thử lại.
+    song: Bài hát
+    noSheets: Bài hát này không có chart nào.
+    min: tối thiểu
+    max: tối đa
+    exactMatch: Khớp chính xác
+    useInternalLevel: Dùng level nội bộ
+    useRegionOverride: Dùng giá trị theo khu vực
   about:
     author: Tác giả
-    dataSource: Dữ liệu nguồn
-    songInfo: Thông tin bài hát
-    sheetInfo: Dữ Liệu Bản Nhạc
-    sheetInfoOf: 'Dữ Liệu Bản Nhạc của {region}'
-    sheetInfoDescription: Xin chân thành cảm ơn tất cả người chơi đã đóng góp dữ liệu!
     openSource: Mã nguồn dự án
-    openSourceDescription: |
-      Dự án này được cấp phép theo <a
-        href="https://vi.wikipedia.org/wiki/Gi%E1%BA%A5y_ph%C3%A9p_MIT"
-        target="_blank"
-        class="text-decoration-none"
-      >Giấy phép MIT</a>, và bạn có thể tìm thấy mã nguồn đầy đủ ở đây.
-      Nếu bạn có quan tâm, bạn có thể tham gia cùng chúng tôi để cải thiện dự án! ⭐ :)
-    updateRecord: Lịch Sử Cập Nhật
     disclaimer: Thông báo bản quyền
-  error:
-    error: Lỗi
-    notFound: Không tìm thấy trang
-    backToHome: Quay về Trang chủ
-
-# Components
-sfc:
-  DataInfoBar:
-    updateTime: 'Ngày Cập Nhật Dữ Liệu: {time}'
-    loadFailed: Thất bại trong việc tải dữ liệu.
-  SheetFilter:
-    exactMatch: Khớp chính xác
-    useInternalLevel: Sử dụng cấp độ nội bộ
-    useRegionOverride: Ghi đè bằng thông tin của vùng
-  ModeSelector:
-    gridMode: Xem lưới
-    tableMode: Xem chi tiết
-    chartMode: Xem tóm tắt
-    filterMode: Chế độ lọc
-    myListMode: DANH SÁCH CỦA TÔI
-    copyFilterLink: Sao chép bộ lọc hiện tại dưới dạng liên kết
-    noFilterWarn: Trước tiên, vui lòng chọn ít nhất một bộ lọc.
-    exportMyList: Xuất DANH SÁCH CỦA TÔI ra tệp
-    myListEmptyWarn: "DANH SÁCH CỦA TÔI trống!\nKhông có gì để xuất."
-    importMyList: Nhập DANH SÁCH CỦA TÔI từ tệp
-    sheetsLoaded: 'Nhập {n} bản nhạc thành công.'
-  SheetDrawerPanel:
-    drawRandomSheet: CHỌN BẢN NHẠC NGẪU NHIÊN!
-    drawRandomSheetCombo: CHỌN SET CHƠI NGẪU NHIÊN!
-  FilterInfoBar:
-    sheetsCount: '{n} bản nhạc'
-    songsCount: '{n} bài hát'
-  SheetDialog:
-    searchOnYouTube: Tìm kiếm trên YouTube
-    tryAgain: THỬ LẠI
-  SheetComboDialog:
-    drawResults: Kết Quả Rút Thăm
-    noDuplicate: Không trùng lặp
-    changeDrawSize: Thay đổi số lượng
-    allowDuplicate: Cho phép Nhân bản
-    blindfoldMode: Chế độ Bịt mắt
