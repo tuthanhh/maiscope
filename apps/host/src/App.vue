@@ -1,21 +1,17 @@
 <script setup lang="ts">
 import { watch, onMounted } from "vue";
-import { useRoute } from "vue-router";
 import { useDataStore } from "~/stores/data";
 import useI18n from "~/composables/useI18n";
 import useDarkMode from "~/composables/useDarkMode";
 import usePageTitle from "~/composables/usePageTitle";
-import LoadingStatus from "~/enums/LoadingStatus";
 import { GAME } from "~/app/game";
 import config from "~/app/config";
 import MvNavigation from "~/components/layout/MvNavigation.vue";
-import MvLoadingOverlay from "~/components/ui/MvLoadingOverlay.vue";
 
 defineOptions({ name: "DefaultLayout" });
 
 const i18n = useI18n();
 const dataStore = useDataStore();
-const route = useRoute();
 const { isDarkMode } = useDarkMode();
 
 
@@ -25,6 +21,7 @@ usePageTitle(() => ({
 }));
 
 onMounted(() => {
+    dataStore.loadReference();
     dataStore.loadData();
 });
 
@@ -50,15 +47,9 @@ watch(
 
 <template>
     <div class="mv-root mv-app">
-        <!-- Not over a song link on Songs: the song modal fetches its one
-             song and paints before the Catalog arrives; the browse behind it
-             says it is loading. -->
-        <MvLoadingOverlay
-            v-if="
-                dataStore.currentLoadingStatus === LoadingStatus.LOADING &&
-                !(route.name === 'songs' && route.query.song)
-            "
-        />
+        <!-- No app-wide loading overlay: only Songs needs the Catalog, and it
+             says so itself. The chart page and a song link paint from their
+             own fetches and the reference tables. -->
 
         <MvNavigation />
 

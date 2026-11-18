@@ -112,6 +112,10 @@ page:
     audioLabel: Audio track — optional (mp3 / wav / ogg)
     load: Load
     loading: loading…
+    chartText: Chart text
+    share: Share
+    otherDifficulties: Other difficulties
+    notes: '{count} notes'
   songs:
     sheetData: Sheet Data
     advancedSearch: Advanced Search

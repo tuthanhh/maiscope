@@ -1,7 +1,5 @@
 import { storeToRefs } from 'pinia';
 import { useDataStore } from '~/stores/data';
-import { GAME } from '~/app/game';
-import type { Sheet } from '~/types';
 
 export default function useGameData() {
   const dataStore = useDataStore();
@@ -62,23 +60,6 @@ export default function useGameData() {
     return difficultyIndexMap.value.get(difficulty!) ?? -1;
   }
 
-  // Search link
-  function getSheetSearchLink(sheet: Sheet) {
-    if (sheet.searchUrl === null) return null;
-    if (sheet.searchUrl !== undefined) return sheet.searchUrl;
-
-    const escapedGameTitle = GAME.gameTitle;
-    const escapedTitle = sheet.song.title ?? '';
-    const escapedDifficulty = getDifficultyName(sheet.difficulty);
-
-    const url = new URL('https://www.youtube.com/results');
-    url.searchParams.set(
-      'search_query',
-      `${escapedGameTitle} ${escapedTitle} ${escapedDifficulty}`,
-    );
-
-    return url.toString();
-  }
 
   return {
     getCategoryIndex,
@@ -90,6 +71,5 @@ export default function useGameData() {
     getDifficultyName,
     getDifficultyColor,
     getDifficultyIndex,
-    getSheetSearchLink,
   };
 }

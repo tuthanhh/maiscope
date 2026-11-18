@@ -143,7 +143,8 @@ const ticks = computed(() => {
     display: flex;
     flex-direction: column;
     padding-top: 9px; /* room for the top half of the thumb */
-    min-width: 150px;
+    /* The row's fixed parts take 256px; 96px keeps it inside a 390px phone. */
+    min-width: 96px;
 }
 
 /* The pill background track */

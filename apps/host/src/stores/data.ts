@@ -11,7 +11,7 @@ import {
   writeCatalog,
 } from "~/utils/catalogCache";
 import { readBookmarkKeys, writeBookmarkKeys } from "~/utils/bookmarks";
-import type { Data, Manifest, Sheet } from "~/types";
+import type { Data, Manifest, Reference, Sheet } from "~/types";
 
 // eslint-disable-next-line import/prefer-default-export
 export const useDataStore = defineStore("data", () => {
@@ -55,28 +55,47 @@ export const useDataStore = defineStore("data", () => {
     currentSelectedSheets.value = sheets;
   }
 
-  // Lookup maps for the loaded data. Computed once per load and shared across
-  // all consumers (rather than rebuilt inside every useGameData() call).
+  // The five reference tables, fetched at boot on their own so names and
+  // colours resolve before the Catalog arrives, or without it (ADR-0021): a
+  // chart page or a shared song link does not wait on the snapshot. Once the
+  // Catalog is installed its own copy of the tables is the one read.
+  const reference = ref<Reference | null>(null);
+  const tables = computed<Reference>(() =>
+    currentLoadingStatus.value === LoadingStatus.LOADED || reference.value === null
+      ? currentData.value
+      : reference.value,
+  );
+  async function loadReference(): Promise<void> {
+    try {
+      reference.value = await fetchJson<Reference>(`${GAME.apiBaseUrl}/reference`);
+    } catch (err) {
+      // Names fall back to their codes until the Catalog brings the tables.
+      console.warn("reference tables unavailable", err);
+    }
+  }
+
+  // Lookup maps for the reference tables. Computed once per load and shared
+  // across all consumers (rather than rebuilt inside every useGameData() call).
   const categoryIndexMap = computed(
-    () => new Map(currentData.value.categories.map((e, i) => [e.category, i])),
+    () => new Map(tables.value.categories.map((e, i) => [e.category, i])),
   );
   const versionMap = computed(
-    () => new Map(currentData.value.versions.map((e) => [e.version, e])),
+    () => new Map(tables.value.versions.map((e) => [e.version, e])),
   );
   const versionIndexMap = computed(
-    () => new Map(currentData.value.versions.map((e, i) => [e.version, i])),
+    () => new Map(tables.value.versions.map((e, i) => [e.version, i])),
   );
   const typeMap = computed(
-    () => new Map(currentData.value.types.map((e) => [e.type, e])),
+    () => new Map(tables.value.types.map((e) => [e.type, e])),
   );
   const typeIndexMap = computed(
-    () => new Map(currentData.value.types.map((e, i) => [e.type, i])),
+    () => new Map(tables.value.types.map((e, i) => [e.type, i])),
   );
   const difficultyMap = computed(
-    () => new Map(currentData.value.difficulties.map((e) => [e.code, e])),
+    () => new Map(tables.value.difficulties.map((e) => [e.code, e])),
   );
   const difficultyIndexMap = computed(
-    () => new Map(currentData.value.difficulties.map((e, i) => [e.code, i])),
+    () => new Map(tables.value.difficulties.map((e, i) => [e.code, i])),
   );
 
   // Parse a `/api/catalog` body and make it the current catalog; covers
@@ -178,5 +197,6 @@ export const useDataStore = defineStore("data", () => {
     difficultyMap,
     difficultyIndexMap,
     loadData,
+    loadReference,
   };
 });

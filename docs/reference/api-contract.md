@@ -619,6 +619,7 @@ Status enum: `pending | approved | rejected | merged`.
 | Contract | Frontend touch-point |
 |----------|---------------------|
 | `GET /catalog` | `stores/data.ts:loadData` (replaced `data.json`) |
+| `GET /reference` | `stores/data.ts:loadReference`, at boot; names and colours before or without the Catalog |
 | `GET /songs/{id}` | `components/dialogs/SongModal.vue` (a shared `?song=` link, before the Catalog loads) |
 | `hasChart` | `components/dialogs/SongModal.vue` (Play is enabled only with a chart) |
 | §2 chart | `pages/visualizer.vue`, `composables/useEngine.ts` (auto-load real charts) |

@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import useI18n from "~/composables/useI18n";
 import usePageTitle from "~/composables/usePageTitle";
+import useSelectedSheets from "~/composables/useSelectedSheets";
+import { useDataStore } from "~/stores/data";
 import {
     ensureEngine,
     mountEngineCanvas,
@@ -21,7 +23,7 @@ import useChartLoader, { hasDeepLink } from "~/composables/useChartLoader";
 import VizStage from "~/components/visualizer/VizStage.vue";
 import VizTransport from "~/components/visualizer/VizTransport.vue";
 import VizSlider from "~/components/visualizer/VizSlider.vue";
-import VizSheetCard from "~/components/visualizer/VizSheetCard.vue";
+import VizTitleBlock from "~/components/visualizer/VizTitleBlock.vue";
 import VizPastePanel from "~/components/visualizer/VizPastePanel.vue";
 
 defineOptions({ name: "GameVisualizerPage" });
@@ -91,6 +93,45 @@ onUnmounted(() => {
     lead.stop();
 });
 
+// Another difficulty of the song is a link to this same route: the page does
+// not remount, so a changed deep link loads here.
+watch(
+    () => route.query,
+    (query) => {
+        if (status.value === "ready") autoLoad(query);
+    },
+);
+
+// The title block's siblings come from the Catalog: the single-sheet fetch
+// carries no other sheets.
+const dataStore = useDataStore();
+const siblings = computed(() => {
+    const sheet = sheetInfo.value;
+    if (!sheet) return [];
+    const song = dataStore.currentData.songs.find((s) => s.id === sheet.song.id);
+    return song?.sheets.filter((s) => s.key !== sheet.key) ?? [];
+});
+
+const { isBookmarked, toggleSheetSelection } = useSelectedSheets();
+const bookmarked = computed(() => !!sheetInfo.value && isBookmarked(sheetInfo.value.key));
+
+// Share: the system sheet where there is one (phones), else the clipboard.
+const shareNote = ref("");
+async function share(): Promise<void> {
+    const url = window.location.href;
+    try {
+        if (navigator.share) {
+            await navigator.share({ title: sheetInfo.value?.song.title, url });
+            return;
+        }
+        await navigator.clipboard.writeText(url);
+        shareNote.value = t("description.copied") as string;
+        window.setTimeout(() => (shareNote.value = ""), 2000);
+    } catch {
+        // Dismissed or denied: nothing to report.
+    }
+}
+
 // Slider tick rules, hoisted so the sliders' computed ticks are not rebuilt
 // on every page render (the `?debug` readout re-renders once a second).
 const isWholeNumber = (v: number) => Number.isInteger(v);
@@ -102,7 +143,7 @@ usePageTitle(() => ({ title: t("page-title.visualizer") as string }));
 </script>
 
 <template>
-    <div class="mv-root mv-viz">
+    <div class="mv-viz">
         <div class="mv-viz-stage">
             <!-- engine canvas: the Bevy app renders the chart here -->
             <VizStage
@@ -150,52 +191,78 @@ usePageTitle(() => ({ title: t("page-title.visualizer") as string }));
             </div>
         </div>
 
-        <!-- chart info + loader -->
-        <div class="mv-viz-side">
-            <div class="mv-label mv-side-label">
-                {{ t("page.viz.chartInfo") }}
-            </div>
-
-            <!-- rich info when a catalog sheet is loaded -->
-            <VizSheetCard v-if="sheetInfo" :sheet="sheetInfo" />
-            <div v-else class="mv-awaiting">{{ t("page.viz.awaiting") }}</div>
-
-            <VizPastePanel
-                v-model="simai"
-                :loading="loading"
-                :engine-ready="status === 'ready'"
-                :error-msg="errorMsg"
-                @load="loadPasted"
+        <div class="mv-viz-info">
+            <VizTitleBlock
+                v-if="sheetInfo"
+                :sheet="sheetInfo"
+                :siblings="siblings"
+                :bookmarked="bookmarked"
+                :share-note="shareNote"
+                @bookmark="toggleSheetSelection(sheetInfo)"
+                @share="share"
             />
+            <p v-else class="t-body t-muted mv-viz-awaiting">{{ t("page.viz.awaiting") }}</p>
         </div>
+
+        <VizPastePanel
+            v-model="simai"
+            class="mv-viz-side"
+            :loading="loading"
+            :engine-ready="status === 'ready'"
+            :error-msg="errorMsg"
+            @load="loadPasted"
+        />
     </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
+@use "~/assets/styles/breakpoints" as bp;
+
+// design-direction "Chart page": the playback surface, the title block under
+// it, and the chart text — a side column the height of the stage from
+// `--bp-lg`, stacked below the title block under it.
 .mv-viz {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-areas:
+        "stage"
+        "info"
+        "side";
+    gap: var(--s-8);
+    max-width: var(--max-w);
+    margin: 0 auto;
+    padding: var(--s-6);
 }
 .mv-viz-stage {
-    flex: 1 1 380px;
-    padding: 20px;
-    border-right: 1px solid var(--mv-bd);
+    grid-area: stage;
+    min-width: 0;
+}
+.mv-viz-info {
+    grid-area: info;
+    min-width: 0;
 }
 .mv-viz-side {
-    flex: 1 1 280px;
-    min-width: 260px;
-    padding: 20px;
+    grid-area: side;
+    min-width: 0;
 }
-.mv-side-label {
-    margin-bottom: 6px;
+.mv-viz-awaiting {
+    margin: 0;
 }
-.mv-awaiting {
-    font-size: 13px;
-    color: var(--mv-mut);
-    padding: 20px 0;
+@media (min-width: bp.$bp-lg) {
+    .mv-viz {
+        grid-template-columns: minmax(0, 1fr) var(--drawer-w);
+        grid-template-areas:
+            "stage side"
+            "info .";
+    }
+}
+@media (max-width: #{bp.$bp-md - 1px}) {
+    .mv-viz {
+        padding: var(--s-4);
+        gap: var(--s-6);
+    }
 }
 
-/* --- Container & Layout --- */
+/* --- playback surface, unchanged --- */
 .mv-sliders {
     display: flex;
     flex-direction: column;

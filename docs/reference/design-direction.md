@@ -318,9 +318,12 @@ above. The bottom bar hides while the engine canvas is in view.
 
 ### Cover and jacket, loading
 
-A jacket that has not loaded shows `--bg-sunken`; no spinner. The page
-loading overlay is `--scrim` with a single `label` reading LOADING,
-shown only on first launch without a cached Catalog.
+A jacket that has not loaded shows `--bg-sunken`; no spinner. There is no
+page loading overlay: Browse, the one screen that needs the Catalog, shows
+"Loading data…" in place of its empty state on first launch without a
+cached Catalog. The chart page and a shared song link paint from their own
+fetches and the reference tables, which an app-wide overlay would have
+hidden (frontend-redesign 12).
 
 ## Screens
 

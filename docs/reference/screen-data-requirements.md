@@ -47,9 +47,10 @@ Domain terms follow the root [`CONTEXT.md`](../../CONTEXT.md).
 
 ### App shell
 
-Header, navigation, locale menu, dark-mode toggle, footer. Renders nothing
-from the Catalog. Shows the loading overlay while the Catalog request is in
-flight, so it depends on the load *status*, not the data.
+Navigation, menu, dark-mode toggle. Renders nothing from the Catalog and
+waits on nothing: it fetches the reference tables (`GET /api/reference`)
+and starts the Catalog load at boot. Browse shows its own loading line while
+the Catalog is in flight.
 
 ### Home
 
