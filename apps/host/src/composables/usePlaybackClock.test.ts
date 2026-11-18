@@ -81,6 +81,19 @@ describe("usePlaybackClock", () => {
     expect(playback.markLoaded).not.toHaveBeenCalled();
   });
 
+  // Review Focus 5, final review: play pressed at the end, where the engine
+  // stays stopped — the button must not stay on "pause".
+  it("comes back to the engine's state when a press does not take", () => {
+    const playback = fakePlayback(false);
+    engine.readPlayback.mockReturnValue(snapshot(90.2, false, 1));
+    const clock = usePlaybackClock(playback);
+    clock.start();
+    runFrame();
+    playback.playing.value = true;
+    for (let i = 0; i < 10; i++) runFrame();
+    expect(playback.playing.value).toBe(false);
+  });
+
   it("reads the timeline again only when the chart changes", () => {
     const timeline = { length: 4, measures: [] };
     engine.readTimeline.mockReturnValue(timeline);
