@@ -16,6 +16,8 @@ nav:
   menu: 메뉴
   theme: 테마
   language: 언어
+home:
+  subtitle: maimai 채보 시각화 프로젝트
 community:
   coming: 팬 채보는 커뮤니티 라이브러리와 함께 공개됩니다.
 ui:

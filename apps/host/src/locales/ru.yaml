@@ -16,6 +16,8 @@ nav:
   menu: Меню
   theme: Тема
   language: Язык
+home:
+  subtitle: проект визуализации maimai
 community:
   coming: Фанатские чарты появятся вместе с библиотекой сообщества.
 ui:

@@ -69,8 +69,16 @@ export const useDataStore = defineStore("data", () => {
     try {
       reference.value = await fetchJson<Reference>(`${GAME.apiBaseUrl}/reference`);
     } catch (err) {
-      // Names fall back to their codes until the Catalog brings the tables.
+      // Names fall back to their codes until the Catalog brings the tables,
+      // or until the connection returns and this is tried once more.
       console.warn("reference tables unavailable", err);
+      window.addEventListener(
+        "online",
+        () => {
+          if (reference.value === null) loadReference();
+        },
+        { once: true },
+      );
     }
   }
 

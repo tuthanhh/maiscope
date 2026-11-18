@@ -1,20 +1,13 @@
 /**
- * Single place where the frontend talks to `apps/server`.
- *
- * Both callers previously did `await (await fetch(url)).json()`, which parses an
- * error body as if it were data. The server's error envelope is:
+ * The JSON and text fetches to `apps/server`. A non-2xx response becomes an
+ * `ApiError` carrying the status and the server's message, rather than an
+ * error envelope parsed as if it were data. The server's envelope is:
  *
  *   { "error": "database_error", "message": "internal error" }
  *
- * so a failed `/catalog` currently becomes a confusing crash inside
- * `preprocessData` rather than a legible "the server errored".
- *
- * Callers and what they do with a throw:
- *   - `stores/data.ts:loadData`  catches, sets `currentLoadingErrorMessage` from
- *     `err.message`, and renders LoadingStatus.ERROR. Whatever this throws is
- *     shown to the user.
- *   - `composables/useSheetSearch.ts:runSearch`  has only `finally`, so a throw
- *     propagates unhandled and leaves the previous results on screen.
+ * `stores/data.ts:loadData` shows the message to the user; the song modal
+ * branches on the status (404 is "Song not found"). The chart text is the one
+ * fetch outside this file: its errors are plain text (`useEngine.fetchChart`).
  */
 
 /** Error envelope returned by `apps/server` (`AppError::into_response`). */

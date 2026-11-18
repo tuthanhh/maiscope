@@ -16,6 +16,8 @@ nav:
   menu: Menú
   theme: Tema
   language: Idioma
+home:
+  subtitle: proyecto de visualización de maimai
 community:
   coming: Los charts de fans llegan con la biblioteca de la comunidad.
 ui:

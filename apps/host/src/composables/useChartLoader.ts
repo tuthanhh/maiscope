@@ -79,8 +79,8 @@ export default function useChartLoader(playback: Playback): {
             simai.value = chart;
             await loadChart(chart);
 
-            // Sound can only start from a user gesture (e.g. arriving via a click in
-            // the sheet dialog). On a gesture-less hard reload, start paused — the
+            // Sound can only start from a user gesture (e.g. arriving via Play in
+            // the song modal). On a gesture-less hard reload, start paused — the
             // first transport click then both plays and unlocks audio.
             const active = navigator.userActivation?.isActive ?? false;
             if (active) {

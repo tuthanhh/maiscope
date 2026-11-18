@@ -16,6 +16,8 @@ nav:
   menu: Menu
   theme: Tema
   language: Bahasa
+home:
+  subtitle: proyek visualisasi maimai
 community:
   coming: Chart buatan penggemar hadir bersama pustaka komunitas.
 ui:

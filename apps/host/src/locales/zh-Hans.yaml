@@ -16,6 +16,8 @@ nav:
   menu: 菜单
   theme: 主题
   language: 语言
+home:
+  subtitle: maimai 谱面可视化项目
 community:
   coming: 同人谱面将随社区谱面库一同上线。
 ui:

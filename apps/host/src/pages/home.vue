@@ -20,7 +20,7 @@ usePageTitle(() => ({
 <template>
   <section class="mv-home">
     <h1 class="t-display mv-home-brand">maiscope</h1>
-    <p class="t-body t-muted mv-home-subtitle">maimai visualization project</p>
+    <p class="t-body t-muted mv-home-subtitle">{{ t("home.subtitle") }}</p>
     <div class="mv-home-actions">
       <MvButton kind="primary" :to="{ name: 'songs' }">{{ t("nav.songs") }}</MvButton>
       <MvButton kind="ghost" :to="{ name: 'visualizer' }">{{ t("nav.play") }}</MvButton>

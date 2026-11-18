@@ -16,6 +16,8 @@ nav:
   menu: 選單
   theme: 主題
   language: 語言
+home:
+  subtitle: maimai 譜面視覺化專案
 community:
   coming: 同人譜面將隨社群譜面庫一同上線。
 ui:

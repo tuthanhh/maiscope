@@ -16,6 +16,8 @@ nav:
   menu: Menu
   theme: Giao diện
   language: Ngôn ngữ
+home:
+  subtitle: dự án mô phỏng chart maimai
 community:
   coming: Chart do người hâm mộ làm sẽ có cùng thư viện cộng đồng.
 ui:

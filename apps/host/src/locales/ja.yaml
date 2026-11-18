@@ -16,6 +16,8 @@ nav:
   menu: メニュー
   theme: テーマ
   language: 言語
+home:
+  subtitle: maimai 譜面ビジュアライザー
 community:
   coming: ファン譜面はコミュニティライブラリと一緒に公開されます。
 ui:
