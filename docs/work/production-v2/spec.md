@@ -246,6 +246,16 @@ beside `release_command`).
 Each of these was put as a decision and deferred on purpose. They are listed so
 a later reader does not mistake a choice for an oversight.
 
+- **No Content-Security-Policy** (decided 2026-11-18, quality review). The
+  sign-in refresh token lives in `localStorage` for 30 days, so an XSS could
+  read it; a CSP is the mitigation. Deferred because nothing renders
+  user-supplied HTML today (the one `v-html` draws the static icon table)
+  and the third-party code on the page is Google Fonts' stylesheet only.
+  **Revisit with `frontend-redesign` 05**, when reports and uploads bring
+  user text onto pages. The worked-out policy — directives, the build-only
+  Vite plugin, the wasm and blob-worker needs, the preview-on-:1420 check —
+  is in the maintainer's notes from that review and in ticket 20's comments.
+
 - **Inherited from v1.0** (shipped 2026-11-17): twelve chart folders name
   songs the catalog does not hold, so `seed-charts.yml` still runs with
   `allow_unmatched` and 12 is its known floor — `community-charts` decides
