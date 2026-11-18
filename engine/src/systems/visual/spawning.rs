@@ -43,8 +43,10 @@ pub fn next_event(
     // notes live at the new time, playing or paused, so a paused seek shows
     // the chart there. Spawning then carries on after them (`seek`).
     if let Some(t) = chart.take_respawn() {
+        // `try_`: a load or an unload in the same frame may have despawned
+        // them already.
         for entity in &on_screen {
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
         }
         let note_speed = chart.note_speed();
         for event in chart.live_events(t) {
@@ -193,7 +195,7 @@ pub fn apply_commands(
             crate::wasm_bridge::EngineCommand::Unload => {
                 // Leaving the Play page: nothing of this chart may outlive it.
                 for entity in &notes {
-                    commands.entity(entity).despawn();
+                    commands.entity(entity).try_despawn();
                 }
                 chart.unload();
                 crate::wasm_bridge::bump_chart(String::new());
@@ -211,7 +213,7 @@ pub fn apply_commands(
                     instance.seek_to(0.0);
                 }
                 for entity in &notes {
-                    commands.entity(entity).despawn();
+                    commands.entity(entity).try_despawn();
                 }
                 chart.restart();
                 bgm_channel.resume();

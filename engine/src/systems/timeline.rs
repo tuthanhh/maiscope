@@ -68,13 +68,13 @@ impl Timeline {
             .iter()
             .map(|m| {
                 format!(
-                    r#"{{"start":{:.3},"tap":{},"slide":{},"touch":{},"hold":{}}}"#,
+                    r#"{{"start":{:.6},"tap":{},"slide":{},"touch":{},"hold":{}}}"#,
                     m.start, m.tap, m.slide, m.touch, m.hold
                 )
             })
             .collect();
         format!(
-            r#"{{"length":{:.3},"measures":[{}]}}"#,
+            r#"{{"length":{:.6},"measures":[{}]}}"#,
             self.length,
             measures.join(",")
         )
@@ -231,7 +231,7 @@ mod tests {
         };
         assert_eq!(
             tl.to_json(),
-            r#"{"length":4.250,"measures":[{"start":0.000,"tap":4,"slide":0,"touch":0,"hold":0},{"start":2.000,"tap":1,"slide":2,"touch":3,"hold":1}]}"#
+            r#"{"length":4.250000,"measures":[{"start":0.000000,"tap":4,"slide":0,"touch":0,"hold":0},{"start":2.000000,"tap":1,"slide":2,"touch":3,"hold":1}]}"#
         );
     }
 }

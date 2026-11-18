@@ -260,8 +260,12 @@ pub fn update_movement(
                         && now_secs - hit.0 < TAP_DYING
                     {
                         let pos = layout.tap[head_button - 1] * RADIUS;
+                        // Invisible until its first Dying frame places it:
+                        // spawned by a command, it is drawn once before.
+                        let mut pop = hexagon_sprite(&assets);
+                        set_alpha(&mut pop, 0.0);
                         commands.spawn((
-                            hexagon_sprite(&assets),
+                            pop,
                             Transform::from_translation(pos.extend(2.5)),
                             Visibility::Visible,
                             NoteKind::Tap(*head_button),
@@ -652,5 +656,35 @@ mod tests {
             }
         }
         assert!(seen > 0);
+    }
+
+    /// The slide head's pop is spawned by a command and drawn once before
+    /// update_movement first places it: it must start invisible, not flash
+    /// at full size (final review M6).
+    #[test]
+    fn the_slide_head_pop_does_not_flash() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<Image>()
+            .init_resource::<NoteAssets>()
+            .init_resource::<ButtonLayout>()
+            .init_resource::<ChartPlayback>()
+            .add_systems(
+                Update,
+                (crate::systems::visual::next_event, update_movement).chain(),
+            );
+        {
+            let mut playback = app.world_mut().resource_mut::<ChartPlayback>();
+            playback.load_chart(simai::parse_chart("(120){4}1-5[2:1],E").unwrap());
+            playback.pause();
+            playback.seek(0.05);
+        }
+        app.update(); // spawns the slide, which enters Waiting and queues its pop
+        let mut pops = app.world_mut().query::<(&NoteKind, &Sprite, &HitTime)>();
+        let (_, sprite, _) = pops
+            .iter(app.world())
+            .find(|(k, _, _)| matches!(k, NoteKind::Tap(_)))
+            .expect("the pop");
+        assert_eq!(sprite.color.alpha(), 0.0);
     }
 }

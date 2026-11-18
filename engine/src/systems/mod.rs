@@ -96,7 +96,7 @@ pub(crate) fn ingest_song(
     // every live note and rewind the clock, otherwise old notes linger and
     // the new chart spawns against a stale `elapsed_time`.
     for entity in notes {
-        commands.entity(entity).despawn();
+        commands.entity(entity).try_despawn();
     }
     playback.load_chart(events);
     crate::wasm_bridge::bump_chart(timeline::build_timeline(playback.timed_events()).to_json());
