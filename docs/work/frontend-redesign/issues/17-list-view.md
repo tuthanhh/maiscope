@@ -26,3 +26,12 @@ mode falls back to the grid. The toggle is two icon buttons in a labelled
 group, the pressed one on `--bg-panel` — not the inverse fill, which the
 design keeps for one strong state per screen. The `grid` and `list` icons
 come back. Rows are 56px tall; the bookmark is a 44px target.
+
+**2026-11-18 — review.** Applied: an edit had pasted the toggle's styles
+into both grid media queries — removed. A row's and a card's accessible
+name now starts with what they show (title, artist), so the name contains
+the visible text (WCAG 2.5.3); the row's jacket is hidden from assistive
+tech so it adds nothing to the name. Each bookmark button names its song.
+`isBookmarked` is one stable function rather than a new one per render.
+Kept: rows are 56px — the 48px jacket sets that; the design's 44px is the
+table row's, for lists without artwork.

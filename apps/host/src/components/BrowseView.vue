@@ -166,11 +166,19 @@ function goToPage(page: number): void {
 }
 
 // ── actions ───────────────────────────────────────────────────
-// A card or row names its sheet in full: the visible text omits the
-// difficulty, which only the colour shows.
+// A card or row names its sheet in full, starting with what it shows
+// (title, artist) so the name contains the visible text (WCAG 2.5.3); the
+// grid card shows the difficulty only as a colour, so it is spelled out.
 function sheetLabel(s: Sheet): string {
-    return `${s.song.title} — ${getTypeAbbr(s.type)} ${getDifficultyName(s.difficulty)} ${s.level ?? ""}`;
+    const artist = s.song.artist ? ` — ${s.song.artist}` : "";
+    return `${s.song.title}${artist} — ${getTypeAbbr(s.type)} ${getDifficultyName(s.difficulty)} ${s.level ?? ""}`;
 }
+// The bookmark button names its song too: fifty "Bookmark" buttons in a row
+// say nothing on their own.
+function bookmarkLabelFor(s: Sheet): string {
+    return `${t("page.songs.bookmark")}: ${s.song.title}`;
+}
+const isBookmarked = (s: Sheet): boolean => selectedSet.value.has(s.key);
 function drawRandom(): void {
     if (results.value.length === 0) return;
     songModal.open(pickItem(results.value));
@@ -305,8 +313,8 @@ function retry(): void {
                 v-else-if="view === 'list'"
                 :sheets="paginatedResults"
                 :link-to="songModal.linkTo"
-                :is-bookmarked="(s) => selectedSet.has(s.key)"
-                :bookmark-label="t('page.songs.bookmark') as string"
+                :is-bookmarked="isBookmarked"
+                :bookmark-label="bookmarkLabelFor"
                 :row-label="sheetLabel"
                 @bookmark="toggleSheetSelection"
             />
@@ -320,7 +328,7 @@ function retry(): void {
                         :level="s.level"
                         :diff="getDifficultyColor(s.difficulty)"
                         :bookmarked="selectedSet.has(s.key)"
-                        :bookmark-label="t('page.songs.bookmark') as string"
+                        :bookmark-label="bookmarkLabelFor(s)"
                         :label="sheetLabel(s)"
                         @bookmark="toggleSheetSelection(s)"
                     />
@@ -435,36 +443,12 @@ function retry(): void {
 }
 
 @media (min-width: bp.$bp-md) {
-    .mv-browse-view {
-    display: inline-flex;
-    gap: var(--s-1);
-}
-// The pressed view button: the icon at full strength, the other muted.
-.mv-browse-view :deep(.mv-button) {
-    color: var(--fg-muted);
-}
-.mv-browse-view :deep(.mv-browse-view--on) {
-    color: var(--fg);
-    background: var(--bg-panel);
-}
-.mv-browse-grid {
+    .mv-browse-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 }
 @media (min-width: bp.$bp-lg) {
-    .mv-browse-view {
-    display: inline-flex;
-    gap: var(--s-1);
-}
-// The pressed view button: the icon at full strength, the other muted.
-.mv-browse-view :deep(.mv-button) {
-    color: var(--fg-muted);
-}
-.mv-browse-view :deep(.mv-browse-view--on) {
-    color: var(--fg);
-    background: var(--bg-panel);
-}
-.mv-browse-grid {
+    .mv-browse-grid {
         grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 }

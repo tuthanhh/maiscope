@@ -15,7 +15,7 @@ defineProps<{
     sheets: Sheet[];
     linkTo: (sheet: Sheet) => RouteLocationRaw;
     isBookmarked: (sheet: Sheet) => boolean;
-    bookmarkLabel: string;
+    bookmarkLabel: (sheet: Sheet) => string;
     rowLabel: (sheet: Sheet) => string;
 }>();
 defineEmits<{ bookmark: [sheet: Sheet] }>();
@@ -27,7 +27,7 @@ const { getTypeAbbr, getDifficultyName, getDifficultyColor } = useGameData();
     <ul class="mv-list">
         <li v-for="s in sheets" :key="s.key" class="mv-list-row">
             <RouterLink :to="linkTo(s)" class="mv-list-link" :aria-label="rowLabel(s)">
-                <span class="mv-list-jacket"><MvCover :item="s.song" /></span>
+                <span class="mv-list-jacket" aria-hidden="true"><MvCover :item="s.song" /></span>
                 <span class="mv-list-main">
                     <span class="mv-list-title t-strong">{{ s.song.title }}</span>
                     <span class="mv-list-artist t-body t-muted">{{ s.song.artist }}</span>
@@ -44,9 +44,9 @@ const { getTypeAbbr, getDifficultyName, getDifficultyColor } = useGameData();
             <button
                 type="button"
                 class="mv-list-bookmark"
-                :aria-label="bookmarkLabel"
+                :aria-label="bookmarkLabel(s)"
                 :aria-pressed="isBookmarked(s)"
-                :title="bookmarkLabel"
+                :title="bookmarkLabel(s)"
                 @click="$emit('bookmark', s)"
             >
                 <MvIcon name="bookmark" :size="15" :filled="isBookmarked(s)" />
@@ -76,6 +76,7 @@ const { getTypeAbbr, getDifficultyName, getDifficultyColor } = useGameData();
 .mv-list-link {
     flex: 1;
     min-width: 0;
+    // 56, not the table row's 44: the 48px jacket and its padding set it.
     min-height: 56px;
     display: grid;
     grid-template-columns: 48px minmax(0, 1fr) 11rem 3.5rem;
