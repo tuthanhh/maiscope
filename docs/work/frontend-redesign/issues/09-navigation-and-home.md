@@ -28,3 +28,16 @@ New strings exist in English only; issue 13 adds the other locales (the
 fallback is English). `MvLocaleMenu` is deleted, replaced by the menu's
 select. Checked at 1280 and 390 px wide: the bar, the menu, the bottom bar
 showing on Community and hidden on Play.
+
+**2026-11-18 — review.** Applied: the menu's language select read a copy of
+the i18n facade taken at setup and went stale after a switch — it now reads
+the facade live, and the switch fires `LocaleChanged` again. The menu is a
+disclosure (`aria-controls`, no `role="menu"`); it closes on a `pointerdown`
+outside and on Escape heard at the document, which returns focus to the
+trigger. About closes it (fixed by 08's click forwarding). The phone bottom
+bar is hidden outright with `visibility: hidden` and `inert` rather than slid
+away, and the main area drops its bottom padding while it is hidden. Songs
+stays active on the old `/song` page until 11 replaces it. `useEngineInView`
+ignores a frame wait that resolves after a route change. `viewport-fit=cover`
+makes the safe-area inset real; Home fills one screen on phones without
+scrolling.

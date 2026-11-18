@@ -28,16 +28,24 @@ usePageTitle(() => ({
   </section>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
+@use "~/assets/styles/breakpoints" as bp;
+
 .mv-home {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: var(--s-4);
-  min-height: calc(100vh - var(--nav-h) * 2);
+  // One screen less the top bar; on phones the slim top bar and the bottom bar.
+  min-height: calc(100dvh - var(--nav-h));
   padding: var(--s-8) var(--s-4);
   text-align: center;
+}
+@media (max-width: #{bp.$bp-md - 1px}) {
+  .mv-home {
+    min-height: calc(100dvh - 44px - var(--nav-h) - env(safe-area-inset-bottom));
+  }
 }
 .mv-home-brand,
 .mv-home-subtitle {

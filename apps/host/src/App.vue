@@ -76,10 +76,13 @@ watch(
 .mv-main {
     flex: 1;
 }
-// Room for the fixed bottom bar on phones.
+// Room for the fixed bottom bar on phones, while it is shown.
 @media (max-width: #{bp.$bp-md - 1px}) {
     .mv-main {
-        padding-bottom: var(--nav-h);
+        padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom));
+    }
+    .mv-app:has(.mv-bottombar--hidden) .mv-main {
+        padding-bottom: 0;
     }
 }
 </style>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useRoute } from "vue-router";
 import useI18n from "~/composables/useI18n";
 import useDarkMode from "~/composables/useDarkMode";
 import useEngineInView from "~/composables/useEngineInView";
@@ -14,6 +15,12 @@ import type { IconName } from "~/components/ui/icons";
 const { t } = useI18n();
 const { isDarkMode } = useDarkMode();
 const engineInView = useEngineInView();
+const route = useRoute();
+
+// The old song page belongs to Songs until the song modal replaces it (11).
+function isActive(name: string): boolean {
+  return route.name === name || (name === "songs" && route.name === "song");
+}
 
 const destinations = computed<{ name: string; label: string; icon: IconName }[]>(() => [
   { name: "songs", label: t("nav.songs") as string, icon: "songs" },
@@ -31,6 +38,7 @@ const destinations = computed<{ name: string; label: string; icon: IconName }[]>
         :key="d.name"
         :to="{ name: d.name }"
         class="mv-topbar-link t-body"
+        :class="{ 'mv-active': isActive(d.name) }"
       >
         {{ d.label }}
       </RouterLink>
@@ -46,8 +54,22 @@ const destinations = computed<{ name: string; label: string; icon: IconName }[]>
     </div>
   </header>
 
-  <nav class="mv-bottombar" :class="{ 'mv-bottombar--hidden': engineInView }" aria-label="Main">
-    <RouterLink v-for="d in destinations" :key="d.name" :to="{ name: d.name }" class="mv-bottombar-link">
+  <!-- Hidden outright while the engine is in view, not slid away: the design
+       names no motion for it, and `inert` keeps it out of Tab order and the
+       accessibility tree while it is gone. -->
+  <nav
+    class="mv-bottombar"
+    :class="{ 'mv-bottombar--hidden': engineInView }"
+    :inert="engineInView"
+    aria-label="Main"
+  >
+    <RouterLink
+      v-for="d in destinations"
+      :key="d.name"
+      :to="{ name: d.name }"
+      class="mv-bottombar-link"
+      :class="{ 'mv-active': isActive(d.name) }"
+    >
       <MvIcon :name="d.icon" :size="20" />
       <span class="t-label">{{ d.label }}</span>
     </RouterLink>
@@ -86,7 +108,7 @@ const destinations = computed<{ name: string; label: string; icon: IconName }[]>
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-.mv-topbar-link.router-link-active {
+.mv-topbar-link.mv-active {
   color: var(--fg);
 }
 .mv-topbar-actions {
@@ -114,14 +136,13 @@ const destinations = computed<{ name: string; label: string; icon: IconName }[]>
     z-index: 20;
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    height: var(--nav-h);
+    height: calc(var(--nav-h) + env(safe-area-inset-bottom));
     padding-bottom: env(safe-area-inset-bottom);
     background: var(--bg);
     border-top: var(--line-w) solid var(--line);
-    transition: transform var(--dur-slow);
   }
   .mv-bottombar--hidden {
-    transform: translateY(100%);
+    visibility: hidden;
   }
   .mv-bottombar-link {
     display: flex;
@@ -132,7 +153,7 @@ const destinations = computed<{ name: string; label: string; icon: IconName }[]>
     color: var(--fg-muted);
     text-decoration: none;
   }
-  .mv-bottombar-link.router-link-active {
+  .mv-bottombar-link.mv-active {
     color: var(--fg);
   }
 }

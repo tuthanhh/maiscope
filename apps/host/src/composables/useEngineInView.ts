@@ -9,8 +9,12 @@ export default function useEngineInView(): Ref<boolean> {
   const route = useRoute();
   const inView = ref(false);
   let observer: IntersectionObserver | null = null;
+  // Bumped on every route change and on unmount, so a frame wait that
+  // resolves after the user has moved on does not attach a stale observer.
+  let generation = 0;
 
   function stop(): void {
+    generation++;
     observer?.disconnect();
     observer = null;
     inView.value = false;
@@ -22,7 +26,9 @@ export default function useEngineInView(): Ref<boolean> {
       stop();
       if (name !== "visualizer" || typeof IntersectionObserver === "undefined") return;
       // The page mounts the canvas on its own mount; wait a frame for it.
+      const mine = generation;
       await new Promise((r) => requestAnimationFrame(r));
+      if (mine !== generation || route.name !== "visualizer") return;
       const canvas = document.getElementById("bevy");
       if (!canvas) return;
       observer = new IntersectionObserver(
