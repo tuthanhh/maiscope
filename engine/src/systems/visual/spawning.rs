@@ -35,10 +35,12 @@ pub fn next_event(
     mut chart: ResMut<ChartPlayback>,
     note_assets: Res<NoteAssets>,
     layout: Res<ButtonLayout>,
+    on_screen: Query<(), With<NoteTiming>>,
 ) {
     if !chart.is_playing() {
         return;
     }
+    let mut spawned = false;
 
     // `chart.elapsed_time` is maintained by `tick_clock`: slaved to the BGM's
     // playback position when a song is present (drift-free), or frame-driven when
@@ -48,6 +50,7 @@ pub fn next_event(
     // so chart.chart_speed() / chart.note_speed() are accessible in the loop body.
     while let Some((event, bpm)) = chart.advance().map(|e| (e.event.clone(), e.bpm)) {
         if let ChartEvent::NoteGroup(notes) = event {
+            spawned = true;
             for note in &notes {
                 // EACH-ness is per sub-comma offset, not per token. Notes split
                 // by a pseudo-EACH backtick are 1ms apart, so the notation is
@@ -73,7 +76,11 @@ pub fn next_event(
         }
     }
 
-    if chart.is_finished() {
+    // The chart is over once everything is spawned and the last note has
+    // played out. Stopping when the last note *spawns* froze it mid-approach,
+    // since a paused chart freezes every note. Notes spawned this frame are
+    // not in `on_screen` yet (deferred commands), hence `spawned`.
+    if chart.is_finished() && !spawned && on_screen.is_empty() {
         chart.pause();
     }
 }
@@ -686,4 +693,57 @@ fn spawn_fan_children(
         true, // fan cone → lyon vector chevrons
         |f| base_radius + f * (max_radius - base_radius),
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::systems::visual::component::NoteTiming;
+
+    fn app_with_chart(chart: &str) -> App {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<Image>()
+            .init_resource::<NoteAssets>()
+            .init_resource::<ButtonLayout>()
+            .init_resource::<ChartPlayback>()
+            .add_systems(Update, next_event);
+        app.world_mut()
+            .resource_mut::<ChartPlayback>()
+            .load_chart(simai::parse_chart(chart).unwrap());
+        app
+    }
+
+    /// The chart runs until its last note has played out, not until that note
+    /// spawns: a paused chart freezes every note, so stopping at spawn froze
+    /// the last notes mid-approach (found planning visualizer-majdata piece 2).
+    #[test]
+    fn the_chart_keeps_running_while_its_last_note_is_on_screen() {
+        let mut app = app_with_chart("(120){4}1,E");
+        app.update();
+        app.update();
+        let notes = app
+            .world_mut()
+            .query_filtered::<(), With<NoteTiming>>()
+            .iter(app.world())
+            .count();
+        assert_eq!(notes, 1, "the only note spawned");
+        assert!(app.world().resource::<ChartPlayback>().is_playing());
+    }
+
+    #[test]
+    fn the_chart_stops_once_its_last_note_is_gone() {
+        let mut app = app_with_chart("(120){4}1,E");
+        app.update();
+        let spawned: Vec<Entity> = app
+            .world_mut()
+            .query_filtered::<Entity, With<NoteTiming>>()
+            .iter(app.world())
+            .collect();
+        for e in spawned {
+            app.world_mut().despawn(e);
+        }
+        app.update();
+        assert!(!app.world().resource::<ChartPlayback>().is_playing());
+    }
 }
