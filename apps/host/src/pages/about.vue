@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import usePageTitle from "~/composables/usePageTitle";
 import useI18n from "~/composables/useI18n";
+import config from "~/app/config";
 
 defineOptions({ name: "GameAboutPage" });
 
@@ -121,6 +122,16 @@ usePageTitle(() => ({ title: t("page-title.about") as string }));
                 upstream project.
             </li>
             <li>
+                <a
+                    href="https://github.com/TeamMajdata/MajdataPlay"
+                    target="_blank"
+                    rel="noopener"
+                    >MajdataPlay</a
+                >
+                － the visualizer's slide layouts and hit effects (GPL-3.0), and
+                its "Deluxe" note skin.
+            </li>
+            <li>
                 <a href="https://maimai.sega.jp/" target="_blank" rel="noopener"
                     >maimai でらっくす 公式サイト｜セガ</a
                 >
@@ -130,7 +141,15 @@ usePageTitle(() => ({ title: t("page-title.about") as string }));
         </ul>
 
         <h3 class="mv-about-h3">License</h3>
-        <p class="mv-about-p">Distributed under the MIT License.</p>
+        <p class="mv-about-p">
+            Free software under the GNU General Public License, version 3 or any
+            later version (GPL-3.0-or-later).
+            <a :href="config.sourceCodeUrl" target="_blank" rel="noopener">Source code</a>
+            ·
+            <a href="/THIRD_PARTY_NOTICES.txt" target="_blank" rel="noopener"
+                >Third-party notices</a
+            >
+        </p>
 
         <h3 class="mv-about-h3">{{ t("page.about.disclaimer") }}</h3>
         <ul class="mv-about-list">

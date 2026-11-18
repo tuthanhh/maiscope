@@ -1,5 +1,6 @@
 mod component;
 mod judgement_circle;
+pub mod majdata;
 mod movement;
 pub mod resources;
 pub mod schedule;
@@ -30,22 +31,22 @@ pub fn report_sprite_loads(
         return;
     }
 
-    let handles: [(&str, &Handle<Image>); 30] = [
+    let handles: Vec<(&str, &Handle<Image>)> = vec![
         ("tap", &assets.tap),
         ("tap_break", &assets.tap_break),
+        ("tap_each", &assets.tap_each),
         ("tap_ex", &assets.tap_ex),
         ("star", &assets.star),
         ("star_break", &assets.star_break),
+        ("star_each", &assets.star_each),
         ("star_ex", &assets.star_ex),
-        ("hold_head", &assets.hold_head),
-        ("hold_body", &assets.hold_body),
-        ("hold_tail", &assets.hold_tail),
-        ("hold_break_head", &assets.hold_break_head),
-        ("hold_break_body", &assets.hold_break_body),
-        ("hold_break_tail", &assets.hold_break_tail),
-        ("hold_ex_head", &assets.hold_ex_head),
-        ("hold_ex_body", &assets.hold_ex_body),
-        ("hold_ex_tail", &assets.hold_ex_tail),
+        ("star_double", &assets.star_double),
+        ("star_break_double", &assets.star_break_double),
+        ("star_each_double", &assets.star_each_double),
+        ("hold", &assets.hold),
+        ("hold_break", &assets.hold_break),
+        ("hold_each", &assets.hold_each),
+        ("hold_ex", &assets.hold_ex),
         ("hold_end_dot", &assets.hold_end_dot),
         ("normal_halo", &assets.normal_halo),
         ("touch", &assets.touch),
@@ -58,10 +59,12 @@ pub fn report_sprite_loads(
         ("touch_effect", &assets.touch_effect),
         ("touch_effect_star_0", &assets.touch_effect_stars[0]),
         ("touch_effect_star_1", &assets.touch_effect_stars[1]),
-        ("chevron", &assets.chevron),
+        ("slide", &assets.slide[0]),
         ("hexagon", &assets.hexagon),
+        ("ring", &assets.ring),
         ("halo", &assets.halo),
     ];
+    let count = handles.len();
 
     let mut pending = false;
     for (name, handle) in handles {
@@ -76,15 +79,13 @@ pub fn report_sprite_loads(
     }
 
     if !pending && !*done {
-        info!("all 29 note sprites loaded OK");
+        info!("all {count} note sprites loaded OK");
         *done = true;
     }
 }
 
 const RADIUS: f32 = 350.0;
 const NOTE_RADIUS: f32 = 40.0;
-/// Spacing between chevron arrows along a slide track. Tune visually.
-const CHEVRON_SPACING: f32 = NOTE_RADIUS * 0.75;
 /// Outer radius the touch-burst stars travel to/from (shared by spawner + animator).
 const SPARK_STAR_RADIUS: f32 = NOTE_RADIUS * 0.6;
 /// Uniform scale of each small touch-burst star.
@@ -138,11 +139,6 @@ pub mod note_colors {
 
     /// Judgement ring and countdown arc stroke.
     pub const RING: Color = Color::WHITE;
-
-    /// Slide track chevron tint (light cyan).
-    /// Matches `bevy::color::palettes::css::LIGHT_CYAN` but kept here so
-    /// every color lives in one file.
-    pub const CHEVRON: Color = Color::srgb(0.878, 1.0, 1.0);
 
     pub const HEXAGON: Color = Color::srgb(1.0, 0.8, 0.0);
 

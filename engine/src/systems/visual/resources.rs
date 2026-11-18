@@ -57,98 +57,98 @@ impl Default for ButtonLayout {
 /// the lyon visuals with no sprite equivalent (approach triangles, countdown).
 #[derive(Resource)]
 pub struct NoteAssets {
-    // ── Sprite textures ────────────────────────────────────────────────
-    /// Tap note (`sprites/Tap/tap.png`).
+    // ── Sprite textures: MajdataPlay's (`majdata/`), visualizer-majdata 15 ──
+    /// Tap note and its break / each variants; `tap_ex` is the EX outline
+    /// drawn on top (`skin/TapSkins/`).
     pub tap: Handle<Image>,
-    /// Tap break variant (`sprites/Tap/tap_break.png`) — replaces `tap`.
     pub tap_break: Handle<Image>,
-    /// Tap EX outline overlay (`sprites/Tap/tap_ex.png`) — drawn on top.
+    pub tap_each: Handle<Image>,
     pub tap_ex: Handle<Image>,
-    /// Slide / spark star (`sprites/Slide/Star.png`).
+    /// Star (a slide's head, `$`) and its variants; `_double` is a star that
+    /// leads more than one slide (`skin/StarSkins/`).
     pub star: Handle<Image>,
-    /// Star break variant (`sprites/Slide/star_break.png`) — replaces `star`.
     pub star_break: Handle<Image>,
-    /// Star EX outline overlay (`sprites/Slide/star_ex.png`) — drawn on top.
+    pub star_each: Handle<Image>,
     pub star_ex: Handle<Image>,
-    /// Hold head cap — `^` (`sprites/Hold/hold_start.jpg`).
-    pub hold_head: Handle<Image>,
-    /// Hold body rails, stretched in Y (`sprites/Hold/hold_mid.jpg`).
-    pub hold_body: Handle<Image>,
-    /// Hold tail cap — `v` (`sprites/Hold/hold_end.jpg`).
-    pub hold_tail: Handle<Image>,
-    /// Hold break slices — replace the normal head/body/tail.
-    pub hold_break_head: Handle<Image>,
-    pub hold_break_body: Handle<Image>,
-    pub hold_break_tail: Handle<Image>,
-    /// Hold EX outline slices — overlaid on top of the base hold.
-    pub hold_ex_head: Handle<Image>,
-    pub hold_ex_body: Handle<Image>,
-    pub hold_ex_tail: Handle<Image>,
-    /// Glow dot pinned to the hold tail end (`sprites/Hold/Hold_End_dot.png`).
+    pub star_double: Handle<Image>,
+    pub star_break_double: Handle<Image>,
+    pub star_each_double: Handle<Image>,
+    /// Hold: one image per variant, cut into head / body / tail with
+    /// `Sprite.rect` (`skin/HoldSkins/`); `hold_ex` is overlaid like `tap_ex`.
+    pub hold: Handle<Image>,
+    pub hold_break: Handle<Image>,
+    pub hold_each: Handle<Image>,
+    pub hold_ex: Handle<Image>,
+    /// Glow dot pinned to the hold tail end (`skin/NoteGuideSkins/Hold_End.png`).
     pub hold_end_dot: Handle<Image>,
-    /// Note halo ring + glow dot (`sprites/Judge/Normal.png`) for tap/star/hold.
+    /// Note guide ring + glow dot (`skin/NoteGuideSkins/Normal.png`).
     pub normal_halo: Handle<Image>,
-    /// Touch note centre dot (`sprites/Touch/TouchPoint.png`).
+    /// Touch note centre dot (`skin/TouchSkins/touch_point.png`).
     pub touch: Handle<Image>,
-    /// Touch "just" hit flash (`sprites/Touch/TouchJust.png`), shown for the
-    /// brief Holding phase when a touch is struck.
+    /// Touch "just" hit flash (`skin/TouchSkins/touch_just.png`).
     pub touch_just: Handle<Image>,
-    /// Touch approach triangle (`sprites/Touch/Touch_01.png`, points +Y),
-    /// rotated into the 4 directions at spawn.
+    /// Touch approach petal (`skin/TouchSkins/touch.png`), rotated into the 4
+    /// directions at spawn.
     pub touch_triangle: Handle<Image>,
-    /// TouchHold directional triangles (`sprites/Touch/TouchHold_01..04.png`),
-    /// one coloured sprite per direction.
+    /// TouchHold petals, one per direction (`skin/TouchHoldSkins/touchhold_0..3`).
     pub touch_hold: [Handle<Image>; 4],
-    /// Touch death burst halo (`sprites/Touch/TouchEff.png`).
+    /// Touch death burst (`effects/TouchEff.png`) and its star parts
+    /// (`effects/TouchEffparts_01/02.png`).
     pub touch_effect: Handle<Image>,
-    /// Touch burst star parts (`TouchEffparts_01/02.png`), alternated across the
-    /// 8 converging stars.
     pub touch_effect_stars: [Handle<Image>; 2],
-    /// Slide-track chevron arrow (`sprites/Slide/Slide.png`).
-    pub chevron: Handle<Image>,
-    /// Hexagon pop effect (`sprites/Effect/Hex.png`).
+    /// Slide arrow: normal, each, break (`skin/SlideSkins/`).
+    pub slide: [Handle<Image>; 3],
+    /// A fan's rows `wifi_0..10`: normal, each, break (`skin/WifiSkins/`).
+    pub wifi: [[Handle<Image>; 11]; 3],
+    /// Hexagon pop effect (`effects/Hex.png`).
     pub hexagon: Handle<Image>,
-    /// Expanding hold / touch halo (`sprites/Effect/Circle.png`).
+    /// Judgement ring with its eight key marks (`skin/outline.png`).
+    pub ring: Handle<Image>,
+    /// Expanding hold / touch halo (`sprites/Effect/Circle.png`): the one
+    /// sprite MajdataPlay has no counterpart for.
     pub halo: Handle<Image>,
 }
 
 impl FromWorld for NoteAssets {
     fn from_world(world: &mut World) -> Self {
         let server = world.resource::<AssetServer>();
+        let m = |path: &str| server.load(format!("majdata/{path}"));
         Self {
-            tap: server.load("sprites/Tap/tap.png"),
-            tap_break: server.load("sprites/Tap/tap_break.png"),
-            tap_ex: server.load("sprites/Tap/tap_ex.png"),
-            star: server.load("sprites/Slide/Star.png"),
-            star_break: server.load("sprites/Slide/star_break.png"),
-            star_ex: server.load("sprites/Slide/star_ex.png"),
-            hold_head: server.load("sprites/Hold/hold_start.png"),
-            hold_body: server.load("sprites/Hold/hold_mid.png"),
-            hold_tail: server.load("sprites/Hold/hold_end.png"),
-            hold_break_head: server.load("sprites/Hold/hold_break_start.png"),
-            hold_break_body: server.load("sprites/Hold/hold_break_mid.png"),
-            hold_break_tail: server.load("sprites/Hold/hold_break_end.png"),
-            hold_ex_head: server.load("sprites/Hold/hold_ex_start.png"),
-            hold_ex_body: server.load("sprites/Hold/hold_ex_mid.png"),
-            hold_ex_tail: server.load("sprites/Hold/hold_ex_end.png"),
-            hold_end_dot: server.load("sprites/Hold/Hold_End_dot.png"),
-            normal_halo: server.load("sprites/Judge/Normal.png"),
-            touch: server.load("sprites/Touch/TouchPoint.png"),
-            touch_just: server.load("sprites/Touch/TouchJust.png"),
-            touch_triangle: server.load("sprites/Touch/Touch_01.png"),
-            touch_hold: [
-                server.load("sprites/Touch/TouchHold_01.png"),
-                server.load("sprites/Touch/TouchHold_02.png"),
-                server.load("sprites/Touch/TouchHold_03.png"),
-                server.load("sprites/Touch/TouchHold_04.png"),
-            ],
-            touch_effect: server.load("sprites/Touch/TouchEff.png"),
+            tap: m("skin/TapSkins/tap.png"),
+            tap_break: m("skin/TapSkins/tap_break.png"),
+            tap_each: m("skin/TapSkins/tap_each.png"),
+            tap_ex: m("skin/TapSkins/tap_ex.png"),
+            star: m("skin/StarSkins/star.png"),
+            star_break: m("skin/StarSkins/star_break.png"),
+            star_each: m("skin/StarSkins/star_each.png"),
+            star_ex: m("skin/StarSkins/star_ex.png"),
+            star_double: m("skin/StarSkins/star_double.png"),
+            star_break_double: m("skin/StarSkins/star_break_double.png"),
+            star_each_double: m("skin/StarSkins/star_each_double.png"),
+            hold: m("skin/HoldSkins/hold.png"),
+            hold_break: m("skin/HoldSkins/hold_break.png"),
+            hold_each: m("skin/HoldSkins/hold_each.png"),
+            hold_ex: m("skin/HoldSkins/hold_ex.png"),
+            hold_end_dot: m("skin/NoteGuideSkins/Hold_End.png"),
+            normal_halo: m("skin/NoteGuideSkins/Normal.png"),
+            touch: m("skin/TouchSkins/touch_point.png"),
+            touch_just: m("skin/TouchSkins/touch_just.png"),
+            touch_triangle: m("skin/TouchSkins/touch.png"),
+            touch_hold: std::array::from_fn(|i| {
+                m(&format!("skin/TouchHoldSkins/touchhold_{i}.png"))
+            }),
+            touch_effect: m("effects/TouchEff.png"),
             touch_effect_stars: [
-                server.load("sprites/Touch/TouchEffparts_01.png"),
-                server.load("sprites/Touch/TouchEffparts_02.png"),
+                m("effects/TouchEffparts_01.png"),
+                m("effects/TouchEffparts_02.png"),
             ],
-            chevron: server.load("sprites/Slide/Slide.png"),
-            hexagon: server.load("sprites/Effect/Hex.png"),
+            slide: ["slide", "slide_each", "slide_break"]
+                .map(|name| m(&format!("skin/SlideSkins/{name}.png"))),
+            wifi: ["", "each_", "break_"].map(|variant| {
+                std::array::from_fn(|row| m(&format!("skin/WifiSkins/wifi_{variant}{row}.png")))
+            }),
+            hexagon: m("effects/Hex.png"),
+            ring: m("skin/outline.png"),
             halo: server.load("sprites/Effect/Circle.png"),
         }
     }

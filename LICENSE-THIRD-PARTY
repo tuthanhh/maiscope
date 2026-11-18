@@ -1,5 +1,27 @@
+maiscope is licensed under the GNU General Public License, version 3 or (at
+your option) any later version — see LICENSE. It includes the following
+third-party works.
+
+---
+
+engine/assets/majdata/ is copied by scripts/extract-majdata.py (see
+engine/assets/majdata/SOURCE.md):
+
+- The hit-effect sprites and the slide layouts read from its slide prefabs come
+  from MajdataPlay (https://github.com/TeamMajdata/MajdataPlay), commit
+  158c78a1bfd2793d9adba33d476c3b37d64599fc. MajdataPlay is licensed under the
+  GNU General Public License, version 3; its full text is LICENSE in this
+  repository. Copyright (c) the MajdataPlay contributors.
+- The note skin (engine/assets/majdata/skin/) is the "Deluxe" skin shipped with
+  MajdataPlay's Windows build. It is not part of MajdataPlay's source and
+  carries no licence of its own; it appears to be maimai DX art by SEGA, and the
+  SEGA notice below applies to it.
+
+---
+
 engine/assets/ contains sprite images and system sounds derived from maimai, a
-product of SEGA. They are included because the engine requires them as build
+product of SEGA; the MajdataPlay skin in engine/assets/majdata/ is likely derived
+from the same art. They are included because the engine requires them as build
 inputs — `engine/src/systems/audio.rs` embeds the WAVs at compile time, and
 `scripts/build-wasm.sh` copies the sprites into the web bundle. No ownership is
 claimed over them and no licence is asserted; SEGA retains all rights. maiscope is

@@ -24,3 +24,6 @@ crates/simai/tests/fixtures/local/
 
 #
 .ua/
+
+# Python bytecode (scripts/)
+__pycache__/

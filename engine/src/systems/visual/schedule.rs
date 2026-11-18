@@ -115,8 +115,9 @@ pub fn note_end(kind: &NoteKind, hit: f64, bpm: f32) -> f64 {
 mod tests {
     use super::*;
     use crate::systems::component::{ChartEvent, NoteKind};
+    use crate::systems::visual::majdata::SlideLayouts;
     use crate::systems::visual::resources::ButtonLayout;
-    use crate::systems::visual::slide_path::{build_slide_trace, trace_total_secs};
+    use crate::systems::visual::slide_path::{build_slide_from_layout, trace_total_secs};
 
     fn first_kind(chart: &str) -> NoteKind {
         simai::parse_chart(chart)
@@ -198,7 +199,15 @@ mod tests {
             else {
                 panic!("{chart}: a slide");
             };
-            let path = build_slide_trace(&segments, head_button, 120.0, shared_duration, &layout);
+            let path = build_slide_from_layout(
+                &segments,
+                head_button,
+                120.0,
+                shared_duration,
+                &SlideLayouts::load(),
+                &layout,
+            )
+            .path;
             let (_, total) = slide_span_secs(&segments, shared_duration, 120.0);
             assert!(close(total, trace_total_secs(&path)), "{chart}: total");
         }

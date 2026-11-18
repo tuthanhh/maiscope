@@ -50,7 +50,7 @@ pub struct HitTime(pub f64);
 // ------------------------
 // Special visual element
 // ------------------------
-#[derive(Component)]
+#[derive(Component, Debug)]
 pub enum HoldNoteElement {
     Head,
     Body,
