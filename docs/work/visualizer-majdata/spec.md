@@ -1,6 +1,7 @@
 # Spec — Visualizer: a MajdataPlay playfield
 
-**Status:** approved 2026-11-18 (after a builder check); next, the plan
+**Status:** approved 2026-11-18 (after a builder check); piece 1 planned in
+[`plan-1-player-behaviour.md`](plan-1-player-behaviour.md)
 **Milestone:** after v2.0 ships
 **Parent:** none (follows [`frontend-redesign`](../frontend-redesign/spec.md))
 
@@ -103,7 +104,11 @@ agreed to the order).
   own `Timer`, ticked by wall time (`timer.tick(time.delta())` in
   `engine/src/systems/visual/movement/mod.rs`). Pause stops the chart clock
   (`ChartPlayback::pause`) and the music, not those timers.
-- **Fix: every on-screen element is a function of chart time.** A note's
+- **Planning change (2026-11-18, plan 1):** the existing per-note timers are
+  gated on the clock instead — they advance by a delta that is zero while
+  paused, which is all pause needs. Deriving every element from chart time
+  (below) moves to piece 2, where seeking needs it.
+- **Fix (now piece 2): every on-screen element is a function of chart time.** A note's
   phase and position are computed from `ChartPlayback`'s elapsed chart
   time and the note's own times, not accumulated per frame. Pause, speed
   changes and (in piece 2) seeking then follow from the one clock with no
