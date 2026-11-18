@@ -64,6 +64,7 @@ page:
     drawRandom: 随机
     reset: 重置
     myList: 我的列表
+    typeToNarrow: 继续输入以缩小列表
     filters: 筛选
     pages: 分页
     previousPage: 上一页

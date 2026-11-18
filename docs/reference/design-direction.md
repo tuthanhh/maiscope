@@ -241,6 +241,15 @@ Controls inside: text input, select, textarea, chip row, file picker.
 Help or error text under the control in `meta`, `--fg-muted` for help,
 `--fg` for error.
 
+### Combobox
+
+A text input over a list of known values (`MvCombobox`): the drawer's
+Artist. Focus or a click drops the whole list open, as a select would;
+typing narrows it, names that start with the text first; arrows and Enter
+choose, Escape closes the list and not the dialog around it. Free text
+stays valid. The list is `--bg` with a `--line-strong` hairline, the active
+row on `--bg-panel`, at most 200 rows with a line asking for more typing.
+
 ### Text input, select, textarea
 
 Height `--control-h` (textarea 8 rows), padding `0 var(--control-px)`,
@@ -304,8 +313,11 @@ shared and so Back closes it.
 
 ### Drawer
 
-Filters. Width `--drawer-w` from the right on desktop, full width from the
-bottom on phones, `--bg-panel`, hairline edge, over `--scrim`. Heading in
+Filters. On desktop a dialog floating in the middle of the screen,
+`--modal-w` wide and at most 80vh, scrolling inside, with a hairline border
+and `--r` corners; on phones full width from the bottom. `--bg-panel`, over
+`--scrim`. (Until 2026-11-18 it was a `--drawer-w` panel against the right
+edge; the maintainer preferred it centred, `frontend-redesign` 16.) Heading in
 `heading`, a Reset text button, fields stacked, no footer. Applying is
 live; there is no Apply button.
 

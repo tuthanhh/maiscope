@@ -3,8 +3,8 @@ import { ref, useId } from "vue";
 import useDialogFocus from "~/composables/useDialogFocus";
 import MvButton from "./MvButton.vue";
 
-// design-direction "Drawer": filters, from the right on desktop and from the
-// bottom on phones, over the scrim. A heading, an action slot (Reset), the
+// design-direction "Drawer": filters, a dialog floating in the middle of the
+// screen on desktop and a sheet from the bottom on phones, over the scrim. A heading, an action slot (Reset), the
 // fields, no footer: whatever it holds applies live. A modal dialog while
 // open (`useDialogFocus`).
 defineProps<{ title: string; closeLabel: string }>();
@@ -48,18 +48,20 @@ const { onKeyDown } = useDialogFocus(open, panel, () => {
   position: fixed;
   inset: 0;
   z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s-6);
   background: var(--scrim);
 }
 .mv-drawer {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: min(var(--drawer-w), 100%);
+  width: min(var(--modal-w), 100%);
+  max-height: 80vh;
   display: flex;
   flex-direction: column;
   background: var(--bg-panel);
-  border-left: var(--line-w) solid var(--line);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r);
   animation: mv-fade var(--dur-slow) ease-out;
 }
 .mv-drawer:focus {
@@ -83,13 +85,16 @@ const { onKeyDown } = useDialogFocus(open, panel, () => {
 }
 
 @media (max-width: #{bp.$bp-md - 1px}) {
+  .mv-drawer-scrim {
+    align-items: flex-end;
+    padding: 0;
+  }
   .mv-drawer {
-    top: auto;
-    left: 0;
     width: 100%;
     max-height: 85dvh;
-    border-left: none;
+    border: none;
     border-top: var(--line-w) solid var(--line);
+    border-radius: 0;
     padding-bottom: env(safe-area-inset-bottom);
   }
   .mv-drawer-head {

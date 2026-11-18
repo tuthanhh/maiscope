@@ -64,6 +64,7 @@ page:
     drawRandom: ランダム
     reset: リセット
     myList: マイリスト
+    typeToNarrow: 入力を続けて絞り込んでください
     filters: フィルター
     pages: ページ
     previousPage: 前のページ

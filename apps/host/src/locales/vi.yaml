@@ -64,6 +64,7 @@ page:
     drawRandom: Ngẫu nhiên
     reset: Đặt lại
     myList: Danh sách của tôi
+    typeToNarrow: Gõ thêm để thu hẹp danh sách
     filters: Bộ lọc
     pages: Trang
     previousPage: Trang trước

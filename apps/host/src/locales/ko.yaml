@@ -64,6 +64,7 @@ page:
     drawRandom: 랜덤
     reset: 초기화
     myList: 마이 리스트
+    typeToNarrow: 계속 입력해 목록을 좁히세요
     filters: 필터
     pages: 페이지
     previousPage: 이전 페이지

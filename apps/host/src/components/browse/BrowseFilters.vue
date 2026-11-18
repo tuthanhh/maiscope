@@ -4,6 +4,7 @@ import useGameData from "~/composables/useGameData";
 import MvChip from "~/components/ui/MvChip.vue";
 import MvField from "~/components/ui/MvField.vue";
 import MvTextInput from "~/components/ui/MvTextInput.vue";
+import MvCombobox from "~/components/ui/MvCombobox.vue";
 import MvSelect, { type SelectOption } from "~/components/ui/MvSelect.vue";
 
 export type BrowseForm = {
@@ -36,6 +37,8 @@ const props = defineProps<{
     versionOptions: SelectOption[];
     designerOptions: SelectOption[];
     regionOptions: SelectOption[];
+    /** Every artist in the Catalog, sorted, for the artist picker. */
+    artistOptions: string[];
     typeChips: { type: string }[];
 }>();
 
@@ -62,7 +65,13 @@ function toggleType(type: string): void {
         </span>
     </MvField>
     <MvField :label="t('term.artist')">
-        <MvTextInput v-model="form.artist" class="mv-filter-control" />
+        <MvCombobox
+            v-model="form.artist"
+            class="mv-filter-control"
+            :options="artistOptions"
+            :placeholder="t('ui.all') as string"
+            :more-label="t('page.songs.typeToNarrow') as string"
+        />
         <span class="mv-filter-chips">
             <MvChip
                 :active="form.matchExactArtist"

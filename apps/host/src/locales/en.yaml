@@ -64,6 +64,7 @@ page:
     drawRandom: Draw
     reset: Reset
     myList: My list
+    typeToNarrow: Keep typing to narrow the list
     filters: Filters
     pages: Pages
     previousPage: Previous page

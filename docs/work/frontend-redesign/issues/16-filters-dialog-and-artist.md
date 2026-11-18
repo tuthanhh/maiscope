@@ -9,13 +9,23 @@ still allowed.
 
 **Blocked by:** 10.
 
-**Status:** todo
+**Status:** done
 
-- [ ] Desktop: centred, `--modal-w`-wide dialog, at most 80vh, scrolling
+- [x] Desktop: centred, `--modal-w`-wide dialog, at most 80vh, scrolling
       inside; same heading, Reset and close; phones unchanged
-- [ ] Artist: a combobox (ARIA 1.2 pattern) over every artist in the
+- [x] Artist: a combobox (ARIA 1.2 pattern) over every artist in the
       Catalog, sorted; opens on focus or click with the full list, filters as
       you type, arrows and Enter choose, Escape closes the list (not the
       dialog); a typed value that matches no artist still filters by substring
-- [ ] Exact match keeps working with a chosen artist
-- [ ] design-direction's "Drawer" section updated
+- [x] Exact match keeps working with a chosen artist
+- [x] design-direction's "Drawer" section updated
+
+## Comments
+
+**2026-11-18 — built.** `MvDrawer` keeps its name and API; on desktop the
+scrim centres it as a dialog, on phones it is the same bottom sheet.
+`MvCombobox` is new in `components/ui/`: ARIA 1.2 combobox with list
+autocomplete, `aria-activedescendant` for the highlighted row, options
+chosen on `mousedown` so the input never blurs first. Artist options are
+each Catalog artist once, sorted with `localeCompare`; prefix matches rank
+first. A string "Keep typing to narrow the list" joins the nine locales.

@@ -64,6 +64,7 @@ page:
     drawRandom: 隨機
     reset: 重設
     myList: 我的清單
+    typeToNarrow: 繼續輸入以縮小清單
     filters: 篩選
     pages: 分頁
     previousPage: 上一頁

@@ -64,6 +64,7 @@ page:
     drawRandom: Acak
     reset: Atur ulang
     myList: Daftarku
+    typeToNarrow: Ketik lagi untuk mempersempit daftar
     filters: Filter
     pages: Halaman
     previousPage: Halaman sebelumnya

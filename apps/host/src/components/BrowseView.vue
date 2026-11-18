@@ -67,6 +67,12 @@ const levelOptions = computed(() => toSelectOptions(options.value.levels));
 const regionOptions = computed(() => toSelectOptions(options.value.regions));
 
 const typeChips = computed(() => data.value.types);
+// Each artist once, in the order a reader looks for them.
+const artistOptions = computed(() =>
+    [...new Set(data.value.songs.map((s) => s.artist).filter((a): a is string => !!a))].sort(
+        (a, b) => a.localeCompare(b),
+    ),
+);
 // `difficulties` also lists every UTAGE tag, one per UTAGE sheet. Those are
 // reached through the UTAGE type chip, so the difficulty chips stay the ones
 // standard and DX sheets use.
@@ -318,6 +324,7 @@ function retry(): void {
                 :designer-options="designerOptions"
                 :region-options="regionOptions"
                 :type-chips="typeChips"
+                :artist-options="artistOptions"
             />
         </MvDrawer>
     </div>

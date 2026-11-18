@@ -64,6 +64,7 @@ page:
     drawRandom: Al azar
     reset: Restablecer
     myList: Mi lista
+    typeToNarrow: Sigue escribiendo para acotar la lista
     filters: Filtros
     pages: Páginas
     previousPage: Página anterior

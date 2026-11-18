@@ -64,6 +64,7 @@ page:
     drawRandom: Случайный
     reset: Сбросить
     myList: Мой список
+    typeToNarrow: Продолжайте вводить, чтобы сузить список
     filters: Фильтры
     pages: Страницы
     previousPage: Предыдущая страница
