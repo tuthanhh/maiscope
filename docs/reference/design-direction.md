@@ -57,21 +57,18 @@ Type families:
 
 | Token | Stack |
 |---|---|
-| `--f-sans` | `Inter, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", "Noto Sans CJK JP", "Apple SD Gothic Neo", "Malgun Gothic", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif` |
-| `--f-mono` | `"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace` |
-| `--f-display` | `"JetBrains Mono"`, then the same CJK system faces as `--f-sans`, then `ui-monospace` |
+| `--f-mono` | `"JetBrainsMono Nerd Font", "JetBrainsMono NF", "JetBrains Mono"`, then the CJK system faces (`"Hiragino Sans"` … `"Microsoft YaHei"`), then `ui-monospace, "SF Mono", Menlo, monospace` |
+| `--f-sans` | `var(--f-mono)` |
+| `--f-display` | `var(--f-mono)` |
 
-`--f-display` gives the brand, the `heading`, `title` and `display` roles
-and the card title their own face; body text and controls keep Inter. It
-was Space Grotesk for a day (`frontend-redesign` 15) and is JetBrains Mono
-since 21, at the maintainer's choice — the face maiscope began with. It
-styles Latin only; a Japanese title shows in the system CJK face.
-
-Inter ships as one Latin-subset variable file; the CJK names are system
-fonts and nothing is downloaded for them. The `lang` attribute on `<html>`
-follows the active locale so the browser picks the right CJK face for
-Chinese, Japanese and Korean. Inter is a call, not a requirement: any
-neutral grotesque with a Latin subset under 40 KB serves the same role.
+One face everywhere since 2026-11-18 (`frontend-redesign` 22): JetBrains
+Mono, the face maiscope began with, at the maintainer's choice. The Nerd
+Font build is listed first for machines that have it installed; everyone
+else gets the webfont. The three tokens stay, so the roles keep their
+names and a later split is one line. The way there: Inter for body and
+headings (07), Space Grotesk for display (15), JetBrains Mono for display
+(21), then mono throughout. It styles Latin only — Japanese, Chinese and
+Korean show in the system CJK faces, chosen by `<html lang>`.
 
 Spacing on a 4px base, radius, line, motion:
 
@@ -583,7 +580,7 @@ Search on YouTube, Sheet data, the list and grid toggle labels.
 | Decision | Chosen | Rejected |
 |---|---|---|
 | Where style comes from | Sans and mono pairing, monochrome | Mono only; one accent colour |
-| Sans coverage | Latin webfont, system CJK | CJK webfont; system-only stack |
+| CJK coverage | Latin webfont, system CJK | CJK webfont; system-only stack |
 | Browse view | Grid default with list kept (reversed 2026-11-18; was grid only) | Grid only |
 | Filters | Search plus difficulty and level on the surface, rest in a drawer | Search only; full panel collapsed |
 | Card tap | Song modal, information first | Song page; two taps on the card |
@@ -594,7 +591,7 @@ Search on YouTube, Sheet data, the list and grid toggle labels.
 | Upload from the player | Navigate to the one upload page prefilled | A sheet over the player |
 | Token structure | Three layers, state tables | Two layers; plus a style page now |
 | Muted text | Raised to pass AA | Kept as is |
-| Display face (2026-11-18) | JetBrains Mono for brand, headings, titles; Inter body | Space Grotesk (tried in 15); one rounded face everywhere; a serif display face |
+| Type (2026-11-18) | JetBrains Mono everywhere, Nerd Font first | Inter body with a display face (Space Grotesk, then JetBrains Mono); one rounded face; a serif display face |
 | Top-bar end (2026-11-18) | Settings behind a gear; the account on its own: Sign in, or the avatar | One menu holding both |
 | Brand colour (2026-11-18) | The maintainer's coloured logo, the shell stays monochrome | A monochrome mark |
 | Filters container (2026-11-18) | Centred dialog on desktop, bottom sheet on phones | Edge drawer |
