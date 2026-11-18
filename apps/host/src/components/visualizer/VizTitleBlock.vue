@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import useI18n from "~/composables/useI18n";
 import useGameData from "~/composables/useGameData";
 import type { Sheet } from "~/types";
@@ -21,6 +21,19 @@ const props = defineProps<{
 defineEmits<{ bookmark: []; share: [] }>();
 
 const { t } = useI18n();
+
+// Following an "other difficulty" link removes that link (it becomes the
+// current sheet), dropping focus to <body>. Move it to the new title, which
+// also announces the new sheet.
+const heading = ref<HTMLElement | null>(null);
+// After the DOM update, when the followed link is already gone.
+watch(
+  () => props.sheet.key,
+  () => {
+    if (document.activeElement === document.body) heading.value?.focus();
+  },
+  { flush: "post" },
+);
 const { getTypeAbbr, getDifficultyName, getDifficultyColor, getVersionAbbr } = useGameData();
 
 function colorOf(sheet: Sheet): string {
@@ -63,7 +76,7 @@ function siblingName(sheet: Sheet): string {
 <template>
   <section class="viz-title">
     <div class="viz-title-head">
-      <h1 class="t-title viz-title-name">{{ sheet.song.title }}</h1>
+      <h1 ref="heading" class="t-title viz-title-name" tabindex="-1">{{ sheet.song.title }}</h1>
       <p class="viz-title-level" :style="{ '--diff': colorOf(sheet) }">
         <span class="t-label">{{ siblingName(sheet) }}</span>
         <span class="t-heading t-num viz-title-level-value">{{ sheet.level ?? "?" }}</span>
@@ -135,6 +148,7 @@ function siblingName(sheet: Sheet): string {
 }
 .viz-title-name {
   margin: 0;
+  outline: none;
   overflow-wrap: anywhere;
 }
 .viz-title-level {

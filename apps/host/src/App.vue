@@ -21,7 +21,6 @@ usePageTitle(() => ({
 }));
 
 onMounted(() => {
-    dataStore.loadReference();
     dataStore.loadData();
 });
 

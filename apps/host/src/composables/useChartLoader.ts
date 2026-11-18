@@ -56,7 +56,8 @@ export default function useChartLoader(playback: Playback): {
 
         loading.value = true;
         errorMsg.value = "";
-        sheetInfo.value = null;
+        // The previous sheet's info stays until the new one arrives, so the
+        // title block does not unmount (and drop focus) between the two.
 
         // Info is best-effort and independent of chart availability — resolve and
         // display it on its own, so the info card still shows for songs with no
@@ -67,10 +68,14 @@ export default function useChartLoader(playback: Playback): {
             .then((info) => {
                 if (key === lastKey) sheetInfo.value = info;
             })
-            .catch(() => {});
+            .catch(() => {
+                if (key === lastKey) sheetInfo.value = null;
+            });
 
         try {
             const chart = await fetchChart(song, type, difficulty);
+            // A later deep link superseded this one while it was in flight.
+            if (key !== lastKey) return;
             simai.value = chart;
             await loadChart(chart);
 
@@ -87,9 +92,9 @@ export default function useChartLoader(playback: Playback): {
             }
             if (playback.speed.value !== 1) setSpeed(playback.speed.value);
         } catch (err: unknown) {
-            errorMsg.value = err instanceof Error ? err.message : String(err);
+            if (key === lastKey) errorMsg.value = err instanceof Error ? err.message : String(err);
         } finally {
-            loading.value = false;
+            if (key === lastKey) loading.value = false;
         }
     }
 
@@ -103,7 +108,8 @@ export default function useChartLoader(playback: Playback): {
             await loadChart(simai.value);
             // Engine transitions to Playing on its own once the chart is parsed.
             playback.markLoaded(true);
-            lastKey = ""; // manual load supersedes any deep-link key
+            // `lastKey` keeps the URL's deep link: the page reloads only when
+            // the link itself changes, never over pasted text.
             sheetInfo.value = null; // pasted chart has no catalog metadata
             resumeAudio(); // this click is a gesture — unlock sound
             if (playback.speed.value !== 1) setSpeed(playback.speed.value);

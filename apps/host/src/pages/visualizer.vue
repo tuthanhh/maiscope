@@ -95,12 +95,17 @@ onUnmounted(() => {
 
 // Another difficulty of the song is a link to this same route: the page does
 // not remount, so a changed deep link loads here.
-watch(
-    () => route.query,
-    (query) => {
-        if (status.value === "ready") autoLoad(query);
-    },
+// Watched as one key, so the `?debug`/`?msaa`/`?scale`/`?lead` toggles do
+// nothing here (they apply on mount only), and only while this page is the
+// route: Back to a song-modal URL carries the same three parameters.
+const deepLinkKey = computed(() =>
+    hasDeepLink(route.query)
+        ? `${route.query.song}/${route.query.type}/${route.query.difficulty}`
+        : "",
 );
+watch(deepLinkKey, (key) => {
+    if (key && route.name === "visualizer" && status.value === "ready") autoLoad(route.query);
+});
 
 // The title block's siblings come from the Catalog: the single-sheet fetch
 // carries no other sheets.
@@ -115,22 +120,44 @@ const siblings = computed(() => {
 const { isBookmarked, toggleSheetSelection } = useSelectedSheets();
 const bookmarked = computed(() => !!sheetInfo.value && isBookmarked(sheetInfo.value.key));
 
-// Share: the system sheet where there is one (phones), else the clipboard.
+// Share: the system sheet where there is one (phones), else the clipboard,
+// else a hidden textarea and `execCommand` (no clipboard API on plain http).
 const shareNote = ref("");
+let shareNoteTimer: number | undefined;
+function copyText(text: string): Promise<void> {
+    if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.append(area);
+    area.select();
+    const ok = document.execCommand("copy");
+    area.remove();
+    return ok ? Promise.resolve() : Promise.reject(new Error("copy failed"));
+}
 async function share(): Promise<void> {
     const url = window.location.href;
-    try {
-        if (navigator.share) {
+    if (navigator.share) {
+        try {
             await navigator.share({ title: sheetInfo.value?.song.title, url });
             return;
+        } catch (err) {
+            // Dismissed by the user: done. Refused for any other reason: copy.
+            if (err instanceof DOMException && err.name === "AbortError") return;
         }
-        await navigator.clipboard.writeText(url);
+    }
+    try {
+        await copyText(url);
         shareNote.value = t("description.copied") as string;
-        window.setTimeout(() => (shareNote.value = ""), 2000);
+        window.clearTimeout(shareNoteTimer);
+        shareNoteTimer = window.setTimeout(() => (shareNote.value = ""), 2000);
     } catch {
-        // Dismissed or denied: nothing to report.
+        // Nothing left to try; the address bar still holds the link.
     }
 }
+onUnmounted(() => window.clearTimeout(shareNoteTimer));
 
 // Slider tick rules, hoisted so the sliders' computed ticks are not rebuilt
 // on every page render (the `?debug` readout re-renders once a second).
@@ -201,7 +228,10 @@ usePageTitle(() => ({ title: t("page-title.visualizer") as string }));
                 @bookmark="toggleSheetSelection(sheetInfo)"
                 @share="share"
             />
-            <p v-else class="t-body t-muted mv-viz-awaiting">{{ t("page.viz.awaiting") }}</p>
+            <template v-else>
+                <h1 class="sr-only">{{ t("page-title.visualizer") }}</h1>
+                <p class="t-body t-muted mv-viz-awaiting">{{ t("page.viz.awaiting") }}</p>
+            </template>
         </div>
 
         <VizPastePanel

@@ -37,7 +37,7 @@ provide(
       {{ label }}
     </label>
     <slot />
-    <p v-if="error" :id="noteId" class="mv-field-note t-meta">{{ error }}</p>
+    <p v-if="error" :id="noteId" class="mv-field-note t-meta" role="alert">{{ error }}</p>
     <p v-else-if="help" :id="noteId" class="mv-field-note t-meta t-muted">{{ help }}</p>
   </div>
 </template>

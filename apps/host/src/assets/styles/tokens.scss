@@ -173,3 +173,17 @@
 }
 // Reduced motion removes the 8px rise of a modal or drawer entering and
 // nothing else: the fade stays (`mv-fade` in theme.scss is redefined there).
+
+// Read by assistive technology, not drawn: a page heading the layout does
+// not show (the chart page before a chart).
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

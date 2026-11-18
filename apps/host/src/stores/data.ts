@@ -149,6 +149,9 @@ export const useDataStore = defineStore("data", () => {
     const status = currentLoadingStatus.value;
     if (status !== LoadingStatus.PENDING && status !== LoadingStatus.ERROR) return;
     currentLoadingStatus.value = LoadingStatus.LOADING;
+    // The reference tables ride along: fetched at boot, and fetched again on
+    // a retry when the first attempt failed.
+    if (reference.value === null) loadReference();
 
     dropRetiredCaches();
     const cachedRevision = await paintFromCache();
