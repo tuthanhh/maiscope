@@ -55,3 +55,9 @@ internal level on — they are numeric bounds, and `14+` as a lower bound
 still reads right against an internal `14.7`. Open: the changed English copy
 (`myListEmpty`, `filterResultEmpty`, `myList`, `drawRandom`,
 `searchPlaceholder`) is stale in the eight other locales until 13.
+
+**2026-11-18 — feature review.** The song modal's Play left Browse, and
+Back remounted it empty: filters, page and My list lived in the page
+component. They now live in `stores/browse.ts` for the session, and the
+router's `scrollBehavior` restores the scroll position on Back and Forward
+(and leaves it alone when only the query changes, as the modal does).

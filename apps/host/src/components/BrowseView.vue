@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { reactive, computed, watch, ref } from "vue";
+import { computed, watch, ref } from "vue";
+import { storeToRefs } from "pinia";
 import { useDataStore } from "~/stores/data";
+import { emptyBrowseForm, useBrowseStore } from "~/stores/browse";
 import useI18n from "~/composables/useI18n";
 import useGameData from "~/composables/useGameData";
 import useSongModal from "~/composables/useSongModal";
@@ -25,9 +27,7 @@ import MvPager from "~/components/ui/MvPager.vue";
 import MvSelect, { type SelectOption } from "~/components/ui/MvSelect.vue";
 import MvTextInput from "~/components/ui/MvTextInput.vue";
 import SongModal from "~/components/dialogs/SongModal.vue";
-import BrowseFilters, {
-    type BrowseForm,
-} from "~/components/browse/BrowseFilters.vue";
+import BrowseFilters from "~/components/browse/BrowseFilters.vue";
 
 // design-direction "Browse" and its worked example. Search, difficulty chips
 // and the level range sit on the surface; the drawer holds the rest. Every
@@ -41,30 +41,11 @@ const { getTypeAbbr, getDifficultyName, getDifficultyColor } = useGameData();
 const songModal = useSongModal();
 const { selectedSheets, toggleSheetSelection } = useSelectedSheets();
 
-// ── filter form (declared, applied, and reset in one place) ───
-function emptyForm(): BrowseForm {
-    return {
-        title: "",
-        artist: "",
-        designer: "",
-        category: "",
-        version: "",
-        types: [],
-        difficulties: [],
-        levelMin: "",
-        levelMax: "",
-        bpmMin: "",
-        bpmMax: "",
-        region: "",
-        useRegionOverride: false,
-        matchExactTitle: false,
-        matchExactArtist: false,
-        useInternalLevel: false,
-    };
-}
-const form = reactive(emptyForm());
+// ── filter form: kept in the browse store, so it outlives the page ──
+const browse = useBrowseStore();
+const form = browse.form;
+const { myListOnly, currentPage } = storeToRefs(browse);
 const drawerOpen = ref(false);
-const myListOnly = ref(false);
 
 // ── data + options (reuses the existing filter engine) ────────
 const data = computed(() => dataStore.currentData);
@@ -152,7 +133,6 @@ const loading = computed(
 
 // ── pagination ────────────────────────────────────────────────
 const PAGE_SIZE = 24; // divides by the 2, 3 and 4 grid columns
-const currentPage = ref(1);
 const top = ref<HTMLElement | null>(null);
 
 // A filter change starts over at the first page.
@@ -187,7 +167,7 @@ function drawRandom(): void {
 // are on the surface and cleared there.
 function reset(): void {
     const { title, difficulties, levelMin, levelMax } = form;
-    Object.assign(form, emptyForm(), { title, difficulties, levelMin, levelMax });
+    Object.assign(form, emptyBrowseForm(), { title, difficulties, levelMin, levelMax });
 }
 function retry(): void {
     dataStore.loadData();

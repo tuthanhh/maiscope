@@ -47,6 +47,14 @@ const routes: RouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHashHistory(),
   routes,
+  // Back and Forward return to where the page was; a query change on the same
+  // page (the song modal opening or switching sheet) leaves the scroll alone;
+  // any other navigation starts at the top.
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) return savedPosition;
+    if (to.name === from.name) return false;
+    return { top: 0 };
+  },
 });
 
 export default router;
