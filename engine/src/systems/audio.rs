@@ -215,19 +215,23 @@ fn coalesce(mut due: Vec<PlayGuideSoundMessage>) -> Vec<PlayGuideSoundMessage> {
 fn is_audible(kind: &NoteKind) -> bool {
     !matches!(kind, NoteKind::HeadlessSlide { .. })
 }
-/// Shortest comfortable gap between metronome clicks, in **wall** seconds. The
-/// beat interval is doubled (1, 2, 4, 8… beats per click) until it clears this,
-/// so fast songs click once per bar and slow songs once per beat — always easy
-/// to catch by ear.
-const METRONOME_MIN_CLICK_SECS: f64 = 0.5;
+/// The metronome clicks every beat × 2^k: the one k that puts the gap
+/// between clicks, in **wall** seconds, in `[MIN, 2 × MIN)`. Slow songs click
+/// on half beats, fast ones on every other beat, and every click stays on the
+/// beat grid; a gap of 0.3–0.6 s is easy to follow by ear.
+const METRONOME_MIN_CLICK_SECS: f64 = 0.3;
 
-/// The metronome's click interval (chart seconds) at `bpm` and play speed: a
-/// quarter note, doubled until the *wall* gap clears the comfortable minimum.
+/// The metronome's click interval (chart seconds) at `bpm` and play speed:
+/// a beat × 2^k, halved or doubled until the *wall* gap falls in
+/// `[METRONOME_MIN_CLICK_SECS, 2 × METRONOME_MIN_CLICK_SECS)`.
 fn click_interval_secs(bpm: f32, chart_speed: f32) -> f64 {
     let chart_speed = chart_speed.max(0.01) as f64;
     let mut interval = 60.0 / bpm.max(1.0) as f64;
     while interval / chart_speed < METRONOME_MIN_CLICK_SECS {
         interval *= 2.0;
+    }
+    while interval / chart_speed >= 2.0 * METRONOME_MIN_CLICK_SECS {
+        interval /= 2.0;
     }
     interval
 }
@@ -802,15 +806,32 @@ mod tests {
         assert_eq!(metro.last_elapsed, 1.25);
     }
 
-    /// The click interval doubles at fast tempos; after a seek the grid is
-    /// the one playback built, interval by interval (final review M2).
+    /// After a seek the click grid is the one playback built, interval by
+    /// interval (final review M2).
     #[test]
     fn the_metronome_counts_clicks_across_tempo_changes() {
         // 120 BPM clicks every 0.5 s for the first second; at 300 BPM a beat
-        // (0.2 s) doubles to 0.8 s. At 1.4 s: 2 clicks + 0.4/0.8.
+        // (0.2 s) doubles to 0.4 s. At 1.4 s: 2 clicks + 0.4/0.4.
         let events = parsed("(120){4}1,1,(300)1,1,1,1,E");
         let mut metro = Metronome::default();
         metro.seek(&events, 1.4, 1.0);
-        assert!((metro.phase - 2.5).abs() < 1e-9, "{}", metro.phase);
+        assert!((metro.phase - 3.0).abs() < 1e-9, "{}", metro.phase);
+    }
+
+    /// The metronome clicks every beat × 2^k: the one k that puts the gap
+    /// between clicks, in wall time, in [0.3 s, 0.6 s) — halving at slow
+    /// tempos, doubling at fast ones, never off the beat grid.
+    #[test]
+    fn the_metronome_clicks_on_a_power_of_two_of_the_beat() {
+        let ms = |bpm: f32, speed: f32| (click_interval_secs(bpm, speed) * 1000.0).round();
+        assert_eq!(ms(60.0, 1.0), 500.0); // every half beat
+        assert_eq!(ms(120.0, 1.0), 500.0);
+        assert_eq!(ms(165.0, 1.0), 364.0); // every beat, not every other
+        assert_eq!(ms(200.0, 1.0), 300.0);
+        assert_eq!(ms(240.0, 1.0), 500.0); // every other beat
+        assert_eq!(ms(300.0, 1.0), 400.0);
+        // At half speed a 165 BPM beat takes 0.727 s of wall time: the
+        // metronome clicks every half beat (0.364 s of wall time).
+        assert_eq!(ms(165.0, 0.5), 182.0);
     }
 }
