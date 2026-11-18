@@ -7,6 +7,7 @@ mod audio;
 mod chart_playback;
 pub(crate) mod component;
 mod frame_stats;
+mod timeline;
 mod visual;
 
 const GROWING: f64 = 1.5;
