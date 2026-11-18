@@ -181,8 +181,8 @@ valid; the v1 text is in this file's history.
 
 ## 4. Auth — GitHub OAuth, roles user/moderator/admin  *(phase 2)*
 
-**Implemented on the v2 branch** (`docs/work/server-auth-github-oauth/`); no
-screen calls it yet (`frontend-redesign` 05). Required to gate §5.
+**Implemented** (`docs/work/server-auth-github-oauth/`); the frontend signs
+in through it (`frontend-redesign` 20). Required to gate §5.
 
 The API before v2 had no accounts and held no PII. v2 ends that deliberately rather than by
 accident: the stored set is `github_id`, `login`, `avatar_url`, `role`, a
@@ -384,5 +384,5 @@ Status enum: `pending | approved | rejected | merged`.
 | `hasChart` | `components/dialogs/SongModal.vue` (Play is enabled only with a chart) |
 | `GET /songs/{id}/sheets/{type}/{code}/chart` | `composables/useEngine.ts:fetchChart`, through `useChartLoader` (the chart page's deep link) |
 | `GET /sync/manifest` | `stores/data.ts:loadData`: the revision probe before refetching the Catalog |
-| §4 auth | not called yet; the sign-in UI is `frontend-redesign` 05 |
+| §4 auth | `stores/session.ts` (sign-in, refresh, `/me`, deletion), `pages/auth-callback.vue`, `app/oauthCallback.ts` |
 | §5 contributions *(superseded)* | replaced by the community library — [ADR-0013](../adr/0013-community-charts-beside-the-catalog.md) |

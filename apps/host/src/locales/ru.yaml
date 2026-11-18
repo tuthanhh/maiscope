@@ -18,6 +18,25 @@ nav:
   language: Язык
 home:
   subtitle: проект визуализации maimai
+auth:
+  signIn: 'Войти'
+  signInWithGitHub: 'Войти через GitHub'
+  signOut: 'Выйти'
+  accountMenu: 'Меню аккаунта {login}'
+  deleteAccount: 'Удалить аккаунт…'
+  deleteTitle: 'Удалить аккаунт?'
+  deleteBody: 'Ваше имя и аватар GitHub удаляются из maiscope, а сеансы на всех устройствах завершаются. Опубликованное остаётся под именем удалённого пользователя. Если войти снова, аккаунт начнётся заново.'
+  deleteConfirm: 'Удалить аккаунт'
+  deleteFailed: 'Не удалось удалить аккаунт'
+  cancel: 'Отмена'
+  signingIn: 'Вход…'
+  failed: 'Вход не завершён'
+  failureState: 'Этот вход начался не в этой вкладке, поэтому он остановлен. Начните заново с кнопки «Войти».'
+  failureRefused: 'GitHub не принял вход — ссылка могла устареть или уже использоваться.'
+  failureDenied: 'Вход отменён на GitHub.'
+  failureUnreachable: 'Не удалось связаться с GitHub или maiscope. Проверьте подключение и попробуйте ещё раз.'
+  tryAgain: 'Попробовать снова'
+  backHome: 'На главную'
 community:
   coming: Фанатские чарты появятся вместе с библиотекой сообщества.
 ui:

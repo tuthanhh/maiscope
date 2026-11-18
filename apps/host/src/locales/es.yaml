@@ -18,6 +18,25 @@ nav:
   language: Idioma
 home:
   subtitle: proyecto de visualización de maimai
+auth:
+  signIn: 'Iniciar sesión'
+  signInWithGitHub: 'Iniciar sesión con GitHub'
+  signOut: 'Cerrar sesión'
+  accountMenu: 'Menú de la cuenta de {login}'
+  deleteAccount: 'Eliminar cuenta…'
+  deleteTitle: '¿Eliminar tu cuenta?'
+  deleteBody: 'Tu nombre y tu foto de GitHub se quitan de maiscope y se cierra tu sesión en todos los dispositivos. Lo que publicaste se queda, atribuido a un usuario eliminado. Si vuelves a iniciar sesión, empezarás una cuenta nueva.'
+  deleteConfirm: 'Eliminar cuenta'
+  deleteFailed: 'No se pudo eliminar la cuenta'
+  cancel: 'Cancelar'
+  signingIn: 'Iniciando sesión…'
+  failed: 'El inicio de sesión no terminó'
+  failureState: 'Este inicio de sesión no empezó en esta pestaña, así que se detuvo. Vuelve a empezar desde el botón Iniciar sesión.'
+  failureRefused: 'GitHub no aceptó el inicio de sesión: puede que el enlace haya caducado o ya se haya usado.'
+  failureDenied: 'Se canceló el inicio de sesión en GitHub.'
+  failureUnreachable: 'No se pudo conectar con GitHub o con maiscope. Revisa la conexión y vuelve a intentarlo.'
+  tryAgain: 'Reintentar'
+  backHome: 'Volver al inicio'
 community:
   coming: Los charts de fans llegan con la biblioteca de la comunidad.
 ui:

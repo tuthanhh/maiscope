@@ -18,6 +18,25 @@ nav:
   language: 언어
 home:
   subtitle: maimai 채보 시각화 프로젝트
+auth:
+  signIn: '로그인'
+  signInWithGitHub: 'GitHub로 로그인'
+  signOut: '로그아웃'
+  accountMenu: '{login}의 계정 메뉴'
+  deleteAccount: '계정 삭제…'
+  deleteTitle: '계정을 삭제할까요?'
+  deleteBody: 'maiscope에서 GitHub 이름과 사진이 지워지고 모든 기기에서 로그아웃됩니다. 게시한 것은 ''삭제된 사용자'' 이름으로 남습니다. 나중에 다시 로그인하면 새 계정으로 시작합니다.'
+  deleteConfirm: '계정 삭제'
+  deleteFailed: '계정을 삭제하지 못했습니다'
+  cancel: '취소'
+  signingIn: '로그인 중…'
+  failed: '로그인이 끝나지 않았습니다'
+  failureState: '이 로그인은 이 탭에서 시작되지 않아 중단했습니다. 로그인 버튼에서 다시 시작하세요.'
+  failureRefused: 'GitHub가 로그인을 받아들이지 않았습니다. 링크가 만료되었거나 이미 사용되었을 수 있습니다.'
+  failureDenied: 'GitHub에서 로그인이 취소되었습니다.'
+  failureUnreachable: 'GitHub 또는 maiscope에 연결할 수 없습니다. 연결을 확인한 뒤 다시 시도하세요.'
+  tryAgain: '다시 시도'
+  backHome: '홈으로'
 community:
   coming: 팬 채보는 커뮤니티 라이브러리와 함께 공개됩니다.
 ui:

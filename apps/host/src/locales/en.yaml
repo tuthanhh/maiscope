@@ -18,6 +18,25 @@ nav:
   language: Language
 home:
   subtitle: maimai visualization project
+auth:
+  signIn: 'Sign in'
+  signInWithGitHub: 'Sign in with GitHub'
+  signOut: 'Sign out'
+  accountMenu: 'Account menu for {login}'
+  deleteAccount: 'Delete account…'
+  deleteTitle: 'Delete your account?'
+  deleteBody: 'Your GitHub name and picture are removed from maiscope and you are signed out on every device. Anything you published stays, credited to a deleted user. Signing in again later starts a fresh account.'
+  deleteConfirm: 'Delete account'
+  deleteFailed: 'The account could not be deleted'
+  cancel: 'Cancel'
+  signingIn: 'Signing in…'
+  failed: 'Sign-in did not finish'
+  failureState: 'This sign-in did not start in this browser tab, so it was stopped. Start again from the Sign in button.'
+  failureRefused: 'GitHub did not accept the sign-in — the link may have expired or been used already.'
+  failureDenied: 'Sign-in was cancelled on GitHub.'
+  failureUnreachable: 'GitHub or maiscope could not be reached. Check the connection and try again.'
+  tryAgain: 'Try again'
+  backHome: 'Back to Home'
 community:
   coming: Fan charts arrive with the community library.
 ui:

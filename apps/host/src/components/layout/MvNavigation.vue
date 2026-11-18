@@ -7,6 +7,7 @@ import useEngineInView from "~/composables/useEngineInView";
 import MvButton from "~/components/ui/MvButton.vue";
 import MvIcon from "~/components/ui/MvIcon.vue";
 import MvMenu from "./MvMenu.vue";
+import { useSessionStore } from "~/stores/session";
 import type { IconName } from "~/components/ui/icons";
 import logoLightUrl from "~/assets/brand/logo.svg";
 import logoDarkUrl from "~/assets/brand/logo-dark.svg";
@@ -20,6 +21,7 @@ const { isDarkMode } = useDarkMode();
 const logoUrl = computed(() => (isDarkMode.value ? logoDarkUrl : logoLightUrl));
 const engineInView = useEngineInView();
 const route = useRoute();
+const session = useSessionStore();
 
 function isActive(name: string): boolean {
   return route.name === name;
@@ -56,6 +58,17 @@ const destinations = computed<{ name: string; label: string; icon: IconName }[]>
         :label="t('nav.theme') as string"
         @click="isDarkMode = !isDarkMode"
       />
+      <!-- Desktop only: on phones the slim bar has room for the menu, which
+           carries the same Sign in. Hidden until a stored session is
+           checked, so a signed-in reload does not flash it. -->
+      <MvButton
+        v-if="session.ready && !session.signedIn"
+        kind="ghost"
+        class="mv-topbar-signin"
+        @click="session.signIn(route.fullPath)"
+      >
+        {{ t("auth.signIn") }}
+      </MvButton>
       <MvMenu />
     </div>
   </header>
@@ -128,6 +141,9 @@ const destinations = computed<{ name: string; label: string; icon: IconName }[]>
 .mv-topbar-link.mv-active {
   color: var(--fg);
 }
+.mv-topbar-signin {
+  margin: 0 var(--s-2);
+}
 .mv-topbar-actions {
   display: flex;
   justify-content: flex-end;
@@ -138,6 +154,11 @@ const destinations = computed<{ name: string; label: string; icon: IconName }[]>
   display: none;
 }
 
+@media (max-width: #{bp.$bp-md - 1px}) {
+  .mv-topbar-signin {
+    display: none;
+  }
+}
 @media (max-width: #{bp.$bp-md - 1px}) {
   .mv-topbar {
     grid-template-columns: 1fr auto;

@@ -18,7 +18,7 @@ chart is never rendered where it could be mistaken for the arcade's.
       "invalid chart"
 - [ ] Reports: submit from a chart, and a moderator queue
 - [ ] Nothing community-shaped appears on an official song or sheet page
-- [ ] **Sign-in, failing closed** (contract §4's flow). `/auth/callback` calls
+- [x] **Sign-in, failing closed** (contract §4's flow) — built in 20. `/auth/callback` calls
       the API callback only when a `state` is stored in `sessionStorage` *and*
       equals the one GitHub returned; it clears the stored value either way.
       This is the whole login-CSRF defence: the API keeps no OAuth state and
@@ -29,14 +29,14 @@ chart is never rendered where it could be mistaken for the arcade's.
 - [ ] Anything rendering an uploader shows one fixed placeholder for a null
       `login` — a deleted account — in one component, not per screen
       (carried from `server-auth-github-oauth` 06)
-- [ ] Account deletion copy says identity removal, not deletion: published
-      charts stay up (`server-auth-github-oauth` 06)
+- [x] Account deletion copy says identity removal, not deletion: published
+      charts stay up (`server-auth-github-oauth` 06) — built in 20
 - [ ] The community strings of design-direction "Copy and locales" (Upload,
       Publish, Rejected, Sign in, Reports, Resolve, Official song, optional,
       fan chart of, deleted user, the rejection sentence) in all nine locales —
       moved here from 13, which ships only keys the code reads
-- [ ] The account entry in the navigation: Sign in while signed out, the
-      avatar after — 09 shipped a generic menu icon in its place
+- [x] The account entry in the navigation: Sign in while signed out, the
+      avatar after — built in 20
 - [ ] The menu's Reports entry, for moderators
 - [ ] Publish on the chart page once a pasted chart has loaded (12's open
       box); signed-out users get the sign-in on tap

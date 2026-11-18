@@ -36,6 +36,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import("~/pages/community.vue"),
   },
   {
+    path: "/auth/callback",
+    name: "auth-callback",
+    component: () => import("~/pages/auth-callback.vue"),
+  },
+  {
     path: "/about",
     name: "about",
     component: () => import("~/pages/about.vue"),

@@ -18,6 +18,25 @@ nav:
   language: 語言
 home:
   subtitle: maimai 譜面視覺化專案
+auth:
+  signIn: '登入'
+  signInWithGitHub: '使用 GitHub 登入'
+  signOut: '登出'
+  accountMenu: '{login} 的帳號選單'
+  deleteAccount: '刪除帳號…'
+  deleteTitle: '要刪除你的帳號嗎？'
+  deleteBody: '你的 GitHub 名稱和頭像將從 maiscope 移除，並在所有裝置上登出。你發布的內容會保留，署名為已刪除的使用者。之後再次登入將以新帳號開始。'
+  deleteConfirm: '刪除帳號'
+  deleteFailed: '無法刪除帳號'
+  cancel: '取消'
+  signingIn: '正在登入…'
+  failed: '登入未完成'
+  failureState: '這次登入不是從這個分頁開始的，已被中止。請從登入按鈕重新開始。'
+  failureRefused: 'GitHub 未接受這次登入——連結可能已過期或已被使用。'
+  failureDenied: '已在 GitHub 取消登入。'
+  failureUnreachable: '無法連線到 GitHub 或 maiscope。請檢查網路連線後重試。'
+  tryAgain: '重試'
+  backHome: '返回首頁'
 community:
   coming: 同人譜面將隨社群譜面庫一同上線。
 ui:

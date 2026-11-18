@@ -18,6 +18,25 @@ nav:
   language: Bahasa
 home:
   subtitle: proyek visualisasi maimai
+auth:
+  signIn: 'Masuk'
+  signInWithGitHub: 'Masuk dengan GitHub'
+  signOut: 'Keluar'
+  accountMenu: 'Menu akun {login}'
+  deleteAccount: 'Hapus akun…'
+  deleteTitle: 'Hapus akunmu?'
+  deleteBody: 'Nama dan foto GitHub-mu dihapus dari maiscope dan kamu keluar di semua perangkat. Yang sudah kamu terbitkan tetap ada, atas nama pengguna yang dihapus. Masuk lagi nanti akan memulai akun baru.'
+  deleteConfirm: 'Hapus akun'
+  deleteFailed: 'Akun tidak dapat dihapus'
+  cancel: 'Batal'
+  signingIn: 'Sedang masuk…'
+  failed: 'Proses masuk tidak selesai'
+  failureState: 'Proses masuk ini tidak dimulai di tab ini, jadi dihentikan. Mulai lagi dari tombol Masuk.'
+  failureRefused: 'GitHub tidak menerima proses masuk — tautannya mungkin kedaluwarsa atau sudah dipakai.'
+  failureDenied: 'Proses masuk dibatalkan di GitHub.'
+  failureUnreachable: 'GitHub atau maiscope tidak dapat dihubungi. Periksa koneksi lalu coba lagi.'
+  tryAgain: 'Coba lagi'
+  backHome: 'Kembali ke Beranda'
 community:
   coming: Chart buatan penggemar hadir bersama pustaka komunitas.
 ui:

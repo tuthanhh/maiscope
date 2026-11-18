@@ -18,6 +18,25 @@ nav:
   language: 语言
 home:
   subtitle: maimai 谱面可视化项目
+auth:
+  signIn: '登录'
+  signInWithGitHub: '使用 GitHub 登录'
+  signOut: '退出登录'
+  accountMenu: '{login} 的账号菜单'
+  deleteAccount: '删除账号…'
+  deleteTitle: '要删除你的账号吗？'
+  deleteBody: '你的 GitHub 名称和头像将从 maiscope 移除，并在所有设备上退出登录。你发布的内容会保留，署名为已删除用户。之后再次登录将作为新账号开始。'
+  deleteConfirm: '删除账号'
+  deleteFailed: '无法删除账号'
+  cancel: '取消'
+  signingIn: '正在登录…'
+  failed: '登录未完成'
+  failureState: '此次登录不是从这个标签页发起的，已被中止。请从登录按钮重新开始。'
+  failureRefused: 'GitHub 未接受此次登录——链接可能已过期或已被使用。'
+  failureDenied: '已在 GitHub 取消登录。'
+  failureUnreachable: '无法连接 GitHub 或 maiscope。请检查网络连接后重试。'
+  tryAgain: '重试'
+  backHome: '返回首页'
 community:
   coming: 同人谱面将随社区谱面库一同上线。
 ui:
