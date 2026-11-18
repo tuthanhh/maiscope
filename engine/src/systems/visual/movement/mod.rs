@@ -302,6 +302,9 @@ pub fn update_movement(
         }
         *timing = NoteTiming::at(now);
 
+        // Each phase's body sets everything its phase shows, not only what
+        // changes during it: a seek places notes straight into a later phase,
+        // and the bodies of the phases before it never ran.
         match &*timing {
             NoteTiming::Growing(timer) => {
                 let t = timer.fraction();
@@ -321,8 +324,15 @@ pub fn update_movement(
             NoteTiming::Moving(timer) => {
                 let t = timer.fraction();
                 if !is_slide(kind) {
-                    // A note entered mid-way (a seek) skipped Growing.
                     transform.scale = Vec3::ONE;
+                } else {
+                    grow_slide(
+                        1.0,
+                        children,
+                        &mut slide_elements,
+                        &mut slide_arrows,
+                        &mut note_halos,
+                    );
                 }
                 move_tap(&mut transform, kind, t, &layout);
                 scale_note_halo(&transform, children, &mut note_halos);
@@ -348,6 +358,9 @@ pub fn update_movement(
             }
             NoteTiming::Holding(timer) => {
                 let t = timer.fraction();
+                transform.scale = Vec3::ONE;
+                move_tap(&mut transform, kind, 1.0, &layout);
+                move_triangles(kind, 1.0, children, &mut triangles);
                 match kind {
                     NoteKind::TapHold { .. } => {
                         hold_tap(
@@ -369,9 +382,25 @@ pub fn update_movement(
                 }
             }
             NoteTiming::Waiting(timer) => {
+                grow_slide(
+                    1.0,
+                    children,
+                    &mut slide_elements,
+                    &mut slide_arrows,
+                    &mut note_halos,
+                );
+                hide_slide_head(children, &mut slide_elements);
                 wait_slide(timer.fraction(), children, &mut slide_elements);
             }
             NoteTiming::Sliding(timer) => {
+                grow_slide(
+                    1.0,
+                    children,
+                    &mut slide_elements,
+                    &mut slide_arrows,
+                    &mut note_halos,
+                );
+                hide_slide_head(children, &mut slide_elements);
                 if let Some(fan) = fan_lanes {
                     fan_trace(
                         timer.fraction(),
@@ -399,6 +428,7 @@ pub fn update_movement(
                     // includes them from the second frame onward.
                     animate_touch_spark(t, children, &mut touch_sparks);
                 } else {
+                    move_tap(&mut transform, kind, 1.0, &layout);
                     // Pop: scale 1.0 -> 2.0 -> 1.0, alpha 0% -> 100% -> 0%.
                     let wave = (t * std::f32::consts::PI).sin();
                     transform.scale = Vec3::splat(1.0 + wave);
@@ -520,5 +550,107 @@ mod tests {
             app.update();
         }
         assert_eq!(count::<HoldHalo>(&mut app), 1);
+    }
+
+    // ── A seek places notes straight into a later phase (final review,
+    // piece 2): each phase must stand on its own, not rely on earlier ones.
+
+    /// The chart paused at `t` after a seek, through the real spawn path.
+    fn seeked(chart: &str, t: f64) -> App {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<Image>()
+            .init_resource::<NoteAssets>()
+            .init_resource::<ButtonLayout>()
+            .init_resource::<ChartPlayback>()
+            .add_systems(
+                Update,
+                (crate::systems::visual::next_event, update_movement).chain(),
+            );
+        {
+            let mut playback = app.world_mut().resource_mut::<ChartPlayback>();
+            playback.load_chart(simai::parse_chart(chart).unwrap());
+            playback.pause();
+            playback.seek(t);
+        }
+        app.update();
+        app.update();
+        app
+    }
+
+    fn ring_distance(tf: &Transform) -> f32 {
+        tf.translation.truncate().length() / RADIUS
+    }
+
+    #[test]
+    fn a_hold_seeked_mid_hold_shows_on_the_ring() {
+        let mut app = seeked("(120){4}1h[1:1],E", 1.0);
+        let mut holds = app.world_mut().query::<(&Transform, &NoteKind)>();
+        let (tf, _) = holds
+            .iter(app.world())
+            .find(|(_, k)| matches!(k, NoteKind::TapHold { .. }))
+            .expect("the hold");
+        assert_eq!(tf.scale, Vec3::ONE);
+        assert!(
+            (ring_distance(tf) - 1.0).abs() < 0.05,
+            "{}",
+            ring_distance(tf)
+        );
+    }
+
+    #[test]
+    fn a_tap_seeked_mid_pop_pops_on_the_ring() {
+        let mut app = seeked("(120){4}1,E", 0.1);
+        let mut taps = app.world_mut().query::<(&Transform, &NoteTiming)>();
+        let (tf, timing) = taps.iter(app.world()).next().expect("the tap");
+        assert_eq!(timing.phase(), Phase::Dying);
+        assert!(
+            (ring_distance(tf) - 1.0).abs() < 0.05,
+            "{}",
+            ring_distance(tf)
+        );
+    }
+
+    #[test]
+    fn a_slide_seeked_mid_trace_shows_its_star() {
+        // Hit at 0, a beat's wait (0.5 s), then a 2 s trace.
+        let mut app = seeked("(120){4}1-5[2:1],E", 1.0);
+        let mut stars = app.world_mut().query::<(&SlideElement, &Visibility)>();
+        let star = stars
+            .iter(app.world())
+            .find(|(el, _)| matches!(el, SlideElement::TraceStar(_)))
+            .expect("the trace star");
+        assert_eq!(*star.1, Visibility::Visible);
+    }
+
+    #[test]
+    fn a_slide_seeked_mid_approach_shows_its_head_and_arrows() {
+        // Hit at 2.0; at note speed 7 it moves for the last 2/7 s.
+        let mut app = seeked("(120){4},,,,1-5[2:1],E", 1.9);
+        let mut heads = app.world_mut().query::<(&SlideElement, &Transform)>();
+        let (_, head) = heads
+            .iter(app.world())
+            .find(|(el, _)| matches!(el, SlideElement::Head))
+            .expect("the head");
+        assert_eq!(head.scale, Vec3::ONE);
+        let mut arrows = app.world_mut().query::<(&SlideArrow, &Sprite)>();
+        assert!(arrows.iter(app.world()).count() > 0);
+        for (_, sprite) in arrows.iter(app.world()) {
+            assert_eq!(sprite.color.alpha(), 1.0);
+        }
+    }
+
+    #[test]
+    fn a_touch_hold_seeked_mid_hold_has_its_triangles_closed() {
+        let mut app = seeked("(120){4}Ch[1:1],E", 1.0);
+        let mut triangles = app.world_mut().query::<(&TouchElement, &Transform)>();
+        let mut seen = 0;
+        for (el, tf) in triangles.iter(app.world()) {
+            if matches!(el, TouchElement::Triangle) {
+                seen += 1;
+                assert!(tf.translation.truncate().length() < 1e-3);
+            }
+        }
+        assert!(seen > 0);
     }
 }
