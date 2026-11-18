@@ -106,6 +106,7 @@ or bindgen fails on a schema mismatch.
 pnpm install
 pnpm dev                           # Vite dev server
 pnpm build                         # vue-tsc --noEmit && vite build
+pnpm test                          # Vitest unit tests, src/**/*.test.ts
 ```
 
 ### Workspace
@@ -174,8 +175,11 @@ cargo test -p engine                                  # engine-only tests; needs
 workspace as a whole (`--workspace`): Cargo unifies features across crates
 built together, which would pull Bevy into the server's graph.
 
-`apps/host/` still has no tests. Both are tracked in
-[`docs/work/test-foundation/`](docs/work/test-foundation/).
+`apps/host/` has Vitest unit tests next to the code they cover
+(`src/**/*.test.ts`, happy-dom, `vitest.config.ts` apart from the app's
+Vite config so the service worker plugin stays out); the first covers the
+sign-in session store. There are no component or browser tests yet. The
+test work is tracked in [`docs/work/test-foundation/`](docs/work/test-foundation/).
 
 **Do not let `DATABASE_URL` point at a data-laden database when running tests.**
 `#[sqlx::test]` derives each test's ephemeral database from the one `DATABASE_URL`

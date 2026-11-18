@@ -56,3 +56,12 @@ the wasm engine, the cover CDN and the per-environment API origin, so it is
 its own change. Accepted: the code reaches Pages' access log on GitHub's
 first request (a redirect URI cannot carry a fragment); it is single-use
 and short-lived.
+
+**2026-11-18 — tests.** `stores/session.test.ts` (Vitest, the frontend's
+first): restore with nothing stored, a good session, a refused one, and one
+that cannot be checked (offline, 503, 429) or comes back malformed; one
+refresh for concurrent calls; a sign-out that a refresh in flight cannot
+undo; the callback refused without or with a mismatched state before any
+request, signing in to the starting page, never landing on the callback or
+off-origin, a refused code; a sign-in state the API accepts. Breaking the
+epoch check or the landing-path check fails them.
