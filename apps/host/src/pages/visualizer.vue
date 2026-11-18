@@ -9,9 +9,7 @@ import {
     ensureEngine,
     mountEngineCanvas,
     detachEngineCanvas,
-    hasChart,
-    pause,
-    restart,
+    unloadChart,
     setMsaa,
     setRenderScale,
     setAudioLeadMs,
@@ -38,7 +36,15 @@ const lead = useAutoLead(route);
 const overlay = useDebugOverlay(route, lead);
 const playback = usePlayback();
 const { loaded, playing, speed, noteSpeed } = playback;
-const { sheetInfo, simai, loading, errorMsg, autoLoad, loadPasted } = useChartLoader(playback);
+const {
+    sheetInfo,
+    simai,
+    loading,
+    errorMsg,
+    autoLoad,
+    loadPasted,
+    dispose: disposeLoader,
+} = useChartLoader(playback);
 
 // A/B toggles, query-only and applied once the engine is up:
 //   ?msaa=4   MSAA back on (the engine now defaults to off)
@@ -70,13 +76,7 @@ onMounted(async () => {
         overlay.start();
         applyRenderToggles();
         lead.start();
-        // Replay any already-loaded chart from the start on each open. A deep-link
-        // (autoLoad) reloads its own chart and supersedes this.
-        if (hasChart() && !hasDeepLink(route.query)) {
-            restart();
-            loaded.value = true;
-            playing.value = true;
-        }
+        // Play opens empty unless the URL names a chart (visualizer-majdata 03).
         await autoLoad(route.query);
     } catch (err: unknown) {
         status.value = "error";
@@ -84,10 +84,12 @@ onMounted(async () => {
     }
 });
 
-// Leaving the route: pause audio/visuals and park the canvas so it survives the
-// unmount (the engine keeps running on the detached canvas).
+// Leaving the route: drop the chart, its notes and its music, and park the
+// canvas so it survives the unmount (the engine keeps running, empty, on the
+// detached canvas). A download still in flight is dropped too.
 onUnmounted(() => {
-    if (loaded.value) pause();
+    disposeLoader();
+    void unloadChart();
     detachEngineCanvas();
     overlay.stop();
     lead.stop();

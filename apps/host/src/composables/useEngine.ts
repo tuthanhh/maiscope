@@ -81,21 +81,12 @@ export function ensureEngine(): Promise<EngineModule> {
 }
 
 // Feed a chart + its audio into the running engine.
-// Whether a chart has ever been handed to the engine this session. Module-level
-// so it survives the visualizer page remounting on route changes — lets the page
-// decide to replay-from-0 on each open.
-let chartLoaded = false;
-export function hasChart(): boolean {
-  return chartLoaded;
-}
-
 export async function loadSong(
   chart: string,
   audio: Uint8Array,
 ): Promise<void> {
   const mod = await ensureEngine();
   mod.load_song(chart, audio);
-  chartLoaded = true;
 }
 
 // Play a chart with no audio. The chart clock is frame-driven, so it runs
@@ -103,7 +94,13 @@ export async function loadSong(
 export async function loadChart(chart: string): Promise<void> {
   const mod = await ensureEngine();
   mod.load_chart(chart);
-  chartLoaded = true;
+}
+
+// Leaving Play: the engine drops the chart, every note and the music
+// (visualizer-majdata 03). The canvas and the engine itself stay alive.
+export async function unloadChart(): Promise<void> {
+  const mod = await ensureEngine();
+  mod.unload();
 }
 
 /** A sheet's address on the v2 API: `/api/songs/{id}/sheets/{type}/{code}`. */
