@@ -1,28 +1,11 @@
-//! Slide path geometry and tracing. Split into:
-//! - [`geometry`]: pure button/tangent/polyline math
-//! - [`generators`]: per-shape waypoint generation
-//! - [`trace`]: timing + trace assembly sampled by the movement system
-//!
-//! Not yet fully wired into spawning.
-#![allow(dead_code)]
+//! The slide star's path and timing (visualizer-majdata 14): built from
+//! MajdataPlay's layouts ([`trace`]) and sampled with polyline helpers
+//! ([`geometry`]).
 
-mod generators;
 mod geometry;
 mod trace;
 
-// Public API in active use by spawning / movement.
 pub use geometry::get_transform_at_distance;
 #[cfg(test)]
 pub use trace::trace_total_secs;
-pub use trace::{build_slide_trace, slide_span_secs};
-
-// Part of the module's public surface, but not yet wired into spawning.
-#[allow(unused_imports)]
-pub use generators::generate_points;
-#[allow(unused_imports)]
-pub use geometry::{
-    calculate_total_length, generate_arc_points, generate_multi_segment_points,
-    generate_offset_arc_points,
-};
-#[allow(unused_imports)]
-pub use trace::trace_position;
+pub use trace::{BuiltSlide, build_slide_from_layout, slide_span_secs, star_distance};

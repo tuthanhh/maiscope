@@ -121,6 +121,7 @@ pub fn register_systems(app: &mut App) {
     // The core game loop will be defined in this function
     app.init_resource::<visual::resources::ButtonLayout>()
         .init_resource::<visual::resources::NoteAssets>()
+        .init_resource::<visual::majdata::SlideLayouts>()
         .init_resource::<chart_playback::ChartPlayback>()
         .init_resource::<frame_stats::FrameStats>()
         // Every state, every frame: a stall while loading is still a stall.

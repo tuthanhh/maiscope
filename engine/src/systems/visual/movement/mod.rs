@@ -468,6 +468,7 @@ mod tests {
             .init_asset::<Image>()
             .init_resource::<NoteAssets>()
             .init_resource::<ButtonLayout>()
+            .init_resource::<crate::systems::visual::majdata::SlideLayouts>()
             .init_resource::<ChartPlayback>()
             .add_systems(Update, update_movement);
         let mut chart = app.world_mut().resource_mut::<ChartPlayback>();
@@ -566,6 +567,7 @@ mod tests {
             .init_asset::<Image>()
             .init_resource::<NoteAssets>()
             .init_resource::<ButtonLayout>()
+            .init_resource::<crate::systems::visual::majdata::SlideLayouts>()
             .init_resource::<ChartPlayback>()
             .add_systems(
                 Update,
@@ -668,6 +670,7 @@ mod tests {
             .init_asset::<Image>()
             .init_resource::<NoteAssets>()
             .init_resource::<ButtonLayout>()
+            .init_resource::<crate::systems::visual::majdata::SlideLayouts>()
             .init_resource::<ChartPlayback>()
             .add_systems(
                 Update,

@@ -59,7 +59,7 @@ pub fn report_sprite_loads(
         ("touch_effect", &assets.touch_effect),
         ("touch_effect_star_0", &assets.touch_effect_stars[0]),
         ("touch_effect_star_1", &assets.touch_effect_stars[1]),
-        ("chevron", &assets.chevron),
+        ("slide", &assets.slide[0]),
         ("hexagon", &assets.hexagon),
         ("halo", &assets.halo),
     ];
@@ -84,8 +84,6 @@ pub fn report_sprite_loads(
 
 const RADIUS: f32 = 350.0;
 const NOTE_RADIUS: f32 = 40.0;
-/// Spacing between chevron arrows along a slide track. Tune visually.
-const CHEVRON_SPACING: f32 = NOTE_RADIUS * 0.75;
 /// Outer radius the touch-burst stars travel to/from (shared by spawner + animator).
 const SPARK_STAR_RADIUS: f32 = NOTE_RADIUS * 0.6;
 /// Uniform scale of each small touch-burst star.
@@ -139,11 +137,6 @@ pub mod note_colors {
 
     /// Judgement ring and countdown arc stroke.
     pub const RING: Color = Color::WHITE;
-
-    /// Slide track chevron tint (light cyan).
-    /// Matches `bevy::color::palettes::css::LIGHT_CYAN` but kept here so
-    /// every color lives in one file.
-    pub const CHEVRON: Color = Color::srgb(0.878, 1.0, 1.0);
 
     pub const HEXAGON: Color = Color::srgb(1.0, 0.8, 0.0);
 

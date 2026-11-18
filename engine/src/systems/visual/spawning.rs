@@ -1,25 +1,24 @@
+use super::majdata::{SlideLayouts, sprite_px};
 use super::schedule::phase_at;
 use super::{
     NOTE_RADIUS,
     component::{
-        FanLanes, HitTime, HoldNoteElement, NoteBpm, NoteHalo, NoteTiming, SlideArrow,
-        SlideElement, TouchElement, TouchHoldCountdown, TouchSpark,
+        HitTime, HoldNoteElement, NoteBpm, NoteHalo, NoteTiming, SlideArrow, SlideElement,
+        TouchElement, TouchHoldCountdown, TouchSpark,
     },
-    note_colors,
     resources::{ButtonLayout, NoteAssets},
     shapes::{
-        CHEVRON_ROT_OFFSET, COUNTDOWN_EDGE_COLORS, COUNTDOWN_SWEEP_S, NORMAL_HALO_DOT_OFFSET,
-        chevron_shape, chevron_sprite, countdown_edge, hold_beam_sprite, hold_cap_sprite,
-        hold_end_dot_sprite, normal_halo_sprite, star_break_sprite, star_ex_sprite, star_sprite,
-        tap_break_sprite, tap_ex_sprite, tap_sprite, touch_circle_sprite, touch_effect_sprite,
-        touch_effect_star_sprite, touch_hold_triangle_sprite, touch_triangle_sprite,
-        touch_triangle_start_distance,
+        COUNTDOWN_EDGE_COLORS, COUNTDOWN_SWEEP_S, NORMAL_HALO_DOT_OFFSET, countdown_edge,
+        hold_beam_sprite, hold_cap_sprite, hold_end_dot_sprite, normal_halo_sprite,
+        star_break_sprite, star_ex_sprite, star_sprite, tap_break_sprite, tap_ex_sprite,
+        tap_sprite, touch_circle_sprite, touch_effect_sprite, touch_effect_star_sprite,
+        touch_hold_triangle_sprite, touch_triangle_sprite, touch_triangle_start_distance,
     },
     slide_path,
 };
 use crate::systems::{
     chart_playback::ChartPlayback,
-    component::{ChartEvent, Note, NoteKind, SlideShape},
+    component::{ChartEvent, Note, NoteKind},
 };
 use bevy::ecs::relationship::RelatedSpawnerCommands;
 use bevy::prelude::*;
@@ -35,6 +34,7 @@ pub fn next_event(
     mut chart: ResMut<ChartPlayback>,
     note_assets: Res<NoteAssets>,
     layout: Res<ButtonLayout>,
+    layouts: Res<SlideLayouts>,
     on_screen: Query<Entity, With<NoteTiming>>,
 ) {
     let mut spawned = false;
@@ -64,6 +64,7 @@ pub fn next_event(
                         event.time,
                         &note_assets,
                         &layout,
+                        &layouts,
                     );
                 }
             }
@@ -92,6 +93,7 @@ pub fn next_event(
                     hit,
                     &note_assets,
                     &layout,
+                    &layouts,
                 );
             }
         }
@@ -233,6 +235,7 @@ fn spawn_note(
     hit: f64,
     assets: &NoteAssets,
     layout: &ButtonLayout,
+    layouts: &SlideLayouts,
 ) {
     // The timer is a placeholder: `update_movement` sets the phase from the
     // chart clock on the note's first frame.
@@ -325,9 +328,9 @@ fn spawn_note(
                 }
             });
         }
-
-        // Slide / HeadlessSlide: parent is an origin container; head star, trace
-        // star, and chevrons live as children at absolute world positions.
+        // A slide's head star, trace star(s) and arrows live as children at
+        // absolute world positions; the arrows are MajdataPlay's, from its
+        // slide layouts (visualizer-majdata 14).
         NoteKind::Slide {
             head_button,
             segments,
@@ -339,11 +342,12 @@ fn spawn_note(
             segments,
             shared_duration,
         } => {
-            let path = slide_path::build_slide_trace(
+            let built = slide_path::build_slide_from_layout(
                 segments,
                 *head_button,
                 bpm,
                 *shared_duration,
+                layouts,
                 layout,
             );
             // `None`: headless. `Some(sprite)`: the head, drawn as the automatic
@@ -355,37 +359,21 @@ fn spawn_note(
                 NoteKind::Slide { .. } => Some(star_sprite(assets)),
                 _ => None,
             };
-            let head = *head_button;
-
-            // Fan (`w`): a single FanShape segment fans into 3 diverging lanes,
-            // each with its own growing chevrons and trace star.
-            let fan_ends = match segments.as_slice() {
-                [seg] => match seg.shape {
-                    SlideShape::FanShape { ends } => Some(ends),
-                    _ => None,
-                },
-                _ => None,
-            };
-
-            e.insert((Transform::default(), Visibility::Visible));
-            if let Some((e1, e2, e3)) = fan_ends {
-                let mut lanes = Vec::with_capacity(3);
-                let mut lengths = Vec::with_capacity(3);
-                for end in [e1, e2, e3] {
-                    let pts =
-                        slide_path::generate_points(&SlideShape::Straight { end }, head, layout);
-                    lengths.push(slide_path::calculate_total_length(&pts));
-                    lanes.push(pts);
-                }
-                e.with_children(|p| {
-                    spawn_fan_children(p, &lanes, &lengths, head_sprite, head, layout, assets);
-                });
-                e.insert((path, FanLanes { lanes, lengths }));
+            let art = if note.is_break {
+                ArrowArt::Break
+            } else if is_paired {
+                ArrowArt::Each
             } else {
-                e.with_children(|p| {
-                    spawn_slide_children(p, &path, head_sprite, head, layout, assets);
-                });
-                e.insert(path);
+                ArrowArt::Normal
+            };
+            e.insert((Transform::default(), Visibility::Visible));
+            e.with_children(|p| {
+                spawn_slide_children(p, &built, head_sprite, *head_button, art, layout, assets);
+            });
+            let slide_path::BuiltSlide { path, fan, .. } = built;
+            e.insert(path);
+            if let Some(fan) = fan {
+                e.insert(fan);
             }
         }
     }
@@ -601,12 +589,35 @@ fn spawn_approach_triangles(
     }
 }
 
+/// MajdataPlay's arrow art: normal, each, break.
+const SLIDE_PATHS: [&str; 3] = [
+    "skin/SlideSkins/slide.png",
+    "skin/SlideSkins/slide_each.png",
+    "skin/SlideSkins/slide_break.png",
+];
+/// A fan's rows, each with its own image.
+pub(super) const WIFI_ROWS: usize = 11;
+
+fn wifi_path(art: ArrowArt, row: usize) -> String {
+    let variant = ["", "each_", "break_"][art as usize];
+    format!("skin/WifiSkins/wifi_{variant}{row}.png")
+}
+
+/// Which MajdataPlay arrow art a slide uses.
+#[derive(Clone, Copy)]
+enum ArrowArt {
+    Normal = 0,
+    Each = 1,
+    Break = 2,
+}
+
 #[allow(clippy::too_many_arguments)]
 fn spawn_slide_children(
     parent: &mut RelatedSpawnerCommands<ChildOf>,
-    path: &super::component::SlidePath,
+    built: &slide_path::BuiltSlide,
     head_sprite: Option<Sprite>,
     head_button: usize,
+    art: ArrowArt,
     layout: &ButtonLayout,
     assets: &NoteAssets,
 ) {
@@ -628,130 +639,49 @@ fn spawn_slide_children(
             .with_children(|h| spawn_note_halo(h, assets, Quat::from_rotation_z(angle)));
     }
 
-    // Trace star: hidden at the path start; revealed and faded in during Waiting,
-    // then moved along the path during Sliding.
-    let start = path.waypoints.first().copied().unwrap_or(Vec2::ZERO);
-    parent.spawn((
-        star_sprite(assets),
-        Transform::from_translation(start.extend(3.0)),
-        Visibility::Hidden,
-        SlideElement::TraceStar(0),
-    ));
-
-    // Chevron arrows of constant size along the path (sprite).
-    spawn_chevron_line(
-        parent,
-        &path.waypoints,
-        path.total_length,
-        0,
-        super::CHEVRON_SPACING,
-        assets,
-        false,
-        |_| NOTE_RADIUS,
-    );
-}
-
-/// Place chevrons along `lane` every `spacing` units, each rotated to the travel
-/// direction and spawned transparent (faded in during Growing; consumed during
-/// Sliding). `radius_at(f)` gives the chevron wing-radius at fraction `f∈[0,1)`
-/// along the lane — constant for ordinary slides, growing for the fan cone.
-#[allow(clippy::too_many_arguments)]
-fn spawn_chevron_line(
-    parent: &mut RelatedSpawnerCommands<ChildOf>,
-    lane: &[Vec2],
-    length: f32,
-    lane_idx: usize,
-    spacing: f32,
-    assets: &NoteAssets,
-    // Fan / wifi cones use the lyon vector chevron (wings scale, stem fixed);
-    // ordinary slides use the sprite chevron.
-    lyon: bool,
-    radius_at: impl Fn(f32) -> f32,
-) {
-    let mut d = spacing;
-    while d < length {
-        let (pos, angle) = slide_path::get_transform_at_distance(lane, d);
-        let radius = radius_at(d / length);
-        let arrow = SlideArrow {
-            distance_along_path: d,
-            lane: lane_idx,
-        };
-        if lyon {
-            // Lyon chevron tip points +X → rotate by the bare travel angle.
-            parent.spawn((
-                chevron_shape(
-                    radius,
-                    0.5 * NOTE_RADIUS,
-                    note_colors::CHEVRON.with_alpha(0.0),
-                ),
-                Transform::from_translation(pos.extend(1.0))
-                    .with_rotation(Quat::from_rotation_z(angle)),
-                arrow,
-            ));
-        } else {
-            parent.spawn((
-                chevron_sprite(assets, radius, 0.5 * NOTE_RADIUS),
-                Transform::from_translation(pos.extend(1.0))
-                    .with_rotation(Quat::from_rotation_z(angle + CHEVRON_ROT_OFFSET)),
-                arrow,
-            ));
-        }
-        d += spacing;
-    }
-}
-
-/// Fan (`w`) variant: one head star plus, per lane, a trace star and a line of
-/// chevrons whose size grows with distance (small near the start, large near
-/// the end), all diverging to the three end buttons.
-#[allow(clippy::too_many_arguments)]
-fn spawn_fan_children(
-    parent: &mut RelatedSpawnerCommands<ChildOf>,
-    lanes: &[Vec<Vec2>],
-    lengths: &[f32],
-    head_sprite: Option<Sprite>,
-    head_button: usize,
-    layout: &ButtonLayout,
-    assets: &NoteAssets,
-) {
-    if let Some(sprite) = head_sprite {
-        let pos = layout.tap_spawn[head_button - 1] * super::RADIUS;
-        let dir = layout.tap[head_button - 1];
-        let angle = dir.y.atan2(dir.x) - FRAC_PI_2;
-        parent
-            .spawn((
-                sprite,
-                Transform::from_translation(pos.extend(2.0)).with_scale(Vec3::ZERO),
-                SlideElement::Head,
-            ))
-            .with_children(|h| spawn_note_halo(h, assets, Quat::from_rotation_z(angle)));
-    }
-
-    // One trace star per lane (diverges to its end during Sliding).
-    for (idx, lane) in lanes.iter().enumerate() {
-        let start = lane.first().copied().unwrap_or(Vec2::ZERO);
+    // Trace star(s): hidden at the path start; revealed and faded in during
+    // Waiting, then moved along the path (a fan: one per lane) during Sliding.
+    let starts: Vec<Vec2> = match &built.fan {
+        Some(fan) => fan.lanes.iter().map(|l| l[0]).collect(),
+        None => vec![built.path.waypoints.first().copied().unwrap_or(Vec2::ZERO)],
+    };
+    for (lane, start) in starts.into_iter().enumerate() {
         parent.spawn((
             star_sprite(assets),
             Transform::from_translation(start.extend(3.0)),
             Visibility::Hidden,
-            SlideElement::TraceStar(idx),
+            SlideElement::TraceStar(lane),
         ));
     }
 
-    // A single widening cone of chevrons along the central lane (→ e, the
-    // bisector of the two neighbours): wing-radius grows base → max with
-    // distance while thickness/angle stay fixed. Consumes against lane 0.
-    let base_radius = 0.8 * NOTE_RADIUS;
-    let max_radius = 7.5 * NOTE_RADIUS;
-    spawn_chevron_line(
-        parent,
-        &lanes[0],
-        lengths[0],
-        0,
-        1.5 * super::CHEVRON_SPACING,
-        assets,
-        true, // fan cone → lyon vector chevrons
-        |f| base_radius + f * (max_radius - base_radius),
-    );
+    // MajdataPlay's arrows (a fan: its rows), transparent until Growing fades
+    // them in; each clears as the star passes it.
+    for arrow in &built.arrows {
+        let (image, path) = if built.fan.is_some() {
+            let row = arrow.row.min(WIFI_ROWS - 1);
+            (assets.wifi[art as usize][row].clone(), wifi_path(art, row))
+        } else {
+            (
+                assets.slide[art as usize].clone(),
+                SLIDE_PATHS[art as usize].to_string(),
+            )
+        };
+        let mut sprite = Sprite {
+            image,
+            custom_size: Some(sprite_px(&path)),
+            ..default()
+        };
+        sprite.color.set_alpha(0.0);
+        parent.spawn((
+            sprite,
+            Transform::from_translation(arrow.pos.extend(1.0))
+                .with_rotation(Quat::from_rotation_z(arrow.angle)),
+            SlideArrow {
+                distance_along_path: arrow.distance,
+                lane: 0,
+            },
+        ));
+    }
 }
 
 #[cfg(test)]
@@ -765,6 +695,7 @@ mod tests {
             .init_asset::<Image>()
             .init_resource::<NoteAssets>()
             .init_resource::<ButtonLayout>()
+            .init_resource::<crate::systems::visual::majdata::SlideLayouts>()
             .init_resource::<ChartPlayback>()
             .add_systems(Update, next_event);
         app.world_mut()
@@ -886,5 +817,22 @@ mod tests {
         for due in [0.875, 1.0, 1.125] {
             assert!(on_screen.contains(&due), "{due} missing from {on_screen:?}");
         }
+    }
+
+    #[test]
+    fn a_slide_has_one_arrow_per_prefab_bar() {
+        let mut app = app_with_chart("(120){4}1-5[8:1],E");
+        app.update();
+        app.update();
+        let arrows = app
+            .world_mut()
+            .query::<&SlideArrow>()
+            .iter(app.world())
+            .count();
+        let bars = crate::systems::visual::majdata::SlideLayouts::load()
+            .get("Star_Line_5")
+            .unwrap()
+            .len();
+        assert_eq!(arrows, bars);
     }
 }

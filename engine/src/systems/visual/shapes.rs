@@ -13,7 +13,6 @@
 
 use bevy::prelude::{Color, Handle, Image, Sprite, Vec2};
 use bevy_prototype_lyon::prelude::*;
-use std::f32::consts::PI;
 
 use crate::systems::visual::{NOTE_RADIUS, RADIUS, resources::NoteAssets};
 
@@ -41,12 +40,6 @@ const HOLD_CAP_H: f32 = NOTE_RADIUS; // 61/122 * width
 /// hold. Centre-anchored; the mover offsets it by `-len/2`.
 const HOLD_BODY_W: f32 = NOTE_RADIUS * 2.0;
 const HOLD_BODY_H: f32 = 1.0;
-/// Chevron arrow (`Slide.png`, 70×94). Width tracks the wing reach; height keeps
-/// the source aspect ratio.
-const CHEVRON_ASPECT: f32 = 94.0 / 70.0;
-/// The arrow art points left (−X); travel angle is measured from +X. Rotate the
-/// spawn transform by this (π) to aim the arrow along the path.
-pub(super) const CHEVRON_ROT_OFFSET: f32 = PI;
 const SIZE_HEXAGON: f32 = NOTE_RADIUS * 1.5;
 const SIZE_HALO: f32 = NOTE_RADIUS * 1.5;
 /// Touch death burst (`TouchEff.png`) and its star parts (`TouchEffparts_0n.png`).
@@ -146,40 +139,6 @@ pub(super) fn touch_hold_triangle_sprite(assets: &NoteAssets, idx: usize) -> Spr
         assets.touch_hold[idx].clone(),
         Vec2::new(TRI_W, TRI_W * TRI_ASPECT),
     )
-}
-
-/// Slide-track chevron (`sprites/Slide/Slide.png`). `radius` scales the wings,
-/// `thickness` the stem; spawned transparent and faded in via `Sprite.color`.
-pub(super) fn chevron_sprite(assets: &NoteAssets, radius: f32, _thickness: f32) -> Sprite {
-    let w = radius;
-    sprite(assets.chevron.clone(), Vec2::new(w, w * CHEVRON_ASPECT))
-}
-
-/// Lyon vector chevron for the **fan / wifi** cone. Unlike the sprite, the wings
-/// scale with `radius` while the stem `thickness` stays fixed, so the widening
-/// cone stays crisp instead of stretching the texture. Tip points +X, so the
-/// spawn rotation is the bare travel angle (no `CHEVRON_ROT_OFFSET`).
-pub(super) fn chevron_shape(radius: f32, thickness: f32, color: Color) -> Shape {
-    ShapeBuilder::with(&build_chevron_path(radius, thickness))
-        .fill(color)
-        .build()
-}
-
-fn build_chevron_path(radius: f32, thickness: f32) -> ShapePath {
-    let half_angle = 3.0 * PI / 8.0;
-    let depth = radius * half_angle.cos();
-    let height = radius * half_angle.sin();
-    let inner_x = thickness / 2.0;
-    let outer_x = -thickness / 2.0;
-
-    ShapePath::new()
-        .move_to(Vec2::new(-depth + inner_x, height))
-        .line_to(Vec2::new(inner_x, 0.0))
-        .line_to(Vec2::new(-depth + inner_x, -height))
-        .line_to(Vec2::new(-depth + outer_x, -height))
-        .line_to(Vec2::new(outer_x, 0.0))
-        .line_to(Vec2::new(-depth + outer_x, height))
-        .close()
 }
 
 /// Hexagon pop effect (`sprites/Effect/Hex.png`), tinted.

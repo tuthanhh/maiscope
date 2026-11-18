@@ -36,7 +36,7 @@ pub(super) fn set_alpha(sprite: &mut Sprite, a: f32) {
     sprite.color.set_alpha(a);
 }
 
-/// Fade a slide-arrow chevron, which is a sprite (ordinary slide) or a lyon
+/// Fade a slide arrow, which is a sprite (MajdataPlay's art) or a lyon
 /// `Shape` (fan/wifi cone) — whichever component the arrow carries.
 fn set_arrow_alpha(sprite: Option<Mut<Sprite>>, shape: Option<Mut<Shape>>, a: f32) {
     if let Some(mut sprite) = sprite {
@@ -367,7 +367,7 @@ pub(super) fn wait_slide(
     }
 }
 
-/// Sliding phase: the trace star walks the path; chevrons it passes are removed.
+/// Sliding phase: the trace star walks the path; arrows it passes are removed.
 pub(super) fn slide_trace(
     frac: f32,
     path: &SlidePath,
@@ -377,7 +377,7 @@ pub(super) fn slide_trace(
     commands: &mut Commands,
 ) {
     let Some(children) = children else { return };
-    let dist = frac * path.total_length;
+    let dist = slide_path::star_distance(path, frac);
     let (pos, angle) = slide_path::get_transform_at_distance(&path.waypoints, dist);
     for child in children.iter() {
         if let Ok((mut transform, el, mut vis, mut shape, _)) = slide_elements.get_mut(child)
@@ -400,7 +400,7 @@ pub(super) fn slide_trace(
 }
 
 /// Fan Sliding phase: each lane's trace star walks its own lane at the shared
-/// progress fraction; chevrons are removed as their lane's star passes them.
+/// progress fraction; arrows are removed as their lane's star passes them.
 pub(super) fn fan_trace(
     frac: f32,
     fan: &FanLanes,

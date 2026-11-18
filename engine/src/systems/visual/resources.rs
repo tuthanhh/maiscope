@@ -104,8 +104,12 @@ pub struct NoteAssets {
     /// Touch burst star parts (`TouchEffparts_01/02.png`), alternated across the
     /// 8 converging stars.
     pub touch_effect_stars: [Handle<Image>; 2],
-    /// Slide-track chevron arrow (`sprites/Slide/Slide.png`).
-    pub chevron: Handle<Image>,
+    /// MajdataPlay's slide arrow: normal, each, break
+    /// (`majdata/skin/SlideSkins/`).
+    pub slide: [Handle<Image>; 3],
+    /// MajdataPlay's fan rows `wifi_0..10`: normal, each, break
+    /// (`majdata/skin/WifiSkins/`).
+    pub wifi: [[Handle<Image>; 11]; 3],
     /// Hexagon pop effect (`sprites/Effect/Hex.png`).
     pub hexagon: Handle<Image>,
     /// Expanding hold / touch halo (`sprites/Effect/Circle.png`).
@@ -147,7 +151,13 @@ impl FromWorld for NoteAssets {
                 server.load("sprites/Touch/TouchEffparts_01.png"),
                 server.load("sprites/Touch/TouchEffparts_02.png"),
             ],
-            chevron: server.load("sprites/Slide/Slide.png"),
+            slide: ["slide", "slide_each", "slide_break"]
+                .map(|name| server.load(format!("majdata/skin/SlideSkins/{name}.png"))),
+            wifi: ["", "each_", "break_"].map(|variant| {
+                std::array::from_fn(|row| {
+                    server.load(format!("majdata/skin/WifiSkins/wifi_{variant}{row}.png"))
+                })
+            }),
             hexagon: server.load("sprites/Effect/Hex.png"),
             halo: server.load("sprites/Effect/Circle.png"),
         }
