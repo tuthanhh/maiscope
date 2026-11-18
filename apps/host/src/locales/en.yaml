@@ -131,6 +131,9 @@ page:
     notFound: Song not found
     notFoundMessage: No song has this link.
     songLoadFailed: The song could not be loaded
+    songLoadFailedMessage: Check the connection and try again.
+    song: Song
+    noSheets: This song has no sheets.
     min: min
     max: max
     openInVisualizer: Open in Visualizer

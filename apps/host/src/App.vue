@@ -50,12 +50,13 @@ watch(
 
 <template>
     <div class="mv-root mv-app">
-        <!-- Not over a shared song link: the song modal fetches its one
-             song and paints before the Catalog arrives. -->
+        <!-- Not over a song link on Songs: the song modal fetches its one
+             song and paints before the Catalog arrives; the browse behind it
+             says it is loading. -->
         <MvLoadingOverlay
             v-if="
                 dataStore.currentLoadingStatus === LoadingStatus.LOADING &&
-                !route.query.song
+                !(route.name === 'songs' && route.query.song)
             "
         />
 

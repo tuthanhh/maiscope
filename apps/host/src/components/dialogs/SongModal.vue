@@ -25,9 +25,10 @@ const { t } = useI18n();
 const router = useRouter();
 const dataStore = useDataStore();
 const { getTypeAbbr, getTypeName, getDifficultyName, getDifficultyColor } = useGameData();
-const { selectedSheets, toggleSheetSelection } = useSelectedSheets();
+const { isBookmarked: hasBookmark, toggleSheetSelection } = useSelectedSheets();
 const modal = useSongModal();
 const titleId = useId();
+const noChartId = useId();
 
 // ── the song: from the Catalog when it is loaded, else fetched alone ──
 // A shared link must not wait on the snapshot (screen-data-requirements).
@@ -88,6 +89,18 @@ const selected = computed<Sheet | null>(() => {
         null
     );
 });
+// A link naming no sheet of the song shows the first one; the URL is
+// corrected to it, so the link always names what is on screen.
+watch(
+    [selected, modal.type, modal.difficulty],
+    ([sheet, type, difficulty]) => {
+        if (sheet && (sheet.type !== type || sheet.difficulty !== difficulty)) {
+            modal.select(sheet);
+        }
+    },
+    { immediate: true },
+);
+
 const types = computed(() => [...new Set(song.value?.sheets.map((s) => s.type) ?? [])]);
 const sameType = computed(
     () => song.value?.sheets.filter((s) => s.type === selected.value?.type) ?? [],
@@ -116,9 +129,7 @@ const noteCounts = computed(() => {
         .join(" · ");
 });
 
-const isBookmarked = computed(() =>
-    selectedSheets.value.some((s) => s.key === selected.value?.key),
-);
+const isBookmarked = computed(() => !!selected.value && hasBookmark(selected.value.key));
 function toggleBookmark(): void {
     if (selected.value) toggleSheetSelection(selected.value);
 }
@@ -139,7 +150,7 @@ function retry(): void {
     <MvModal
         :open="modal.songId.value !== null"
         :labelledby="song ? titleId : undefined"
-        :label="t('page-title.song') as string"
+        :label="t('page.songs.song') as string"
         @close="modal.close"
     >
         <header class="sm-head">
@@ -163,11 +174,15 @@ function retry(): void {
             <MvError
                 v-else-if="failure === 'error'"
                 :label="t('page.songs.songLoadFailed') as string"
+                :message="t('page.songs.songLoadFailedMessage') as string"
                 :retry-label="t('ui.retry') as string"
                 @retry="retry"
             />
-            <p v-else-if="!song || !selected" class="t-body t-muted sm-loading">
+            <p v-else-if="!song" class="t-body t-muted sm-loading">
                 {{ t("description.loading") }}
+            </p>
+            <p v-else-if="!selected" class="t-body t-muted sm-loading">
+                {{ t("page.songs.noSheets") }}
             </p>
 
             <template v-else>
@@ -240,11 +255,12 @@ function retry(): void {
                         kind="text"
                         icon="play"
                         :disabled="!selected.hasChart"
+                        :aria-describedby="selected.hasChart ? undefined : noChartId"
                         @click="play"
                     >
                         {{ t("page.songs.play") }}
                     </MvButton>
-                    <span v-if="!selected.hasChart" class="t-meta t-muted">
+                    <span v-if="!selected.hasChart" :id="noChartId" class="t-meta t-muted">
                         {{ t("page.songs.noChart") }}
                     </span>
                 </div>

@@ -1,5 +1,10 @@
 import { nextTick, onBeforeUnmount, watch, type Ref } from "vue";
 
+// How many dialogs hold the page's scroll lock. The drawer and the modal can
+// be mounted together, so the last to let go unlocks, and a closed dialog
+// mounting never touches a lock another holds.
+let locks = 0;
+
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -13,6 +18,20 @@ export default function useDialogFocus(
   close: () => void,
 ) {
   let opener: HTMLElement | null = null;
+  let holding = false;
+
+  function lock(): void {
+    if (holding) return;
+    holding = true;
+    locks++;
+    document.documentElement.style.overflow = "hidden";
+  }
+  function unlock(): void {
+    if (!holding) return;
+    holding = false;
+    locks--;
+    if (locks === 0) document.documentElement.style.overflow = "";
+  }
 
   function onKeyDown(event: KeyboardEvent): void {
     if (event.key === "Escape") {
@@ -45,11 +64,12 @@ export default function useDialogFocus(
     async (isOpen) => {
       if (isOpen) {
         opener = document.activeElement as HTMLElement | null;
-        document.documentElement.style.overflow = "hidden";
+        lock();
         await nextTick();
         panel.value?.focus();
       } else {
-        document.documentElement.style.overflow = "";
+        if (!holding) return;
+        unlock();
         // The opener may be gone (a card on a page that changed).
         if (opener?.isConnected) opener.focus();
         opener = null;
@@ -57,9 +77,7 @@ export default function useDialogFocus(
     },
     { immediate: true },
   );
-  onBeforeUnmount(() => {
-    document.documentElement.style.overflow = "";
-  });
+  onBeforeUnmount(unlock);
 
   return { onKeyDown };
 }

@@ -43,3 +43,19 @@ Departures:
   difficulty underline and the level fall back to `--fg`; 12 fetches
   `/api/reference` at boot, which fixes this.
 - **The song comment is gone** from the modal; the design does not list it.
+
+**2026-11-18 — review.** Applied: a bookmark toggled on a shared link
+before the Catalog installed was added a second time beside its persisted
+key, and could then never be removed. The store now owns bookmarks
+(`hasBookmark`, `toggleBookmark`): a still-unresolved key counts as
+bookmarked and toggles off where it is, `install` de-duplicates, and every
+change is persisted whatever the Catalog's state. The scroll lock is
+reference-counted across dialogs, so the always-mounted drawer no longer
+clears the lock of a modal opened at mount. The loading overlay is held off
+only for a song link on Songs, and the browse behind it says "Loading data…"
+rather than "No sheets match". Closing compares normalised paths. A link
+naming no sheet of the song is corrected to the sheet shown; a song without
+sheets says so instead of loading forever; the modal's fallback name is
+"Song"; the error block carries its sentence; disabled Play is described by
+"No chart yet". Kept: the chip groups use `aria-pressed` — only one chip is
+ever pressed, so it reads as the selection.

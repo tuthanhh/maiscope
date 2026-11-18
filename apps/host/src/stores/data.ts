@@ -23,16 +23,37 @@ export const useDataStore = defineStore("data", () => {
   // the first install, then whatever an install could not resolve — a sheet
   // missing from a stale cached body, or hidden upstream for now (ADR-0026).
   // They stay persisted, so a later Catalog that has them restores them.
-  let unresolvedBookmarkKeys = readBookmarkKeys();
-  function persistBookmarks(): void {
+  const unresolvedBookmarkKeys = ref<string[]>(readBookmarkKeys());
+  // Every change is written, whatever the Catalog's state: the song modal
+  // bookmarks a fetched sheet before the Catalog arrives, or without it.
+  watch([currentSelectedSheets, unresolvedBookmarkKeys], () => {
     writeBookmarkKeys([
       ...currentSelectedSheets.value.map((s) => s.key),
-      ...unresolvedBookmarkKeys,
+      ...unresolvedBookmarkKeys.value,
     ]);
-  }
-  watch(currentSelectedSheets, () => {
-    if (currentLoadingStatus.value === LoadingStatus.LOADED) persistBookmarks();
   });
+
+  /** Whether a sheet is bookmarked, resolved or not. */
+  function hasBookmark(key: string): boolean {
+    return (
+      currentSelectedSheets.value.some((s) => s.key === key) ||
+      unresolvedBookmarkKeys.value.includes(key)
+    );
+  }
+  // By key, not object: a Catalog refresh replaces every sheet object, and a
+  // sheet held from before it (an open modal) must still match. A key still
+  // unresolved is toggled off there, not added a second time.
+  function toggleBookmark(sheet: Sheet): void {
+    if (unresolvedBookmarkKeys.value.includes(sheet.key)) {
+      unresolvedBookmarkKeys.value = unresolvedBookmarkKeys.value.filter((k) => k !== sheet.key);
+      return;
+    }
+    const sheets = currentSelectedSheets.value.slice();
+    const index = sheets.findIndex((s) => s.key === sheet.key);
+    if (index === -1) sheets.push(sheet);
+    else sheets.splice(index, 1);
+    currentSelectedSheets.value = sheets;
+  }
 
   // Lookup maps for the loaded data. Computed once per load and shared across
   // all consumers (rather than rebuilt inside every useGameData() call).
@@ -68,21 +89,22 @@ export const useDataStore = defineStore("data", () => {
     preprocessData(data, GAME.dataSourceUrl, GAME.gameCode);
 
     const byKey = new Map(data.sheets.map((s) => [s.key, s]));
-    const keys = [
+    const keys = new Set([
       ...currentSelectedSheets.value.map((s) => s.key),
-      ...unresolvedBookmarkKeys,
-    ];
+      ...unresolvedBookmarkKeys.value,
+    ]);
     const resolved: Sheet[] = [];
-    unresolvedBookmarkKeys = [];
+    const unresolved: string[] = [];
     for (const key of keys) {
       const sheet = byKey.get(key);
       if (sheet) resolved.push(sheet);
-      else unresolvedBookmarkKeys.push(key);
+      else unresolved.push(key);
     }
 
     currentData.value = data;
     currentLoadingStatus.value = LoadingStatus.LOADED;
     currentSelectedSheets.value = resolved;
+    unresolvedBookmarkKeys.value = unresolved;
   }
 
   // Paint from IndexedDB if it holds a catalog. Returns the revision it was
@@ -146,6 +168,8 @@ export const useDataStore = defineStore("data", () => {
     currentLoadingStatus,
     currentLoadingErrorMessage,
     currentSelectedSheets,
+    hasBookmark,
+    toggleBookmark,
     categoryIndexMap,
     versionMap,
     versionIndexMap,

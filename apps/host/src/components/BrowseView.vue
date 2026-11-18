@@ -147,6 +147,11 @@ const results = computed(() => {
 });
 
 const bookmarkCount = computed(() => selectedSheets.value.length);
+const loading = computed(
+    () =>
+        dataStore.currentLoadingStatus === LoadingStatus.PENDING ||
+        dataStore.currentLoadingStatus === LoadingStatus.LOADING,
+);
 
 // ── pagination ────────────────────────────────────────────────
 const PAGE_SIZE = 24; // divides by the 2, 3 and 4 grid columns
@@ -281,7 +286,8 @@ function retry(): void {
                 </div>
             </div>
 
-            <MvEmpty v-if="results.length === 0">
+            <MvEmpty v-if="loading">{{ t("description.loading") }}</MvEmpty>
+            <MvEmpty v-else-if="results.length === 0">
                 {{
                     myListOnly && bookmarkCount === 0
                         ? t("description.myListEmpty")

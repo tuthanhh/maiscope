@@ -52,7 +52,10 @@ export default function useSongModal() {
   function close(): void {
     const target = { query: withoutModal(route.query) };
     const back = (window.history.state as { back?: string } | null)?.back;
-    if (back != null && back === router.resolve(target).fullPath) router.back();
+    // Both sides normalised: an entry loaded from a typed URL keeps its raw
+    // spelling in `back`.
+    const previous = back == null ? null : router.resolve(back).fullPath;
+    if (previous !== null && previous === router.resolve(target).fullPath) router.back();
     else router.replace(target);
   }
 
