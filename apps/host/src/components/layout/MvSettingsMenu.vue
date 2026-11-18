@@ -11,7 +11,13 @@ import MvSelect from "~/components/ui/MvSelect.vue";
 // links. The account has its own control beside it (MvAccountMenu).
 const i18n = useI18n();
 const { t } = i18n;
-const { root, open, panelId, onFocusOut } = useDisclosure();
+const { root, open, panelId, onFocusOut, focusTrigger } = useDisclosure();
+// Choosing About closes the panel under the focused link; focus goes back to
+// the gear rather than to <body>.
+function chooseAbout(): void {
+  open.value = false;
+  focusTrigger();
+}
 
 const locale = computed({
   get: () => i18n.localeProperties.code,
@@ -38,7 +44,7 @@ const localeOptions = computed(() =>
         <span class="t-label t-muted">{{ t("nav.language") }}</span>
         <MvSelect v-model="locale" :options="localeOptions" :width="180" />
       </label>
-      <RouterLink class="mv-menu-link t-body" :to="{ name: 'about' }" @click="open = false">
+      <RouterLink class="mv-menu-link t-body" :to="{ name: 'about' }" @click="chooseAbout">
         {{ t("page-title.about") }}
       </RouterLink>
       <a class="mv-menu-link t-body" :href="config.siteReportUrl" target="_blank" rel="noopener">

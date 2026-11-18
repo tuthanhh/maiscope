@@ -80,6 +80,11 @@ export const useSessionStore = defineStore("session", () => {
   const accessToken = ref<string | null>(null);
   /** False until the stored session, if any, has been checked on load. */
   const ready = ref(false);
+  /**
+   * A session is stored but could not be checked (offline, server down):
+   * neither signed in nor signed out, so the UI offers no "Sign in" for it.
+   */
+  const unverified = ref(false);
   const signedIn = computed(() => user.value !== null);
 
   // Every sign-in and every sign-out starts a new epoch. A response that
@@ -89,6 +94,7 @@ export const useSessionStore = defineStore("session", () => {
   let epoch = 0;
   function forget(): void {
     epoch++;
+    unverified.value = false;
     accessToken.value = null;
     user.value = null;
     write(local, REFRESH_KEY, null);
@@ -173,7 +179,11 @@ export const useSessionStore = defineStore("session", () => {
         if (mine === epoch) user.value = me;
       }
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401 && mine === epoch) forget();
+      if (err instanceof ApiError && err.status === 401) {
+        if (mine === epoch) forget();
+      } else if (mine === epoch && read(local, REFRESH_KEY)) {
+        unverified.value = true;
+      }
     } finally {
       ready.value = true;
     }
@@ -222,6 +232,7 @@ export const useSessionStore = defineStore("session", () => {
       accessToken.value = body.token;
       write(local, REFRESH_KEY, body.refreshToken);
       user.value = body.user;
+      unverified.value = false;
     }
     return safeReturn(stored);
   }
@@ -244,6 +255,7 @@ export const useSessionStore = defineStore("session", () => {
   return {
     user,
     ready,
+    unverified,
     signedIn,
     restore,
     signIn,
