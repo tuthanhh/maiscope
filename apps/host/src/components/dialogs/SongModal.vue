@@ -148,6 +148,7 @@ function retry(): void {
                 <MvCover v-if="song" :item="song" />
             </div>
             <MvButton
+                class="sm-close"
                 kind="icon"
                 icon="x"
                 :label="t('ui.close') as string"
@@ -257,15 +258,22 @@ function retry(): void {
 </template>
 
 <style scoped>
+/* The jacket is the modal's picture: large and centred, with the close
+   button in the corner rather than beside it. */
 .sm-head {
+    position: relative;
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    padding: var(--s-4);
+    justify-content: center;
+    padding: var(--s-6) var(--s-4);
     border-bottom: var(--line-w) solid var(--line);
 }
+.sm-close {
+    position: absolute;
+    top: var(--s-4);
+    right: var(--s-4);
+}
 .sm-jacket {
-    width: 120px;
+    width: min(240px, 60vw);
     aspect-ratio: 1;
     border-radius: var(--r);
     overflow: hidden;
