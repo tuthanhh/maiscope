@@ -35,3 +35,8 @@ chart is never rendered where it could be mistaken for the arcade's.
       Publish, Rejected, Sign in, Reports, Resolve, Official song, optional,
       fan chart of, deleted user, the rejection sentence) in all nine locales —
       moved here from 13, which ships only keys the code reads
+- [ ] The account entry in the navigation: Sign in while signed out, the
+      avatar after — 09 shipped a generic menu icon in its place
+- [ ] The menu's Reports entry, for moderators
+- [ ] Publish on the chart page once a pasted chart has loaded (12's open
+      box); signed-out users get the sign-in on tap

@@ -2,20 +2,22 @@
 
 Postgres schema for the maiscope global backend. Two concerns:
 
-1. **Canonical** — the catalog served to clients. Mirrors the frontend `Data`
-   shape (`apps/host/src/types/{Data,Song,Sheet}.ts`) so the client can rehydrate
-   its frozen, prototype-linked object graph (`utils/data.ts:preprocessData`)
-   unchanged. **Built now** — migration `20260624091738_canonical.sql`.
+1. **Canonical** — the catalog served to clients. Its fields are the raw ones
+   the frontend `Data` shape reads (`apps/host/src/types/{Data,Song,Sheet}.ts`);
+   the client builds its graph from them (`utils/data.ts:preprocessData`).
+   **Built now** — migration `20260624091738_canonical.sql`.
 2. **Charts / assets / contributions** — chart storage + open contribution &
    moderation flow. **Later migrations** (see `docs/api-contract.md` §2, §5).
 
-Cross-tier key everywhere: **`sheet_expr = songId|type|difficulty`**
-(`utils/sheet.ts:computeSheetExpr`).
+A sheet is addressed by its song's id, its type and its difficulty code
+([ADR-0026](../adr/0026-v2-api-carries-codes-and-read-fields-only.md)).
+**`sheet_expr = songId|type|difficulty`** is v1's cross-tier key: the sync
+still matches upstream on it, and `/api/v1` reads it until `api-rewrite` 07
+deletes that tree. The v2 client never computes it.
 
-The server stores **raw fields only**. Derived fields the client computes
-(`songNo`*, `imageUrl`, `imageUrlM`, `sheetExpr`*, `notePercents`,
-`$canonicalSheet`) are not authoritative here. (*`song_no`/`sheet_expr` are
-denormalized as a convenience/cache, but the client recomputes them.)
+The server stores **raw fields only**; the client derives `imageUrl` and its
+graph references. `song_no` and `sheet_expr` are denormalized columns, not
+fields the v2 client reads.
 
 ---
 
@@ -89,7 +91,7 @@ One row per song. Mirrors `Song.ts` raw fields (`song_id`, `category`, `title`,
   key is identity-bearing, so nothing may re-insert a song under a fresh id;
   the sync upserts on `song_id` and never names `id`, so an existing song
   keeps its own.
-- `song_no` — derived display order (client also recomputes in `preprocessData`).
+- `song_no` — derived display order; v1 only, the v2 client does not read it.
 - `source_index` — position in the upstream `data.json`, so a sync is
   reproducible and stable ordering survives re-imports.
 - `song_id UNIQUE`: upstream's natural key and the sync's conflict target
@@ -101,8 +103,9 @@ type×difficulty). Mirrors `Sheet.ts` raw fields (`type`, `difficulty`, `level`,
 `level_value`, `internal_level`, `internal_level_value`, `note_designer`,
 `is_special`). Key columns:
 - `song_id_fk UUID`: the real link to `songs.id` (source of truth).
-- `sheet_expr` — denormalized cross-tier key, `UNIQUE`; the lookup key for
-  `GET /sheets/{sheetExpr}` and charts.
+- `sheet_expr` — denormalized v1 cross-tier key, `UNIQUE`; the sync's upstream
+  match key, and the lookup key of `/api/v1`'s `GET /sheets/{sheetExpr}` until
+  `api-rewrite` 07 removes it.
 - `source_index` — upstream ordering, as on `songs`.
 - `UNIQUE (song_id_fk, type, difficulty)` — the v2 address
   (`/api/songs/{id}/sheets/{type}/{difficulty}`); implied by `sheet_expr`,

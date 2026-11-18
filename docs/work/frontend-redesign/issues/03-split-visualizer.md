@@ -44,3 +44,6 @@ reports a loaded chart through `usePlayback.markLoaded` instead of writing
 its refs. The page still imports engine primitives (mount, transport,
 render toggles); the boundary the ticket guards — nothing outside
 `useEngine.ts` touches wasm — holds.
+
+**2026-11-18 — note.** `VizSheetCard` was replaced by `VizTitleBlock` in 12,
+which also restyled `VizPastePanel`; the rest of this split stands.

@@ -289,7 +289,7 @@ current app, and each removes a dependency from the branch-bound work.
 |---|---|---|
 | 6 | [`server-auth-github-oauth`](../server-auth-github-oauth/spec.md) | Hard prerequisite for any write endpoint. |
 | 7 | [`api-rewrite`](../api-rewrite/spec.md) | Needs 1, 2 and 3. |
-| 8 | [`frontend-redesign`](../frontend-redesign/spec.md) tickets 02–05 | Cuts over with 7, against the direction written in ticket 06. |
+| 8 | [`frontend-redesign`](../frontend-redesign/spec.md) tickets 02–14 | Cuts over with 7, against the direction written in ticket 06. |
 | 9 | [`community-charts`](../community-charts/spec.md) | Needs 4, 6, and 7's conventions. |
 
 Auth moved onto the branch rather than ahead of it: nothing on master consumes

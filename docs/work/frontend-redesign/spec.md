@@ -30,21 +30,22 @@ that now has uploads, accounts and a second library.
 
 ## Scope
 
-| # | Ticket | Note |
-|---|---|---|
-| 01 | [Data requirements per screen](issues/01-data-requirements.md) | **Blocks `api-rewrite`'s payload.** Not code. Written first |
-| 06 | [Design direction](issues/06-design-direction.md) | **Bounds the visual work.** Not code. Written first, alongside 01 |
-| 02 | [Identity and indexing off `sheetExpr`](issues/02-identity-off-sheetexpr.md) | Needs `song-public-id` |
-| 03 | [Split the visualizer page](issues/03-split-visualizer.md) | Independent, doable now |
-| 04 | [Screens against the new API](issues/04-screens-on-new-api.md) | Blocked by `api-rewrite` and 06 |
-| 05 | [Community library screens](issues/05-community-screens.md) | Blocked by `community-charts` and 06 |
-| 07 | [Tokens and type](issues/07-tokens-and-type.md) | The design system's foundation |
-| 08 | [Base components](issues/08-base-components.md) | The component inventory |
-| 09 | [Navigation and home](issues/09-navigation-and-home.md) | |
-| 10 | [Browse](issues/10-browse.md) | Grid only, filter drawer |
-| 11 | [Song modal with a URL](issues/11-song-modal.md) | Replaces the song page and sheet dialog |
-| 12 | [Chart page](issues/12-chart-page.md) | Around the unchanged playback surface |
-| 13 | [Copy and locales](issues/13-copy-and-locales.md) | Last |
+| # | Ticket | Note | Status |
+|---|---|---|---|
+| 01 | [Data requirements per screen](issues/01-data-requirements.md) | **Blocks `api-rewrite`'s payload.** Not code. Written first | done |
+| 06 | [Design direction](issues/06-design-direction.md) | **Bounds the visual work.** Not code. Written first, alongside 01 | done |
+| 02 | [Identity and indexing off `sheetExpr`](issues/02-identity-off-sheetexpr.md) | Needs `song-public-id` | done |
+| 03 | [Split the visualizer page](issues/03-split-visualizer.md) | Independent, doable now | done |
+| 04 | [Screens against the new API](issues/04-screens-on-new-api.md) | Blocked by `api-rewrite` and 06 | done (closed into 07–13) |
+| 05 | [Community library screens](issues/05-community-screens.md) | Blocked by `community-charts` and 06 | todo — blocked by `community-charts` |
+| 07 | [Tokens and type](issues/07-tokens-and-type.md) | The design system's foundation | done |
+| 08 | [Base components](issues/08-base-components.md) | The component inventory | done |
+| 09 | [Navigation and home](issues/09-navigation-and-home.md) | | done |
+| 10 | [Browse](issues/10-browse.md) | Grid only, filter drawer | done |
+| 11 | [Song modal with a URL](issues/11-song-modal.md) | Replaces the song page and sheet dialog | done |
+| 12 | [Chart page](issues/12-chart-page.md) | Around the unchanged playback surface | done; Publish waits for 05 |
+| 13 | [Copy and locales](issues/13-copy-and-locales.md) | Last | done; community strings moved to 05 |
+| 14 | [About page](issues/14-about-page.md) | Found by the feature review; outside 07–13 | todo |
 
 Issue 04 turned out to be two jobs: reading the new API, done with issue 02,
 and the visual and structural redesign `design-direction.md` describes, too
@@ -97,3 +98,12 @@ makes it clearer what would be worth testing.
 
 Every screen reads the new API, no client code derives an identity key from a
 title, and `preprocessData` either has a stated reason to exist or is gone.
+
+**2026-11-18 — status.** Met for the official screens: every one reads
+`/api` (none reads `/api/v1`), `sheet.key` is built from the song's minted
+id, type and difficulty code, and `preprocessData` stays with one stated job
+— build the Catalog's client graph (cover URL, `sheet.song`, `sheet.key`)
+and freeze it. The feature stays active for 05 (community screens, blocked
+by `community-charts`) and 14 (About). The whole-feature review's findings
+are applied in the commits after `3809bf1`; each ticket file carries its
+own review notes.

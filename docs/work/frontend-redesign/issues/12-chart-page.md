@@ -14,7 +14,7 @@ so names resolve without the Catalog.
 - [x] Playback surface (canvas, transport, sliders, `?debug`) untouched — the controls are; their box moved (see departures)
 - [x] Difficulty colour from the reference table, not the hard-coded map
 - [x] Names resolve from `/api/reference` fetched at boot, before and without the Catalog
-- [ ] Publish appears only with `community-charts` (frontend-redesign 05)
+- [ ] Publish appears only with `community-charts` (frontend-redesign 05) — mirrored on 05's checklist
 
 ## Comments
 

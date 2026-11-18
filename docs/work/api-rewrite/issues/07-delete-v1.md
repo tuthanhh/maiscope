@@ -26,7 +26,14 @@ stopped calling v1).
       search pagination boundary) are closed as moot: their endpoints are gone
 - [ ] `tests/snapshots/catalog.json` and the v1 snapshot test are deleted or
       replaced by 03's mapping check
-- [ ] Contract: v1 sections removed; §7's wiring map describes v2
+- [ ] Health checks move first, in their own change: `fly.toml`'s
+      `[[http_service.checks]]` path and `deploy.yml`'s `HEALTHCHECK_URL`
+      point at `/api/healthcheck`, not `/api/v1/healthcheck` — or the deploy
+      gate and Fly's check fail the moment v1 is gone
+- [ ] Contract: v1 sections removed (`computeSheetExpr`, `GET /sheets/{sheetExpr}`
+      and the "unchanged" notes among them); §7's wiring map describes v2
+- [ ] `architecture.md` and `schema.md` drop the v1-only `sheet_expr` and
+      `song_no` notes that say "until api-rewrite 07"
 - [ ] `.sqlx/` regenerated; `--check` clean
 - [ ] Spec *Done when* verified: no URL in the system carries a percent-encoded
       title

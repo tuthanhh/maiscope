@@ -179,6 +179,23 @@ Only these; everything else reads the semantic layer directly.
 State tables use: default, hover, active or selected, focus, disabled.
 Blank means unchanged from default.
 
+The components live in `apps/host/src/components/ui/`, one `Mv*` file each.
+Their props follow one naming rule:
+
+- **`label`** is the text that names the component. Where it is drawn
+  (`MvField`, `MvError`) it is visible; where the component has no visible
+  text of its own (an icon `MvButton`, a bare `MvTextInput` or `MvSelect`,
+  `MvPager`, `MvModal` with nothing to point `labelledby` at, a `MvCard`
+  whose text is not enough) it becomes the accessible name.
+- **`<part>Label`** (`prevLabel`, `retryLabel`, `closeLabel`,
+  `bookmarkLabel`) names a control the component draws inside itself.
+- **`diff`** is a difficulty colour: a string, or `null` for none, which
+  draws `--fg`. On `MvChip` alone, leaving it out (`undefined`) means the
+  chip is a filter chip rather than a difficulty chip.
+- **Dialogs** differ on purpose: `MvDrawer` is page state and takes
+  `v-model`; `MvModal` is URL state, so it takes `open` and emits `close`
+  for the owner to turn into a navigation.
+
 ### Button
 
 Four kinds. Height `--control-h`, padding `0 var(--control-px)`, radius
@@ -500,8 +517,8 @@ of the existing screens.
 | Filters button | ghost, with a sliders icon, opens the drawer |
 | Difficulty chips | chip row, difficulty form, `--s-2` gaps, wraps on phone |
 | Level range | two selects at 96px with an en dash in `--fg-muted` between, under a LEVEL label |
-| Result line | `label` count at left, My list text button with a star icon and the bookmark count, Draw text button, right |
-| Grid | 2 / 3 / 4 columns, `--card-gap`, cards as specified |
+| Result line | `label` count at left, My list text button with the bookmark icon (the card's mark; one concept, one icon) and the bookmark count, Draw text button, right |
+| Grid | 2 / 3 / 4 columns, `--card-gap`, cards as specified, 24 a page (whole rows at every column count) |
 | Card title | `strong`, ellipsis |
 | Card artist | `body`, `--fg-muted`, ellipsis |
 | Level pill | as specified, `--diff` from the sheet's difficulty |

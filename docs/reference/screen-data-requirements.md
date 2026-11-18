@@ -14,6 +14,16 @@ community screens have no code yet; their section is grounded in the
 recorded in [ADR-0021](../adr/0021-catalog-snapshot-plus-reference-tables-no-server-search.md);
 the rest of the decisions below were taken on 2026-11-17 and are reversible.
 
+> **Read as v1 as-built, 2026-11-17.** "Official screens", "Derived fields:
+> where they stand" and their tables describe the screens this document was
+> written against — the song page, the sheet dialog, in-memory bookmarks
+> keyed by `sheetExpr`, a 22-sheet pager. `frontend-redesign` replaced them
+> (2026-11-18): the song modal with a URL, a `sheet.key` of song id, type
+> and difficulty code, bookmarks persisted in `localStorage`, 24 cards a
+> page. "What each screen needs delivered" and "Community screens" are
+> still the current requirements; the ticket files under
+> `docs/work/frontend-redesign/issues/` record what was built.
+
 ## Summary
 
 - Of the five derived fields, **two are rendered** (`imageUrl`, and

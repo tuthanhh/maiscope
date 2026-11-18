@@ -41,3 +41,7 @@ stays active on the old `/song` page until 11 replaces it. `useEngineInView`
 ignores a frame wait that resolves after a route change. `viewport-fit=cover`
 makes the safe-area inset real; Home fills one screen on phones without
 scrolling.
+
+**2026-11-18 — feature review.** The "avatar slot (Sign in until auth
+lands)" shipped as a generic menu icon only; the Sign-in entry, the avatar
+and the menu's Reports entry are on 05's checklist now.
