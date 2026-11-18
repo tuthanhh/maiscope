@@ -1,8 +1,9 @@
+use super::schedule::phase_at;
 use super::{
     NOTE_RADIUS,
     component::{
-        FanLanes, HoldNoteElement, NoteBpm, NoteHalo, NoteTiming, SlideArrow, SlideElement,
-        TouchElement, TouchHoldCountdown, TouchSpark,
+        FanLanes, HitTime, HoldNoteElement, NoteBpm, NoteHalo, NoteTiming, SlideArrow,
+        SlideElement, TouchElement, TouchHoldCountdown, TouchSpark,
     },
     note_colors,
     resources::{ButtonLayout, NoteAssets},
@@ -17,7 +18,6 @@ use super::{
     slide_path,
 };
 use crate::systems::{
-    GROWING,
     chart_playback::ChartPlayback,
     component::{ChartEvent, Note, NoteKind, SlideShape},
 };
@@ -35,7 +35,41 @@ pub fn next_event(
     mut chart: ResMut<ChartPlayback>,
     note_assets: Res<NoteAssets>,
     layout: Res<ButtonLayout>,
+    on_screen: Query<Entity, With<NoteTiming>>,
 ) {
+    let mut spawned = false;
+
+    // A seek (visualizer-majdata 08): replace whatever is on screen with the
+    // notes live at the new time, playing or paused, so a paused seek shows
+    // the chart there. Spawning then carries on after them (`seek`).
+    if let Some(t) = chart.take_respawn() {
+        // `try_`: a load or an unload in the same frame may have despawned
+        // them already.
+        for entity in &on_screen {
+            commands.entity(entity).try_despawn();
+        }
+        let note_speed = chart.note_speed();
+        for event in chart.live_events(t) {
+            let ChartEvent::NoteGroup(notes) = &event.event else {
+                continue;
+            };
+            for note in notes {
+                if phase_at(&note.kind, event.time, event.bpm, note_speed, t).is_some() {
+                    spawned = true;
+                    spawn_note(
+                        &mut commands,
+                        note,
+                        is_paired(note, notes),
+                        event.bpm,
+                        event.time,
+                        &note_assets,
+                        &layout,
+                    );
+                }
+            }
+        }
+    }
+
     if !chart.is_playing() {
         return;
     }
@@ -46,26 +80,16 @@ pub fn next_event(
     //
     // .map() clones event data and releases the &mut borrow on chart,
     // so chart.chart_speed() / chart.note_speed() are accessible in the loop body.
-    while let Some((event, bpm)) = chart.advance().map(|e| (e.event.clone(), e.bpm)) {
+    while let Some((event, bpm, hit)) = chart.advance().map(|e| (e.event.clone(), e.bpm, e.time)) {
         if let ChartEvent::NoteGroup(notes) = event {
+            spawned = true;
             for note in &notes {
-                // EACH-ness is per sub-comma offset, not per token. Notes split
-                // by a pseudo-EACH backtick are 1ms apart, so the notation is
-                // explicit that they are *not* an EACH and must not render as
-                // a pair. Groups are at most a handful of notes, so the scan is
-                // cheaper than building a map.
-                let is_paired = notes
-                    .iter()
-                    .filter(|other| other.offset_ms == note.offset_ms)
-                    .count()
-                    >= 2;
                 spawn_note(
                     &mut commands,
                     note,
-                    is_paired,
+                    is_paired(note, &notes),
                     bpm,
-                    chart.chart_speed(),
-                    chart.note_speed(),
+                    hit,
                     &note_assets,
                     &layout,
                 );
@@ -73,9 +97,25 @@ pub fn next_event(
         }
     }
 
-    if chart.is_finished() {
+    // The chart is over once everything is spawned and the last note has
+    // played out. Stopping when the last note *spawns* froze it mid-approach,
+    // since a paused chart freezes every note. Notes spawned this frame are
+    // not in `on_screen` yet (deferred commands), hence `spawned`.
+    if chart.all_notes_spawned() && !spawned && on_screen.is_empty() {
         chart.pause();
     }
+}
+
+/// EACH-ness is per sub-comma offset, not per token. Notes split by a
+/// pseudo-EACH backtick are 1ms apart, so the notation is explicit that they
+/// are *not* an EACH and must not render as a pair. Groups are at most a
+/// handful of notes, so the scan is cheaper than building a map.
+fn is_paired(note: &Note, group: &[Note]) -> bool {
+    group
+        .iter()
+        .filter(|other| other.offset_ms == note.offset_ms)
+        .count()
+        >= 2
 }
 
 // ── Transport commands ──────────────────────────────────────────────────────
@@ -96,9 +136,19 @@ pub fn apply_commands(
     mut window: Query<&mut Window, With<bevy::window::PrimaryWindow>>,
     mut audio_lead: ResMut<crate::systems::audio::AudioLead>,
     mut guide_scheduler: ResMut<crate::systems::audio::GuideScheduler>,
+    mut metronome: ResMut<crate::systems::audio::Metronome>,
+    mut audio_sources: ResMut<Assets<AudioSource>>,
 ) {
     for cmd in crate::wasm_bridge::take_commands() {
         match cmd {
+            crate::wasm_bridge::EngineCommand::Load(song) => crate::systems::ingest_song(
+                song,
+                &mut commands,
+                &mut chart,
+                &mut guide_scheduler,
+                &mut audio_sources,
+                &notes,
+            ),
             crate::wasm_bridge::EngineCommand::SetAudioLeadMs(ms) => audio_lead.wall_ms = ms,
             // Diagnostics (mobile-webview-spike 02). Msaa is a camera
             // component; inserting replaces the default Sample4.
@@ -125,12 +175,30 @@ pub fn apply_commands(
                 chart.set_chart_speed(rate);
             }
             crate::wasm_bridge::EngineCommand::SetNoteSpeed(speed) => chart.set_note_speed(speed),
+            crate::wasm_bridge::EngineCommand::Seek(secs) => {
+                // The clock jumps; `next_event` swaps the notes on screen. The
+                // music follows (its position is chart time), and the guide
+                // sounds and clicks restart there without sounding the gap.
+                chart.seek(secs);
+                let t = chart.elapsed_time();
+                if let Some(instance) = bgm_instance
+                    .as_ref()
+                    .and_then(|h| audio_instances.get_mut(&h.0))
+                {
+                    instance.seek_to(t);
+                }
+                let speed = chart.chart_speed();
+                let horizon = t + audio_lead.chart_secs(speed);
+                guide_scheduler.seek(chart.timed_events(), t);
+                metronome.seek(chart.timed_events(), horizon, speed);
+            }
             crate::wasm_bridge::EngineCommand::Unload => {
                 // Leaving the Play page: nothing of this chart may outlive it.
                 for entity in &notes {
-                    commands.entity(entity).despawn();
+                    commands.entity(entity).try_despawn();
                 }
                 chart.unload();
+                crate::wasm_bridge::bump_chart(String::new());
                 guide_scheduler.reset();
                 bgm_channel.stop();
                 commands.remove_resource::<crate::systems::audio::BgmInstance>();
@@ -145,7 +213,7 @@ pub fn apply_commands(
                     instance.seek_to(0.0);
                 }
                 for entity in &notes {
-                    commands.entity(entity).despawn();
+                    commands.entity(entity).try_despawn();
                 }
                 chart.restart();
                 bgm_channel.resume();
@@ -162,19 +230,17 @@ fn spawn_note(
     note: &Note,
     is_paired: bool,
     bpm: f32,
-    chart_speed: f32,
-    note_speed: f32,
+    hit: f64,
     assets: &NoteAssets,
     layout: &ButtonLayout,
 ) {
-    // Travel is faster with both play speed and note speed:
-    // duration ∝ 1 / (chart_speed · note_speed).
-    let growing_time = GROWING as f32 / (chart_speed * note_speed);
-
+    // The timer is a placeholder: `update_movement` sets the phase from the
+    // chart clock on the note's first frame.
     let mut e = commands.spawn((
         note.kind.clone(),
-        NoteTiming::Growing(Timer::from_seconds(growing_time, TimerMode::Once)),
+        NoteTiming::Growing(Timer::default()),
         NoteBpm(bpm),
+        HitTime(hit),
     ));
 
     match &note.kind {
@@ -686,4 +752,139 @@ fn spawn_fan_children(
         true, // fan cone → lyon vector chevrons
         |f| base_radius + f * (max_radius - base_radius),
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::systems::visual::component::NoteTiming;
+
+    fn app_with_chart(chart: &str) -> App {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<Image>()
+            .init_resource::<NoteAssets>()
+            .init_resource::<ButtonLayout>()
+            .init_resource::<ChartPlayback>()
+            .add_systems(Update, next_event);
+        app.world_mut()
+            .resource_mut::<ChartPlayback>()
+            .load_chart(simai::parse_chart(chart).unwrap());
+        app
+    }
+
+    /// The chart runs until its last note has played out, not until that note
+    /// spawns: a paused chart freezes every note, so stopping at spawn froze
+    /// the last notes mid-approach (found planning visualizer-majdata piece 2).
+    #[test]
+    fn the_chart_keeps_running_while_its_last_note_is_on_screen() {
+        let mut app = app_with_chart("(120){4}1,E");
+        app.update();
+        app.update();
+        let notes = app
+            .world_mut()
+            .query_filtered::<(), With<NoteTiming>>()
+            .iter(app.world())
+            .count();
+        assert_eq!(notes, 1, "the only note spawned");
+        assert!(app.world().resource::<ChartPlayback>().is_playing());
+    }
+
+    #[test]
+    fn the_chart_stops_once_its_last_note_is_gone() {
+        let mut app = app_with_chart("(120){4}1,E");
+        app.update();
+        let spawned: Vec<Entity> = app
+            .world_mut()
+            .query_filtered::<Entity, With<NoteTiming>>()
+            .iter(app.world())
+            .collect();
+        for e in spawned {
+            app.world_mut().despawn(e);
+        }
+        app.update();
+        assert!(!app.world().resource::<ChartPlayback>().is_playing());
+    }
+
+    fn hits(app: &mut App) -> Vec<f64> {
+        let mut hits: Vec<f64> = app
+            .world_mut()
+            .query::<&HitTime>()
+            .iter(app.world())
+            .map(|h| h.0)
+            .collect();
+        hits.sort_by(f64::total_cmp);
+        hits
+    }
+
+    /// Review Focus 1, 2 (piece 2): a seek while paused shows the chart at
+    /// that time — here a hold half-way through, and not the tap before it.
+    #[test]
+    fn a_seek_spawns_what_is_on_screen_at_that_time() {
+        let mut app = app_with_chart("(120){4}1h[1:1],2,E");
+        {
+            let mut chart = app.world_mut().resource_mut::<ChartPlayback>();
+            chart.pause();
+            chart.seek(1.0);
+        }
+        app.update();
+        assert_eq!(hits(&mut app), vec![0.0]);
+    }
+
+    /// Review Focus 3 (piece 2).
+    #[test]
+    fn seeking_twice_leaves_only_the_second_frame() {
+        let mut app = app_with_chart("(120){4}1h[1:1],2,E");
+        app.world_mut().resource_mut::<ChartPlayback>().pause();
+        app.world_mut().resource_mut::<ChartPlayback>().seek(1.0);
+        app.update();
+        app.world_mut().resource_mut::<ChartPlayback>().seek(0.2);
+        app.update();
+        assert_eq!(hits(&mut app), vec![0.0, 0.5]);
+    }
+
+    /// Review Focus 5 (piece 2): rests after the last note do not keep the
+    /// chart running past its length, where the timeline ends.
+    #[test]
+    fn the_chart_stops_at_its_length_despite_trailing_rests() {
+        let mut app = app_with_chart("(120){4}1,,,,,,,,E");
+        app.world_mut().resource_mut::<ChartPlayback>().seek(0.3);
+        app.update();
+        app.update();
+        assert!(!app.world().resource::<ChartPlayback>().is_playing());
+    }
+
+    /// Final review, piece 2: raising the note speed shortens the approach,
+    /// so notes already spawned can fall out of view — and must come back
+    /// when they are due, not be lost behind the spawn cursor.
+    #[test]
+    fn a_faster_note_speed_does_not_lose_notes() {
+        let mut app = app_with_chart("(120){16}1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,E");
+        app.add_systems(
+            Update,
+            crate::systems::visual::update_movement.after(next_event),
+        );
+        {
+            let mut chart = app.world_mut().resource_mut::<ChartPlayback>();
+            chart.set_note_speed(3.0);
+            chart.pause();
+            chart.seek(0.0);
+        }
+        app.update();
+        app.world_mut()
+            .resource_mut::<ChartPlayback>()
+            .set_note_speed(9.0);
+        app.update();
+        {
+            let mut chart = app.world_mut().resource_mut::<ChartPlayback>();
+            chart.tick(0.8);
+            chart.resume();
+        }
+        app.update();
+        app.update();
+        let on_screen = hits(&mut app);
+        for due in [0.875, 1.0, 1.125] {
+            assert!(on_screen.contains(&due), "{due} missing from {on_screen:?}");
+        }
+    }
 }

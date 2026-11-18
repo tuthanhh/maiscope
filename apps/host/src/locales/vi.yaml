@@ -77,6 +77,8 @@ page:
     chartText: Nội dung chart
     fullscreen: 'Toàn màn hình'
     exitFullscreen: 'Thoát toàn màn hình'
+    timeline: 'Dòng thời gian'
+    measure: 'Ô nhịp {n}'
     share: Chia sẻ
     otherDifficulties: Độ khó khác
     notes: '{count} nốt'

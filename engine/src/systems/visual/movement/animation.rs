@@ -128,7 +128,10 @@ pub(super) fn scale_note_halo(
 // ── Moving phase ─────────────────────────────────────────────────────────────
 
 pub(super) fn move_tap(transform: &mut Transform, kind: &NoteKind, t: f32, layout: &ButtonLayout) {
-    if let NoteKind::Tap(id) | NoteKind::SlideStar { button: id, .. } = kind {
+    if let NoteKind::Tap(id)
+    | NoteKind::SlideStar { button: id, .. }
+    | NoteKind::TapHold { button: id, .. } = kind
+    {
         let (spawn, hit) = travel_endpoints(layout, *id);
         transform.translation = spawn.lerp(hit, t).extend(2.0);
     }
@@ -377,9 +380,13 @@ pub(super) fn slide_trace(
     let dist = frac * path.total_length;
     let (pos, angle) = slide_path::get_transform_at_distance(&path.waypoints, dist);
     for child in children.iter() {
-        if let Ok((mut transform, el, _vis, mut shape, _)) = slide_elements.get_mut(child)
+        if let Ok((mut transform, el, mut vis, mut shape, _)) = slide_elements.get_mut(child)
             && matches!(*el, SlideElement::TraceStar(_))
         {
+            // Visible from Waiting on; set here too for a slide a seek puts
+            // straight into Sliding.
+            *vis = Visibility::Visible;
+            transform.scale = Vec3::ONE;
             set_alpha(&mut shape, 1.0);
             transform.translation = pos.extend(3.0);
             transform.rotation = Quat::from_rotation_z(angle);
@@ -404,9 +411,11 @@ pub(super) fn fan_trace(
 ) {
     let Some(children) = children else { return };
     for child in children.iter() {
-        if let Ok((mut transform, el, _vis, mut shape, _)) = slide_elements.get_mut(child)
+        if let Ok((mut transform, el, mut vis, mut shape, _)) = slide_elements.get_mut(child)
             && let SlideElement::TraceStar(lane) = *el
         {
+            *vis = Visibility::Visible;
+            transform.scale = Vec3::ONE;
             let len = fan.lengths.get(lane).copied().unwrap_or(0.0);
             let (pos, angle) = slide_path::get_transform_at_distance(&fan.lanes[lane], frac * len);
             set_alpha(&mut shape, 1.0);

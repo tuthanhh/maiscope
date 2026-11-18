@@ -77,6 +77,8 @@ page:
     chartText: 谱面文本
     fullscreen: '全屏'
     exitFullscreen: '退出全屏'
+    timeline: '时间轴'
+    measure: '小节 {n}'
     share: 分享
     otherDifficulties: 其他难度
     notes: '{count} 个音符'

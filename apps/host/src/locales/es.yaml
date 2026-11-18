@@ -77,6 +77,8 @@ page:
     chartText: Texto del chart
     fullscreen: 'Pantalla completa'
     exitFullscreen: 'Salir de pantalla completa'
+    timeline: 'Línea de tiempo'
+    measure: 'Compás {n}'
     share: Compartir
     otherDifficulties: Otras dificultades
     notes: '{count} notas'

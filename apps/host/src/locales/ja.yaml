@@ -77,6 +77,8 @@ page:
     chartText: 譜面テキスト
     fullscreen: '全画面表示'
     exitFullscreen: '全画面表示を終了'
+    timeline: 'タイムライン'
+    measure: '小節 {n}'
     share: 共有
     otherDifficulties: 他の難易度
     notes: '{count} ノーツ'

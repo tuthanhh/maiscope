@@ -2,6 +2,7 @@ mod component;
 mod judgement_circle;
 mod movement;
 pub mod resources;
+pub mod schedule;
 mod shapes;
 mod slide_path;
 mod spawning;

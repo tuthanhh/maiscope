@@ -77,6 +77,8 @@ page:
     chartText: Chart text
     fullscreen: 'Fullscreen'
     exitFullscreen: 'Exit fullscreen'
+    timeline: 'Timeline'
+    measure: 'Measure {n}'
     share: Share
     otherDifficulties: Other difficulties
     notes: '{count} notes'

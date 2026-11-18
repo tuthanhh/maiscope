@@ -51,6 +51,29 @@ fn slide_timing(duration: Duration, note_bpm: f32) -> (f32, f32) {
     }
 }
 
+/// `(wait, trace_total)` of a slide in seconds, without its geometry: the
+/// wait before the star moves (the first segment's), and how long it takes
+/// to trace the whole path — the one shared duration, or the sum of each
+/// segment's own. Tested against `build_slide_trace`'s breakpoints, so a
+/// chart's timeline and the drawn slide agree.
+pub fn slide_span_secs(
+    segments: &[SlideSegment],
+    shared_duration: bool,
+    note_bpm: f32,
+) -> (f32, f32) {
+    let first = segments.first().map(|s| slide_timing(s.duration, note_bpm));
+    let wait = first.map(|f| f.0).unwrap_or(0.0);
+    let total = if shared_duration {
+        first.map(|f| f.1).unwrap_or(0.0)
+    } else {
+        segments
+            .iter()
+            .map(|s| slide_timing(s.duration, note_bpm).1)
+            .sum()
+    };
+    (wait, total)
+}
+
 /// The end button a slide segment terminates on (used to chain segments).
 fn slide_shape_end(shape: &SlideShape) -> usize {
     match shape {
@@ -94,10 +117,6 @@ pub fn build_slide_trace(
     }
 
     let total_length: f32 = seg_lengths.iter().sum();
-    let wait_secs = segments
-        .first()
-        .map(|s| slide_timing(s.duration, note_bpm).0)
-        .unwrap_or(0.0);
     // Shared total = the single duration covering the whole path.
     let shared_total = segments
         .first()
@@ -126,7 +145,6 @@ pub fn build_slide_trace(
         waypoints,
         total_length,
         breakpoints,
-        wait_secs,
     }
 }
 

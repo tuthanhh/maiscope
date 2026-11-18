@@ -77,6 +77,8 @@ page:
     chartText: Текст чарта
     fullscreen: 'Во весь экран'
     exitFullscreen: 'Выйти из полноэкранного режима'
+    timeline: 'Шкала времени'
+    measure: 'Такт {n}'
     share: Поделиться
     otherDifficulties: Другие сложности
     notes: 'нот: {count}'

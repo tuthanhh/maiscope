@@ -8,16 +8,11 @@ pub struct SongPayload {
     pub audio: Option<Vec<u8>>,
 }
 
-static INBOX: Lazy<Mutex<Vec<SongPayload>>> = Lazy::new(|| Mutex::new(Vec::new()));
-
 /// Load a chart with no audio — plays silently against the frame clock.
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn load_chart(chart: String) {
-    INBOX
-        .lock()
-        .unwrap()
-        .push(SongPayload { chart, audio: None });
+    push_load(SongPayload { chart, audio: None });
 }
 
 /// Load a chart with its audio bytes — the BGM becomes the authoritative
@@ -25,26 +20,33 @@ pub fn load_chart(chart: String) {
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn load_song(chart: String, audio: Vec<u8>) {
-    INBOX.lock().unwrap().push(SongPayload {
+    push_load(SongPayload {
         chart,
         audio: Some(audio),
     });
 }
 
-pub fn take_songs() -> Vec<SongPayload> {
-    std::mem::take(&mut *INBOX.lock().unwrap())
+/// Songs go through the command queue, so a load and the transport commands
+/// around it apply in the order they were sent.
+pub fn push_load(song: SongPayload) {
+    COMMANDS.lock().unwrap().push(EngineCommand::Load(song));
 }
 
 // ── Transport commands ───────────────────────────────────────────────────────
 //
-// JS pushes transport intents here; the `apply_commands` Bevy system drains them
-// each frame and acts on the BGM channel + ChartPlayback. Same queue pattern as
-// the song INBOX so the wasm boundary stays a thin, lock-guarded mailbox.
+// JS pushes chart loads and transport intents here; the `apply_commands`
+// Bevy system drains them each frame, in the order they were sent, and acts on
+// the BGM channel + ChartPlayback. The wasm boundary stays a thin,
+// lock-guarded mailbox.
 
 pub enum EngineCommand {
+    /// A chart, with its music or without (`load_chart`, `load_song`).
+    Load(SongPayload),
     Pause,
     Resume,
     Restart,
+    /// Jump to a chart time (seconds), playing or paused (visualizer-majdata 08).
+    Seek(f64),
     /// Clear the chart, every note on screen and the music
     /// (visualizer-majdata 02): the Play page sends it when it is left.
     Unload,
@@ -87,16 +89,19 @@ pub fn restart() {
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen]
+pub fn seek(secs: f64) {
+    push_command(EngineCommand::Seek(secs));
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
 pub fn unload() {
     request_unload();
 }
 
-/// Songs and commands drain from separate queues, so the order of the JS
-/// calls between them is lost. A chart still queued when the page is left
-/// (it arrived while the engine was booting) is dropped here, or it could
-/// load after the unload and play behind the next page.
+/// One queue for loads and commands: an unload drops any chart sent before
+/// it and none sent after (`apply_commands` applies them in order).
 pub fn request_unload() {
-    INBOX.lock().unwrap().clear();
     COMMANDS.lock().unwrap().push(EngineCommand::Unload);
 }
 
@@ -158,6 +163,65 @@ pub fn take_commands() -> Vec<EngineCommand> {
 
 static FRAME_STATS: Lazy<Mutex<String>> = Lazy::new(|| Mutex::new(String::new()));
 
+// ── Playback readout (visualizer-majdata 09) ────────────────────────────────
+//
+// Published every frame, read by the page's timeline at its own frame rate.
+// The chart id rises with every load and unload, so the page knows when to
+// read the timeline again.
+
+/// `(position in chart seconds, playing, chart id)`.
+static PLAYBACK: Lazy<Mutex<(f64, bool, u32)>> = Lazy::new(|| Mutex::new((0.0, false, 0)));
+/// The loaded chart's `Timeline::to_json`, `""` when none.
+static TIMELINE: Lazy<Mutex<String>> = Lazy::new(|| Mutex::new(String::new()));
+
+pub fn publish_playback(position: f64, playing: bool) {
+    let mut snapshot = PLAYBACK.lock().unwrap();
+    snapshot.0 = position;
+    snapshot.1 = playing;
+}
+
+/// A chart was loaded (its timeline) or unloaded (`""`).
+pub fn bump_chart(timeline_json: String) {
+    let mut snapshot = PLAYBACK.lock().unwrap();
+    snapshot.2 = snapshot.2.wrapping_add(1);
+    *TIMELINE.lock().unwrap() = timeline_json;
+}
+
+pub fn playback_snapshot() -> (f64, bool, u32) {
+    *PLAYBACK.lock().unwrap()
+}
+
+pub fn timeline_json() -> String {
+    TIMELINE.lock().unwrap().clone()
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn playback_position() -> f64 {
+    playback_snapshot().0
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn playback_playing() -> bool {
+    playback_snapshot().1
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn chart_id() -> u32 {
+    playback_snapshot().2
+}
+
+/// The loaded chart's timeline as JSON: `length` (seconds) and `measures`,
+/// each `start` (seconds) and its `tap`/`slide`/`touch`/`hold` counts; `""`
+/// when no chart is loaded.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn timeline() -> String {
+    timeline_json()
+}
+
 pub fn publish_frame_stats(json: String) {
     *FRAME_STATS.lock().unwrap() = json;
 }
@@ -176,20 +240,38 @@ pub fn frame_stats() -> String {
 mod tests {
     use super::*;
 
-    /// A chart queued while the engine boots, then the page is left: the
-    /// unload must win, whatever order the two queues drain in that frame
-    /// (final review, visualizer-majdata piece 1).
+    /// Loads and transport commands share one queue, so they apply in the
+    /// order JS sent them: a gesture-less load is followed by a pause that
+    /// must win, and an unload must win over a load sent before it, but not
+    /// over one sent after.
     #[test]
-    fn unload_drops_a_chart_still_queued() {
-        INBOX.lock().unwrap().push(SongPayload {
+    fn loads_and_commands_drain_in_the_order_sent() {
+        let chart = || SongPayload {
             chart: "(120){4}1,E".into(),
             audio: None,
-        });
+        };
+        push_load(chart());
+        COMMANDS.lock().unwrap().push(EngineCommand::Pause);
         request_unload();
-        assert!(take_songs().is_empty());
+        push_load(chart());
         assert!(matches!(
             take_commands().as_slice(),
-            [EngineCommand::Unload]
+            [
+                EngineCommand::Load(_),
+                EngineCommand::Pause,
+                EngineCommand::Unload,
+                EngineCommand::Load(_),
+            ]
         ));
+    }
+
+    #[test]
+    fn a_new_chart_bumps_the_id_and_carries_its_timeline() {
+        let (_, _, before) = playback_snapshot();
+        bump_chart(r#"{"length":1.000,"measures":[]}"#.into());
+        bump_chart(r#"{"length":2.000,"measures":[]}"#.into());
+        publish_playback(1.5, false);
+        assert_eq!(playback_snapshot(), (1.5, false, before + 2));
+        assert_eq!(timeline_json(), r#"{"length":2.000,"measures":[]}"#);
     }
 }

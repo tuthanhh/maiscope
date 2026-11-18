@@ -7,6 +7,7 @@ mod audio;
 mod chart_playback;
 pub(crate) mod component;
 mod frame_stats;
+mod timeline;
 mod visual;
 
 const GROWING: f64 = 1.5;
@@ -67,50 +68,55 @@ fn tick_clock(
     playback.tick(time.delta_secs_f64());
 }
 
-fn ingest_songs(
-    mut commands: Commands,
-    mut playback: ResMut<ChartPlayback>,
-    mut guide_scheduler: ResMut<audio::GuideScheduler>,
-    mut audio_sources: ResMut<Assets<AudioSource>>,
-    // Every note currently on screen, so a fresh chart can clear the old one.
-    notes: Query<Entity, With<visual::NoteTiming>>,
+/// The page's timeline reads where the chart is (`wasm_bridge::playback_position`).
+fn publish_playback_state(playback: Res<ChartPlayback>) {
+    crate::wasm_bridge::publish_playback(playback.elapsed_time(), playback.is_playing());
+}
+
+/// Load one chart (`EngineCommand::Load`, drained by `apply_commands`).
+pub(crate) fn ingest_song(
+    song: crate::wasm_bridge::SongPayload,
+    commands: &mut Commands,
+    playback: &mut ChartPlayback,
+    guide_scheduler: &mut audio::GuideScheduler,
+    audio_sources: &mut Assets<AudioSource>,
+    notes: &Query<Entity, With<visual::NoteTiming>>,
 ) {
-    for song in crate::wasm_bridge::take_songs() {
-        // A malformed chart shouldn't crash the engine (panics abort the whole
-        // wasm module) — log and skip it instead.
-        let events = match simai::parse_chart(&song.chart) {
-            Ok(events) => events,
-            Err(err) => {
-                error!("chart parse failed, skipping song: {err:?}");
-                continue;
-            }
-        };
-
-        // Hard reset: loading a new chart must flush the previous one. Despawn
-        // every live note and rewind the clock, otherwise old notes linger and
-        // the new chart spawns against a stale `elapsed_time`.
-        for entity in &notes {
-            commands.entity(entity).despawn();
+    // A malformed chart shouldn't crash the engine (panics abort the whole
+    // wasm module) — log and skip it instead.
+    let events = match simai::parse_chart(&song.chart) {
+        Ok(events) => events,
+        Err(err) => {
+            error!("chart parse failed, skipping song: {err:?}");
+            return;
         }
-        playback.load_chart(events);
-        // The guide-sound cursor indexes the old event list; start it over.
-        guide_scheduler.reset();
+    };
 
-        // The song BGM is optional — a chart with no audio plays silently. The
-        // guide SFX is loaded separately at startup, so hit sounds still play.
-        // A decode failure is non-fatal: fall back to the silent frame clock.
-        if let Some(audio) = song.audio {
-            match StaticSoundData::from_cursor(std::io::Cursor::new(audio)) {
-                Ok(sound) => {
-                    commands.insert_resource(audio::BgmSource(
-                        audio_sources.add(AudioSource { sound }),
-                    ));
-                }
-                Err(err) => warn!("BGM decode failed, playing silently: {err:?}"),
+    // Hard reset: loading a new chart must flush the previous one. Despawn
+    // every live note and rewind the clock, otherwise old notes linger and
+    // the new chart spawns against a stale `elapsed_time`.
+    for entity in notes {
+        commands.entity(entity).try_despawn();
+    }
+    playback.load_chart(events);
+    crate::wasm_bridge::bump_chart(timeline::build_timeline(playback.timed_events()).to_json());
+    // The guide-sound cursor indexes the old event list; start it over.
+    guide_scheduler.reset();
+
+    // The song BGM is optional — a chart with no audio plays silently. The
+    // guide SFX is loaded separately at startup, so hit sounds still play.
+    // A decode failure is non-fatal: fall back to the silent frame clock.
+    if let Some(audio) = song.audio {
+        match StaticSoundData::from_cursor(std::io::Cursor::new(audio)) {
+            Ok(sound) => {
+                commands
+                    .insert_resource(audio::BgmSource(audio_sources.add(AudioSource { sound })));
             }
+            Err(err) => warn!("BGM decode failed, playing silently: {err:?}"),
         }
     }
 }
+
 pub fn register_systems(app: &mut App) {
     // The core game loop will be defined in this function
     app.init_resource::<visual::resources::ButtonLayout>()
@@ -133,12 +139,10 @@ pub fn register_systems(app: &mut App) {
             Startup,
             (visual::spawn_judgement_ring, audio::load_guide_sfx),
         )
-        // ingest_songs runs in every state: the first chart loads during
-        // `Loading`, and later re-loads (switching songs) arrive while already
-        // `Playing`. Commands go first, so an `Unload` sent before a new chart
-        // in the same frame cannot wipe it (`wasm_bridge::request_unload`
-        // covers the opposite order).
-        .add_systems(Update, (visual::apply_commands, ingest_songs).chain())
+        // Runs in every state: the first chart loads during `Loading`, and
+        // later re-loads (switching songs) arrive while already `Playing`.
+        // Before the clock, so a seek, load or unload shows the same frame.
+        .add_systems(Update, visual::apply_commands.before(tick_clock))
         .add_systems(Update, check_if_ready.run_if(in_state(AppState::Loading)))
         .add_systems(OnEnter(AppState::Playing), audio::start_bgm)
         // tick_clock must advance the clock before next_event / metronome /
@@ -150,13 +154,20 @@ pub fn register_systems(app: &mut App) {
                 visual::next_event,
                 audio::tick_metronome,
                 audio::schedule_guide_sounds,
+                publish_playback_state,
             )
                 .chain()
                 .run_if(in_state(AppState::Playing)),
         )
         .add_systems(
             Update,
-            (visual::update_movement, audio::handle_guide_sounds)
+            // After next_event: notes it despawns (a seek, a load) are gone
+            // before update_movement could queue work on them — an insert on
+            // a despawned entity is an error Bevy reports by panicking.
+            (
+                visual::update_movement.after(visual::next_event),
+                audio::handle_guide_sounds,
+            )
                 .run_if(in_state(AppState::Playing)),
         );
 }

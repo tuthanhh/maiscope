@@ -11,10 +11,13 @@ import { GAME } from "~/app/game";
 import { attachSong } from "~/utils/data";
 import { fetchJson } from "~/utils/api";
 import type { Sheet, Song } from "~/types";
+import type { Timeline } from "~/utils/timeline";
 
 type EngineModule = typeof import("~/wasm/engine.js");
 
 let enginePromise: Promise<EngineModule> | null = null;
+// The booted module, for the synchronous snapshot reads (`readPlayback`).
+let engineModule: EngineModule | null = null;
 // The wasm instance's linear memory, kept from init so the mobile overlay can
 // report it. `WebAssembly.Memory` only grows, so this is a high-water mark,
 // not a live figure — which is the number the memory-ceiling question wants.
@@ -74,6 +77,7 @@ export function ensureEngine(): Promise<EngineModule> {
       // Default export is wasm-bindgen's init(); fetches + instantiates the .wasm
       // and runs the #[wasm_bindgen(start)] entry, which launches the Bevy App.
       wasmMemory = (await mod.default()).memory;
+      engineModule = mod;
       return mod;
     })();
   }
@@ -165,6 +169,29 @@ export async function resume(): Promise<void> {
 
 export async function restart(): Promise<void> {
   (await ensureEngine()).restart();
+}
+
+// Jump to a chart time (seconds), playing or paused (visualizer-majdata 08).
+export async function seek(secs: number): Promise<void> {
+  (await ensureEngine()).seek(secs);
+}
+
+// The engine's latest playback snapshot (visualizer-majdata 09): position in
+// chart seconds, whether it plays, and an id that changes with every load and
+// unload. Synchronous, for a display-frame loop; null before the engine boots.
+export function readPlayback(): { position: number; playing: boolean; chartId: number } | null {
+  if (!engineModule) return null;
+  return {
+    position: engineModule.playback_position(),
+    playing: engineModule.playback_playing(),
+    chartId: engineModule.chart_id(),
+  };
+}
+
+// The loaded chart's timeline, or null with no chart (or before boot).
+export function readTimeline(): Timeline | null {
+  const raw = engineModule?.timeline();
+  return raw ? (JSON.parse(raw) as Timeline) : null;
 }
 
 // rate: 1.0 = normal. Affects both the audio rate and chart timing.

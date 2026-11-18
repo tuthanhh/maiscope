@@ -10,6 +10,7 @@ import {
     mountEngineCanvas,
     detachEngineCanvas,
     unloadChart,
+    seek,
     setMsaa,
     setRenderScale,
     setAudioLeadMs,
@@ -22,6 +23,8 @@ import useFullscreen from "~/composables/useFullscreen";
 import VizStage from "~/components/visualizer/VizStage.vue";
 import VizTransport from "~/components/visualizer/VizTransport.vue";
 import VizSlider from "~/components/visualizer/VizSlider.vue";
+import VizTimeline from "~/components/visualizer/VizTimeline.vue";
+import usePlaybackClock from "~/composables/usePlaybackClock";
 import VizTitleBlock from "~/components/visualizer/VizTitleBlock.vue";
 import VizPastePanel from "~/components/visualizer/VizPastePanel.vue";
 
@@ -36,6 +39,9 @@ const status = ref<EngineStatus>("booting");
 const lead = useAutoLead(route);
 const overlay = useDebugOverlay(route, lead);
 const playback = usePlayback();
+// The engine's position and timeline, read once per display frame while the
+// page is open (visualizer-majdata 10).
+const clock = usePlaybackClock(playback);
 const { loaded, playing, speed, noteSpeed } = playback;
 const {
     sheetInfo,
@@ -80,6 +86,7 @@ onMounted(async () => {
         overlay.start();
         applyRenderToggles();
         lead.start();
+        clock.start();
         // Play opens empty unless the URL names a chart (visualizer-majdata 03).
         await autoLoad(route.query);
     } catch (err: unknown) {
@@ -97,6 +104,7 @@ onUnmounted(() => {
     detachEngineCanvas();
     overlay.stop();
     lead.stop();
+    clock.stop();
 });
 
 // Another difficulty of the song is a link to this same route: the page does
@@ -198,6 +206,14 @@ usePageTitle(() => ({ title: t("page-title.visualizer") as string }));
                 @fullscreen="fullscreen.toggle"
             />
 
+            <!-- timeline: the chart by measure; click, drag or keys to seek -->
+            <VizTimeline
+                :timeline="clock.timeline.value"
+                :position="clock.position.value"
+                :disabled="!loaded"
+                @seek="seek"
+            />
+
             <!-- speed controls: stepped sliders with -/+ steppers -->
             <div class="mv-sliders" :class="{ 'mv-sliders--off': !loaded }">
                 <VizSlider
@@ -277,7 +293,8 @@ usePageTitle(() => ({ title: t("page-title.visualizer") as string }));
 }
 // Fullscreen (visualizer-majdata 04): the stage alone, centred on the page
 // background, the canvas as large as the screen allows above the controls
-// (its box is 1000:800, so its width is 1.25 × the height it may take).
+// (its box is 1000:800, so its width is 1.25 × the height it may take; the
+// transport, timeline and sliders under it take about 400px).
 .mv-viz-stage:fullscreen {
     display: flex;
     flex-direction: column;
@@ -288,9 +305,10 @@ usePageTitle(() => ({ title: t("page-title.visualizer") as string }));
     background: var(--bg);
 }
 .mv-viz-stage:fullscreen .mv-canvas-wrap {
-    width: min(100%, calc((100vh - 240px) * 1.25));
+    width: min(100%, calc((100vh - 400px) * 1.25));
 }
-.mv-viz-stage:fullscreen .mv-sliders {
+.mv-viz-stage:fullscreen .mv-sliders,
+.mv-viz-stage:fullscreen .mv-tl {
     width: min(100%, 640px);
 }
 .mv-viz-info {
