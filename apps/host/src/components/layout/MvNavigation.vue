@@ -8,13 +8,16 @@ import MvButton from "~/components/ui/MvButton.vue";
 import MvIcon from "~/components/ui/MvIcon.vue";
 import MvMenu from "./MvMenu.vue";
 import type { IconName } from "~/components/ui/icons";
-import logoUrl from "~/assets/brand/logo.svg";
+import logoLightUrl from "~/assets/brand/logo.svg";
+import logoDarkUrl from "~/assets/brand/logo-dark.svg";
 
 // design-direction "Navigation": three destinations. A top bar on desktop; on
 // phones a slim top bar (brand, menu) and a bottom bar of icon-above-label
 // destinations that hides while the engine canvas is in view.
 const { t } = useI18n();
 const { isDarkMode } = useDarkMode();
+// The dark theme's logo lightens the handle, which is ~2.3:1 on black.
+const logoUrl = computed(() => (isDarkMode.value ? logoDarkUrl : logoLightUrl));
 const engineInView = useEngineInView();
 const route = useRoute();
 

@@ -4,10 +4,12 @@
     <meta charset="UTF-8" />
     <!-- The maiscope logo (src/assets/brand/logo.svg); the .ico for browsers
          without SVG favicons. Every PNG in public/ is rendered from it, and favicon.svg is a copy of
-         it: re-render and re-copy both when the logo changes. -->
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="icon" type="image/x-icon" href="/favicon.ico" sizes="48x48" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+         it whose handle follows the browser's theme: re-render both when the
+         logo changes, and bump ?v= here and in vite.config.ts's manifest so
+         browsers and installed apps that cached the old icon fetch the new. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2" sizes="48x48" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>maiscope</title>
     <!-- Space Grotesk (brand, headings, titles), Inter (body) and JetBrains

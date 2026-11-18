@@ -36,19 +36,19 @@ export default defineConfig(async () => ({
         theme_color: "#ffffff",
         icons: [
           {
-            src: "/android-chrome-192x192.png",
+            src: "/android-chrome-192x192.png?v=2",
             sizes: "192x192",
             type: "image/png",
           },
           {
-            src: "/android-chrome-512x512.png",
+            src: "/android-chrome-512x512.png?v=2",
             sizes: "512x512",
             type: "image/png",
           },
           // Separate asset, not the 512 relabelled: Android crops maskable icons
           // to its own shape, so the artwork needs the safe-area padding baked in.
           {
-            src: "/maskable-512x512.png",
+            src: "/maskable-512x512.png?v=2",
             sizes: "512x512",
             type: "image/png",
             purpose: "maskable",

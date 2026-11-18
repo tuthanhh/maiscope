@@ -530,7 +530,8 @@ Community is reached from the bar. The picture is the maintainer's
 image when `apps/host/src/assets/home/` holds a `home-hero` file, and the
 maiscope logo otherwise. The logo (`assets/brand/logo.svg`) is the one
 place the shell carries colour besides the difficulty colours: it is the
-brand, drawn by the maintainer, and it reads on both themes as drawn. It
+brand, drawn by the maintainer. The dark theme uses `logo-dark.svg`, the
+same drawing with a lighter handle. It
 also marks the top bar beside the wordmark and is the favicon and app
 icon.
 
@@ -595,3 +596,4 @@ Search on YouTube, Sheet data, the list and grid toggle labels.
 | Brand colour (2026-11-18) | The maintainer's coloured logo, the shell stays monochrome | A monochrome mark |
 | Filters container (2026-11-18) | Centred dialog on desktop, bottom sheet on phones | Edge drawer |
 | Artist filter (2026-11-18) | Combobox: full list on focus, narrowed by typing | `<datalist>` (no open-on-focus, unstyled); plain select of every artist |
+| UI icons (2026-11-18) | Lucide's shapes vendored into `icons.ts` | The prototype's hand-drawn paths; an icon package at runtime |

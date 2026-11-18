@@ -50,7 +50,7 @@ that now has uploads, accounts and a second library.
 | 16 | [Filters dialog and artist picker](issues/16-filters-dialog-and-artist.md) | Maintainer's asks, 2026-11-18 | done |
 | 17 | [List view](issues/17-list-view.md) | Reverses "grid only", 2026-11-18 | done |
 | 18 | [Title as a searchable list](issues/18-title-picker.md) | Maintainer's ask, 2026-11-18 | done |
-| 19 | [Icon set, app icon refresh, dark logo](issues/19-icons.md) | Maintainer's ask, 2026-11-18 | todo |
+| 19 | [Icon set, app icon refresh, dark logo](issues/19-icons.md) | Maintainer's ask, 2026-11-18 | done |
 
 Issue 04 turned out to be two jobs: reading the new API, done with issue 02,
 and the visual and structural redesign `design-direction.md` describes, too

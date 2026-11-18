@@ -1,4 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 260" width="260" height="260">
+  <style>
+    /* The browser's own theme picks the handle: the tab strip is dark or
+       light with it, whatever the app's toggle says. */
+    .handle { fill: #3B4A54; }
+    @media (prefers-color-scheme: dark) { .handle { fill: #9AA8B2; } }
+  </style>
   <defs>
     <linearGradient id="lensGradient" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#CFF3D8"/>
@@ -8,7 +14,7 @@
 
   <!-- magnifier handle (drawn first so the ring overlaps its base) -->
   <g transform="translate(169.41 164.41) rotate(45)">
-    <rect x="-14" y="-12" width="86" height="24" rx="10" fill="#3B4A54"/>
+    <rect class="handle" x="-14" y="-12" width="86" height="24" rx="10"/>
   </g>
 
   <!-- ring, rotated 11.25deg (half a segment) -->

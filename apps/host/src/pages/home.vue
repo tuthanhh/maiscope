@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import usePageTitle from "~/composables/usePageTitle";
+import { computed } from "vue";
 import useI18n from "~/composables/useI18n";
+import useDarkMode from "~/composables/useDarkMode";
 import { GAME } from "~/app/game";
 import config from "~/app/config";
 import MvButton from "~/components/ui/MvButton.vue";
-import logoUrl from "~/assets/brand/logo.svg";
+import logoLightUrl from "~/assets/brand/logo.svg";
+import logoDarkUrl from "~/assets/brand/logo-dark.svg";
 
 // design-direction "Home": a picture, the brand in `display`, the subtitle,
 // and two buttons — primary for Songs, ghost for Play. Community is in the
@@ -13,6 +16,8 @@ import logoUrl from "~/assets/brand/logo.svg";
 defineOptions({ name: "HomePage" });
 
 const { t } = useI18n();
+const { isDarkMode } = useDarkMode();
+const logoUrl = computed(() => (isDarkMode.value ? logoDarkUrl : logoLightUrl));
 
 const heroes = import.meta.glob<string>("../assets/home/home-hero.{webp,avif,png,jpg,jpeg}", {
   eager: true,
