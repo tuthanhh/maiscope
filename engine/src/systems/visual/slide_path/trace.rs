@@ -95,8 +95,8 @@ pub struct BuiltSlide {
 }
 
 /// Build a slide from MajdataPlay's layouts (visualizer-majdata 14). The star
-/// walks from the start key through every arrow in draw order, as
-/// MajdataPlay's does; each segment of a chain starts at the key the previous
+/// walks from the start key through every arrow in draw order to the end
+/// key, as MajdataPlay's does; each segment of a chain starts at the key the previous
 /// one ended on. A segment MajdataPlay rejects (`1-2`) has no arrows and its
 /// star goes straight to the end key.
 ///
@@ -140,6 +140,10 @@ pub fn build_slide_from_layout(
                         row,
                     });
                 }
+                // The arrows stop short of the key; the star goes on to it,
+                // as MajdataPlay's does (`SlideDrop.LoadSlidePath`), so a
+                // chain turns at the key itself.
+                walk_to(key(shape_end(&seg.shape)), &mut waypoints, &mut distance);
             }
             None => {
                 debug!("no MajdataPlay layout for {:?} from {from}", seg.shape);
@@ -221,6 +225,7 @@ mod tests {
     use super::*;
     use crate::systems::component::NoteKind;
     use crate::systems::visual::majdata::SlideLayouts;
+    use crate::systems::visual::slide_path::get_transform_at_distance;
     use crate::systems::visual::{NOTE_RADIUS, RADIUS};
 
     fn slide(chart: &str) -> (usize, Vec<SlideSegment>, bool) {
@@ -333,5 +338,20 @@ mod tests {
         let (_, joint) = slide.path.breakpoints[0];
         let at = star_distance(&slide.path, 1.0 / 3.0);
         assert!((at - joint).abs() < 1.0, "{at} vs {joint}");
+    }
+
+    /// Final review: MajdataPlay's star ends on the end key, past the last
+    /// arrow (`SlideDrop.LoadSlidePath` adds the end key), and a chain runs
+    /// through the key at each joint.
+    #[test]
+    fn the_star_ends_on_the_end_key() {
+        let slide = built("(120){4}1-5[8:1],E");
+        assert_eq!(slide.path.waypoints.last().copied(), Some(key_pos(5)));
+        let (end, _) =
+            get_transform_at_distance(&slide.path.waypoints, star_distance(&slide.path, 1.0));
+        assert!(end.distance(key_pos(5)) < 1e-3);
+        let chain = built("(120){4}1-4[8:1]-7[8:1],E");
+        assert!(chain.path.waypoints.contains(&key_pos(4)));
+        assert_eq!(chain.path.waypoints.last().copied(), Some(key_pos(7)));
     }
 }
