@@ -136,9 +136,18 @@ pub fn apply_commands(
     mut audio_lead: ResMut<crate::systems::audio::AudioLead>,
     mut guide_scheduler: ResMut<crate::systems::audio::GuideScheduler>,
     mut metronome: ResMut<crate::systems::audio::Metronome>,
+    mut audio_sources: ResMut<Assets<AudioSource>>,
 ) {
     for cmd in crate::wasm_bridge::take_commands() {
         match cmd {
+            crate::wasm_bridge::EngineCommand::Load(song) => crate::systems::ingest_song(
+                song,
+                &mut commands,
+                &mut chart,
+                &mut guide_scheduler,
+                &mut audio_sources,
+                &notes,
+            ),
             crate::wasm_bridge::EngineCommand::SetAudioLeadMs(ms) => audio_lead.wall_ms = ms,
             // Diagnostics (mobile-webview-spike 02). Msaa is a camera
             // component; inserting replaces the default Sample4.

@@ -8,16 +8,11 @@ pub struct SongPayload {
     pub audio: Option<Vec<u8>>,
 }
 
-static INBOX: Lazy<Mutex<Vec<SongPayload>>> = Lazy::new(|| Mutex::new(Vec::new()));
-
 /// Load a chart with no audio — plays silently against the frame clock.
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn load_chart(chart: String) {
-    INBOX
-        .lock()
-        .unwrap()
-        .push(SongPayload { chart, audio: None });
+    push_load(SongPayload { chart, audio: None });
 }
 
 /// Load a chart with its audio bytes — the BGM becomes the authoritative
@@ -25,23 +20,28 @@ pub fn load_chart(chart: String) {
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn load_song(chart: String, audio: Vec<u8>) {
-    INBOX.lock().unwrap().push(SongPayload {
+    push_load(SongPayload {
         chart,
         audio: Some(audio),
     });
 }
 
-pub fn take_songs() -> Vec<SongPayload> {
-    std::mem::take(&mut *INBOX.lock().unwrap())
+/// Songs go through the command queue, so a load and the transport commands
+/// around it apply in the order they were sent.
+pub fn push_load(song: SongPayload) {
+    COMMANDS.lock().unwrap().push(EngineCommand::Load(song));
 }
 
 // ── Transport commands ───────────────────────────────────────────────────────
 //
-// JS pushes transport intents here; the `apply_commands` Bevy system drains them
-// each frame and acts on the BGM channel + ChartPlayback. Same queue pattern as
-// the song INBOX so the wasm boundary stays a thin, lock-guarded mailbox.
+// JS pushes chart loads and transport intents here; the `apply_commands`
+// Bevy system drains them each frame, in the order they were sent, and acts on
+// the BGM channel + ChartPlayback. The wasm boundary stays a thin,
+// lock-guarded mailbox.
 
 pub enum EngineCommand {
+    /// A chart, with its music or without (`load_chart`, `load_song`).
+    Load(SongPayload),
     Pause,
     Resume,
     Restart,
@@ -99,12 +99,9 @@ pub fn unload() {
     request_unload();
 }
 
-/// Songs and commands drain from separate queues, so the order of the JS
-/// calls between them is lost. A chart still queued when the page is left
-/// (it arrived while the engine was booting) is dropped here, or it could
-/// load after the unload and play behind the next page.
+/// One queue for loads and commands: an unload drops any chart sent before
+/// it and none sent after (`apply_commands` applies them in order).
 pub fn request_unload() {
-    INBOX.lock().unwrap().clear();
     COMMANDS.lock().unwrap().push(EngineCommand::Unload);
 }
 
@@ -184,20 +181,28 @@ pub fn frame_stats() -> String {
 mod tests {
     use super::*;
 
-    /// A chart queued while the engine boots, then the page is left: the
-    /// unload must win, whatever order the two queues drain in that frame
-    /// (final review, visualizer-majdata piece 1).
+    /// Loads and transport commands share one queue, so they apply in the
+    /// order JS sent them: a gesture-less load is followed by a pause that
+    /// must win, and an unload must win over a load sent before it, but not
+    /// over one sent after.
     #[test]
-    fn unload_drops_a_chart_still_queued() {
-        INBOX.lock().unwrap().push(SongPayload {
+    fn loads_and_commands_drain_in_the_order_sent() {
+        let chart = || SongPayload {
             chart: "(120){4}1,E".into(),
             audio: None,
-        });
+        };
+        push_load(chart());
+        COMMANDS.lock().unwrap().push(EngineCommand::Pause);
         request_unload();
-        assert!(take_songs().is_empty());
+        push_load(chart());
         assert!(matches!(
             take_commands().as_slice(),
-            [EngineCommand::Unload]
+            [
+                EngineCommand::Load(_),
+                EngineCommand::Pause,
+                EngineCommand::Unload,
+                EngineCommand::Load(_),
+            ]
         ));
     }
 }
