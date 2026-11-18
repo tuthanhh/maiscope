@@ -125,6 +125,29 @@ fn is_paired(note: &Note, group: &[Note]) -> bool {
         >= 2
 }
 
+/// The art of a slide's arrows, by MajdataPlay's rule (`IsEachNote`): EACH
+/// when more than one slide shares its time — a star's further tracks count —
+/// whatever else is there; break when the note is.
+fn slide_art(note: &Note, group: &[Note]) -> Art {
+    let slides = group
+        .iter()
+        .filter(|other| other.offset_ms == note.offset_ms)
+        .filter(|other| {
+            matches!(
+                other.kind,
+                NoteKind::Slide { .. } | NoteKind::HeadlessSlide { .. }
+            )
+        })
+        .count();
+    if note.is_break {
+        Art::Break
+    } else if slides >= 2 {
+        Art::Each
+    } else {
+        Art::Normal
+    }
+}
+
 /// A slide's head star that leads more than one slide (`1-5*-3`): the later
 /// tracks are headless slides from the same key in the same group. MajdataPlay
 /// draws it with its `_double` art.
@@ -381,7 +404,15 @@ fn spawn_note(
             };
             e.insert((Transform::default(), Visibility::Visible));
             e.with_children(|p| {
-                spawn_slide_children(p, &built, head_sprite, *head_button, art, layout, assets);
+                spawn_slide_children(
+                    p,
+                    &built,
+                    head_sprite,
+                    *head_button,
+                    (art, slide_art(note, group)),
+                    layout,
+                    assets,
+                );
             });
             let slide_path::BuiltSlide { path, fan, .. } = built;
             e.insert(path);
@@ -603,7 +634,8 @@ fn spawn_slide_children(
     built: &slide_path::BuiltSlide,
     head_sprite: Option<Sprite>,
     head_button: usize,
-    art: Art,
+    // The star's art, and the arrows' (`slide_art`).
+    (art, arrow_art): (Art, Art),
     layout: &ButtonLayout,
     assets: &NoteAssets,
 ) {
@@ -645,11 +677,14 @@ fn spawn_slide_children(
     for arrow in &built.arrows {
         let (image, path) = if built.fan.is_some() {
             let row = arrow.row.min(WIFI_ROWS - 1);
-            (assets.wifi[art as usize][row].clone(), wifi_path(art, row))
+            (
+                assets.wifi[arrow_art as usize][row].clone(),
+                wifi_path(arrow_art, row),
+            )
         } else {
             (
-                assets.slide[art as usize].clone(),
-                SLIDE_PATHS[art as usize].to_string(),
+                assets.slide[arrow_art as usize].clone(),
+                SLIDE_PATHS[arrow_art as usize].to_string(),
             )
         };
         let mut sprite = Sprite {
@@ -934,6 +969,39 @@ mod tests {
                 ("Head".into(), 58.0),
                 ("Tail".into(), 58.0)
             ]
+        );
+    }
+
+    /// The arrows' images after `chart` spawns its first notes.
+    fn arrow_images(chart: &str) -> (App, Vec<Handle<Image>>) {
+        let mut app = app_with_chart(chart);
+        app.update();
+        app.update();
+        let images = app
+            .world_mut()
+            .query_filtered::<&Sprite, With<SlideArrow>>()
+            .iter(app.world())
+            .map(|s| s.image.clone())
+            .collect();
+        (app, images)
+    }
+
+    /// Final review, Review Focus 4: MajdataPlay draws a slide's arrows as
+    /// EACH when more than one slide shares its time (`IsEachNote`), whatever
+    /// else is there; a star's further tracks count as slides.
+    #[test]
+    fn slide_arrows_are_each_only_beside_another_slide() {
+        let (app, images) = arrow_images("(120){4}1-5[8:1]/3,E");
+        let slide = &app.world().resource::<NoteAssets>().slide;
+        assert!(
+            !images.is_empty() && images.iter().all(|i| *i == slide[0]),
+            "beside a tap"
+        );
+        let (app, images) = arrow_images("(120){4}1-5[8:1]*-3[8:1],E");
+        let slide = &app.world().resource::<NoteAssets>().slide;
+        assert!(
+            !images.is_empty() && images.iter().all(|i| *i == slide[1]),
+            "two tracks"
         );
     }
 }
