@@ -77,22 +77,6 @@
   --drawer-w: 360px;
   --nav-h: 52px;
   --jacket-bar: 3px;
-
-  // ── v1 names, re-pointed at the semantic layer ──
-  // The screens not yet restyled read these. Each screen ticket moves its
-  // components onto the semantic names; the last one deletes this block.
-  --mv-bg: var(--bg);
-  --mv-panel: var(--bg-panel);
-  --mv-panel2: var(--bg-sunken);
-  --mv-bd: var(--line);
-  --mv-bd2: var(--line);
-  --mv-fg: var(--fg);
-  --mv-mut: var(--fg-muted);
-  --mv-inv: var(--inverse-fg);
-  --mv-invbg: var(--inverse-bg);
-  --mv-ov: var(--scrim);
-  --mv-jacket-bg: var(--bg-sunken);
-  --mv-mono: var(--f-mono);
 }
 
 :root.dark {
@@ -172,7 +156,8 @@
   outline-offset: 2px;
 }
 // Reduced motion removes the 8px rise of a modal or drawer entering and
-// nothing else: the fade stays (`mv-fade` in theme.scss is redefined there).
+// nothing else: theme.scss redefines `mv-fade` without the rise under
+// `prefers-reduced-motion`.
 
 // Read by assistive technology, not drawn: a page heading the layout does
 // not show (the chart page before a chart).

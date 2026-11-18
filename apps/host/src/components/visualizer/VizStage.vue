@@ -37,7 +37,7 @@ defineExpose({ host });
     width: 100%;
     aspect-ratio: 1000 / 800;
     background: #000;
-    border: 1px solid var(--mv-bd);
+    border: 1px solid var(--line);
     border-radius: 4px;
     overflow: hidden;
 }
@@ -58,13 +58,13 @@ defineExpose({ host });
     align-items: center;
     justify-content: center;
     font-size: 12px;
-    color: var(--mv-mut);
+    color: var(--fg-muted);
     text-align: center;
     padding: 12px;
 }
 .mv-canvas-err {
     color: #e66;
-    font-family: var(--mv-mono);
+    font-family: var(--f-mono);
 }
 /* ?debug readout: top-left of the canvas, readable on a phone at arm's length. */
 .mv-canvas-stats {
@@ -73,7 +73,7 @@ defineExpose({ host });
     left: 6px;
     margin: 0;
     padding: 6px 8px;
-    font: 12px/1.4 var(--mv-mono);
+    font: 12px/1.4 var(--f-mono);
     color: #fff;
     background: rgba(0, 0, 0, 0.6);
     border-radius: 4px;

@@ -42,9 +42,9 @@ defineEmits<{ restart: []; toggle: [] }>();
     width: 38px;
     height: 38px;
     border-radius: 50%;
-    border: 1px solid var(--mv-bd);
+    border: 1px solid var(--line);
     background: none;
-    color: var(--mv-fg);
+    color: var(--fg);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -55,8 +55,8 @@ defineEmits<{ restart: []; toggle: [] }>();
 .mv-ctl--play {
     width: 46px;
     height: 46px;
-    background: var(--mv-invbg);
-    border-color: var(--mv-fg);
-    color: var(--mv-inv);
+    background: var(--inverse-bg);
+    border-color: var(--fg);
+    color: var(--inverse-fg);
 }
 </style>

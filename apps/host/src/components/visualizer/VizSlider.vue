@@ -86,7 +86,7 @@ const ticks = computed(() => {
 .mv-slider-label {
     font-size: 14px;
     font-weight: 700;
-    color: var(--mv-fg);
+    color: var(--fg);
     width: 80px; /* Fixed width to align sliders nicely */
     flex-shrink: 0;
 }
@@ -94,7 +94,7 @@ const ticks = computed(() => {
 .mv-slider-val {
     font-size: 14px;
     font-weight: 700;
-    color: var(--mv-fg);
+    color: var(--fg);
     width: 44px; /* Fixed width for the trailing value */
     text-align: right;
     flex-shrink: 0;
@@ -102,7 +102,7 @@ const ticks = computed(() => {
 
 /* --- Control Buttons (-/+) --- */
 .mv-step {
-    background: var(--mv-invbg);
+    background: var(--inverse-bg);
     border: none;
     border-radius: 9px;
     width: 42px;
@@ -110,7 +110,7 @@ const ticks = computed(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--mv-inv);
+    color: var(--inverse-fg);
     cursor: pointer;
     transition:
         transform 0.12s ease,
@@ -155,7 +155,7 @@ const ticks = computed(() => {
     left: 0;
     right: 0;
     height: 5px;
-    background: var(--mv-bd2);
+    background: var(--line);
     border-radius: 999px;
     z-index: 1;
 }
@@ -179,8 +179,8 @@ const ticks = computed(() => {
     height: 20px;
     width: 20px;
     border-radius: 50%;
-    background: var(--mv-invbg);
-    border: 3px solid var(--mv-bg, #fff);
+    background: var(--inverse-bg);
+    border: 3px solid var(--bg, #fff);
     margin-top: -7px; /* (20 thumb - 5 track) / 2, minus border */
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
     transition: transform 0.1s ease;
@@ -195,8 +195,8 @@ const ticks = computed(() => {
     height: 20px;
     width: 20px;
     border-radius: 50%;
-    background: var(--mv-invbg);
-    border: 3px solid var(--mv-bg, #fff);
+    background: var(--inverse-bg);
+    border: 3px solid var(--bg, #fff);
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
     transition: transform 0.1s ease;
     cursor: pointer;
@@ -229,20 +229,20 @@ const ticks = computed(() => {
 .mv-tick-mark {
     width: 1px;
     height: 6px;
-    background: var(--mv-bd);
+    background: var(--line);
     border-radius: 1px;
 }
 /* major mark: taller + stronger */
 .mv-tick--major .mv-tick-mark {
     width: 2px;
     height: 10px;
-    background: var(--mv-mut);
+    background: var(--fg-muted);
 }
 .mv-tick-lbl {
     margin-top: 4px;
     font-size: 10px;
     font-style: normal;
-    color: var(--mv-mut);
+    color: var(--fg-muted);
     white-space: nowrap;
 }
 </style>

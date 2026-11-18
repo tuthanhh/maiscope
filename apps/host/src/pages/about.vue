@@ -161,14 +161,14 @@ usePageTitle(() => ({ title: t("page-title.about") as string }));
 }
 .mv-hr {
     height: 1px;
-    background: var(--mv-bd);
+    background: var(--line);
     margin: 12px 0 20px;
 }
 .mv-about-h3 {
     font-size: 12px;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: var(--mv-mut);
+    color: var(--fg-muted);
     margin: 24px 0 8px;
 }
 .mv-about-p {
@@ -181,7 +181,7 @@ usePageTitle(() => ({ title: t("page-title.about") as string }));
     margin-bottom: 6px;
 }
 .mv-about a {
-    color: var(--mv-fg);
+    color: var(--fg);
     text-underline-offset: 2px;
 }
 .mv-about a:hover {

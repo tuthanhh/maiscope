@@ -297,7 +297,7 @@ usePageTitle(() => ({ title: t("page-title.visualizer") as string }));
     display: flex;
     flex-direction: column;
     gap: 24px; /* Space between the two slider rows */
-    font-family: var(--mv-mono);
+    font-family: var(--f-mono);
     width: 100%;
 }
 

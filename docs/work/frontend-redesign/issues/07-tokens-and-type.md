@@ -16,7 +16,7 @@ type scale as utility classes.
 - [x] The seven type roles as classes (`t-label`, `t-meta`, `t-body`, `t-strong`, `t-heading`, `t-title`, `t-display`), phone sizes for `title` and `display`, `palt` for Japanese in the sans roles
 - [x] `<html lang>` follows the active locale
 - [x] The old `--mv-*` tokens map onto the new semantic ones for the screens not yet restyled
-- [ ] …and are deleted by the last screen ticket (13)
+- [x] …and are deleted by the last screen ticket (13)
 - [x] Focus is `1px solid var(--focus)` offset 2px on `:focus-visible`; `prefers-reduced-motion` honoured
 
 ## Comments
@@ -44,3 +44,9 @@ mode so native popups and checkboxes go dark; `--inverse-hover` is recorded
 in design-direction's semantic table. Accepted as the spec's: dark hairlines
 are fainter than v1's (`--line` is `--n-900`), and `--mv-bd2` collapses onto
 `--line` until those screens are restyled.
+
+**2026-11-18 — feature review.** The `--mv-*` block is deleted. Its last
+readers — the playback surface (`VizStage`, `VizTransport`, `VizSlider`,
+the visualizer page), About, `MvJacket` and `theme.scss` — now name the
+semantic tokens directly; each old name mapped to exactly one, so the
+pages render pixel-identical (compared before and after, light and dark).

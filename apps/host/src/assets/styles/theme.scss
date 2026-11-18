@@ -1,15 +1,10 @@
-// ─────────────────────────────────────────────────────────────
-// Shared rules for the screens not yet restyled. Colours and fonts come from
-// tokens.scss, which re-points the v1 `--mv-*` names at the semantic layer;
-// this file goes when the last screen moves onto the new components.
-// ─────────────────────────────────────────────────────────────
-// Scope mono styling to the redesigned surfaces. While the app shell still
-// runs on Vuetify (removed in a later slice), this keeps the two worlds
-// from fighting over global element styles.
+// The app's base rules, on the root element (`App.vue`): mono by default
+// (the type role classes in tokens.scss set the sans faces), border-box
+// sizing, and the dialog entry animation. Values come from tokens.scss.
 .mv-root {
-  font-family: var(--mv-mono);
-  background: var(--mv-bg);
-  color: var(--mv-fg);
+  font-family: var(--f-mono);
+  background: var(--bg);
+  color: var(--fg);
 
   *,
   *::before,
@@ -21,7 +16,7 @@
   textarea,
   select,
   button {
-    font-family: var(--mv-mono);
+    font-family: var(--f-mono);
   }
 
   select {
@@ -30,12 +25,12 @@
   }
 
   ::placeholder {
-    color: var(--mv-mut);
+    color: var(--fg-muted);
   }
 }
 
 
-// Invert = active. Shared transitions/motion (kept minimal by design).
+// The transport's buttons (VizTransport), from the v1 playback surface.
 .mv-btn {
   cursor: pointer;
   transition: opacity 0.12s ease, border-color 0.12s ease, background 0.12s ease;
