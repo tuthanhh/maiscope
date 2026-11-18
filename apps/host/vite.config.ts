@@ -61,6 +61,10 @@ export default defineConfig(async () => ({
         // makes a bad deploy permanent. It is served by the NetworkFirst
         // navigation rule below instead. No `wasm` either — see globIgnores.
         globPatterns: ["**/*.{js,css,ico,png,svg,webp,avif,jpg,jpeg,woff2}"],
+        // The icon URLs carry `?v=N` to bust browser caches (index.html, the
+        // manifest below); the precache is keyed on the bare path, so `v` is
+        // ignored on lookup, as Workbox's defaults already ignore `utm_*`.
+        ignoreURLParametersMatching: [/^utm_/, /^fbclid$/, /^v$/],
         // Belt and braces. The engine bundle is ~20MB release / 74MB debug, and
         // precaching it would charge every catalog visitor for a page most of
         // them never open.

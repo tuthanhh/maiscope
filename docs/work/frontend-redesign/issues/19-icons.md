@@ -9,8 +9,8 @@ copies actually pick up; a dark-theme variant of the logo.
 
 **Status:** done
 
-- [x] Every `MvIcon` name drawn from Lucide (ISC licence), same 24px grid
-      and 2px stroke; `filled` still signals state (bookmark, play)
+- [x] Every `MvIcon` name drawn from Lucide (ISC licence) on its 24px grid;
+      `filled` still signals state (bookmark, play)
 - [x] Icon URLs in `index.html` and the manifest carry a version, so a
       browser or an installed app that cached the old icon fetches the new
 - [x] `logo-dark.svg` with a handle that reads on black; the top bar, Home
@@ -29,3 +29,16 @@ so an installed copy can take that long. `logo-dark.svg` lightens only the
 handle (`#9AA8B2`, ~8.6:1 on black); the top bar and Home pick it by the
 app's theme, and `favicon.svg` by the browser's (`prefers-color-scheme`),
 since the tab strip follows the browser.
+
+**2026-11-18 — review.** Applied: the `?v=2` icon URLs missed the
+service worker's precache, keyed on the bare path, so offline they fell
+to the network — Workbox now ignores `v` on lookup. Lucide's ISC notice
+ships in the built app (`/THIRD_PARTY_NOTICES.txt`), not only in the
+source. `MvTextInput` loses its `icon` prop, which nothing passes since
+18. Corrections to the above: the PNG and ICO icons were redrawn in 15;
+this ticket only versions their URLs. The theme-aware favicon works where
+a browser renders SVG favicons with `prefers-color-scheme` (Firefox,
+current Chrome); Safari uses the `.ico`, which keeps the light handle.
+Kept on purpose: icons stroke at 1.6, lighter than Lucide's 2, to match
+the monochrome UI; and a tap on the title or artist field opens the full
+list on phones too, as asked ("a plain dropdown" first).

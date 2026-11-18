@@ -10,7 +10,8 @@
 // held by Lucide Contributors 2022. Permission to use, copy, modify, and/or
 // distribute this software for any purpose with or without fee is hereby
 // granted, provided that the above copyright notice and this permission
-// notice appear in all copies.
+// notice appear in all copies. The built app carries it in
+// public/THIRD_PARTY_NOTICES.txt, served at /THIRD_PARTY_NOTICES.txt.
 const icons = {
   // lucide: search
   search: '<circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />',

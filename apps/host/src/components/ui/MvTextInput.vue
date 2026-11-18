@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { inject } from "vue";
 import { fieldKey } from "./fieldContext";
-import MvIcon from "./MvIcon.vue";
-import type { IconName } from "./icons";
 
 defineProps<{
   modelValue: string;
@@ -11,8 +9,6 @@ defineProps<{
   label?: string;
   inputmode?: "text" | "decimal" | "numeric" | "search";
   width?: number;
-  /** A leading icon in `--fg-muted`, e.g. search. */
-  icon?: IconName;
   invalid?: boolean;
   disabled?: boolean;
 }>();
@@ -28,13 +24,11 @@ const field = inject(fieldKey, null);
 
 <template>
   <div class="mv-input-wrap" :style="{ width: width != null ? `${width}px` : undefined }">
-    <span v-if="icon" class="mv-input-icon"><MvIcon :name="icon" :size="15" /></span>
     <input
       :id="field?.id"
       :aria-label="field ? undefined : label"
       :aria-describedby="field?.describedBy()"
       class="mv-input"
-      :class="{ 'mv-input--icon': icon }"
       :value="modelValue"
       :placeholder="placeholder"
       :inputmode="inputmode"
@@ -55,16 +49,5 @@ const field = inject(fieldKey, null);
 .mv-input {
   @include control.control;
   width: 100%;
-}
-.mv-input--icon {
-  padding-left: calc(var(--control-px) + 15px + var(--s-2));
-}
-.mv-input-icon {
-  position: absolute;
-  left: var(--control-px);
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--fg-muted);
-  pointer-events: none;
 }
 </style>
