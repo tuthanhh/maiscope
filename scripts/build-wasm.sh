@@ -44,14 +44,23 @@ wasm-bindgen "$WASM_IN" --out-dir "$OUT_DIR" --target web
 # there. (Charts + audio are NOT copied — they're pushed in as bytes via
 # wasm_bridge; only sprites go through the file-fetching AssetServer.)
 ASSETS_OUT="$WORKSPACE_DIR/apps/host/public/assets"
-echo ">> sync sprites -> $ASSETS_OUT/sprites"
-rm -rf "$ASSETS_OUT/sprites"
 mkdir -p "$ASSETS_OUT"
-cp -R "$ENGINE_DIR/assets/sprites" "$ASSETS_OUT/sprites"
+
+# Mirror a folder in place: only changed files are written and removed ones
+# deleted. Deleting the folder and copying it back confused a running Vite,
+# which then answered some re-created files with index.html.
+sync_dir() {
+  echo ">> sync $1 -> $ASSETS_OUT/$1"
+  if command -v rsync > /dev/null; then
+    rsync -a --delete "$ENGINE_DIR/assets/$1/" "$ASSETS_OUT/$1/"
+  else
+    rm -rf "${ASSETS_OUT:?}/$1"
+    cp -R "$ENGINE_DIR/assets/$1" "$ASSETS_OUT/$1"
+  fi
+}
+sync_dir sprites
 # MajdataPlay's art (visualizer-majdata 12); the text layouts are embedded at
 # compile time, but copying the folder whole keeps its SOURCE.md beside it.
-echo ">> sync majdata -> $ASSETS_OUT/majdata"
-rm -rf "$ASSETS_OUT/majdata"
-cp -R "$ENGINE_DIR/assets/majdata" "$ASSETS_OUT/majdata"
+sync_dir majdata
 
 echo ">> done. host imports from ~/wasm/engine.js"
