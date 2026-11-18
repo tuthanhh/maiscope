@@ -1,4 +1,4 @@
-import { reactive, ref } from "vue";
+import { reactive, ref, watch } from "vue";
 import { defineStore } from "pinia";
 import type { BrowseForm } from "~/components/browse/BrowseFilters.vue";
 
@@ -31,5 +31,24 @@ export const useBrowseStore = defineStore("browse", () => {
   const form = reactive(emptyBrowseForm());
   const myListOnly = ref(false);
   const currentPage = ref(1);
-  return { form, myListOnly, currentPage };
+
+  // Grid or list: the one browse setting kept across visits, per browser.
+  const VIEW_KEY = "mv:browse-view";
+  const view = ref<"grid" | "list">(readView());
+  function readView(): "grid" | "list" {
+    try {
+      return localStorage.getItem(VIEW_KEY) === "list" ? "list" : "grid";
+    } catch {
+      return "grid";
+    }
+  }
+  watch(view, (value) => {
+    try {
+      localStorage.setItem(VIEW_KEY, value);
+    } catch {
+      // Storage refused (private mode, quota): the choice lasts the session.
+    }
+  });
+
+  return { form, myListOnly, currentPage, view };
 });

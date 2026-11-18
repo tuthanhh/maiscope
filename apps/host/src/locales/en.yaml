@@ -65,6 +65,9 @@ page:
     reset: Reset
     myList: My list
     typeToNarrow: Keep typing to narrow the list
+    view: View
+    gridView: Grid view
+    listView: List view
     filters: Filters
     pages: Pages
     previousPage: Previous page

@@ -65,6 +65,9 @@ page:
     reset: Đặt lại
     myList: Danh sách của tôi
     typeToNarrow: Gõ thêm để thu hẹp danh sách
+    view: Kiểu xem
+    gridView: Dạng lưới
+    listView: Dạng danh sách
     filters: Bộ lọc
     pages: Trang
     previousPage: Trang trước

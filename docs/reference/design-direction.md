@@ -388,10 +388,14 @@ hidden (frontend-redesign 12).
 ```
 
 Surface: search, difficulty chips, level range, result count, My list
-toggle, the Filters button. Drawer: category, version, designer, region
+toggle, the grid/list toggle, the Filters button. Drawer: category, version, designer, region
 and its override toggle, type chips, BPM range, exact-match toggles,
 Reset. "Draw a random sheet" becomes a text button in the result line.
-The list view is gone.
+The list view, dropped at first, is back since 2026-11-18 (`frontend-redesign`
+17): rows of a 48px jacket, the title in the display face over the artist,
+type and difficulty in `meta`, the level pill and the bookmark mark; on
+phones type and difficulty sit under the artist. The choice is remembered
+per browser.
 
 ### Song modal
 
@@ -577,7 +581,7 @@ Search on YouTube, Sheet data, the list and grid toggle labels.
 |---|---|---|
 | Where style comes from | Sans and mono pairing, monochrome | Mono only; one accent colour |
 | Sans coverage | Latin webfont, system CJK | CJK webfont; system-only stack |
-| Browse view | Grid only | Grid default with list kept |
+| Browse view | Grid default with list kept (reversed 2026-11-18; was grid only) | Grid only |
 | Filters | Search plus difficulty and level on the surface, rest in a drawer | Search only; full panel collapsed |
 | Card tap | Song modal, information first | Song page; two taps on the card |
 | Song page | Removed; modal has a URL | Kept as the comparison table |

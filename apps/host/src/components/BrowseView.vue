@@ -15,7 +15,7 @@ import {
     groupThousands,
     pickItem,
 } from "~/utils";
-import type { Filters, FilterOption } from "~/types";
+import type { Filters, FilterOption, Sheet } from "~/types";
 import MvButton from "~/components/ui/MvButton.vue";
 import MvCard from "~/components/ui/MvCard.vue";
 import MvChip from "~/components/ui/MvChip.vue";
@@ -28,6 +28,7 @@ import MvSelect, { type SelectOption } from "~/components/ui/MvSelect.vue";
 import MvTextInput from "~/components/ui/MvTextInput.vue";
 import SongModal from "~/components/dialogs/SongModal.vue";
 import BrowseFilters from "~/components/browse/BrowseFilters.vue";
+import BrowseList from "~/components/browse/BrowseList.vue";
 
 // design-direction "Browse" and its worked example. Search, difficulty chips
 // and the level range sit on the surface; the drawer holds the rest. Every
@@ -44,7 +45,7 @@ const { selectedSheets, toggleSheetSelection } = useSelectedSheets();
 // ── filter form: kept in the browse store, so it outlives the page ──
 const browse = useBrowseStore();
 const form = browse.form;
-const { myListOnly, currentPage } = storeToRefs(browse);
+const { myListOnly, currentPage, view } = storeToRefs(browse);
 const drawerOpen = ref(false);
 
 // ── data + options (reuses the existing filter engine) ────────
@@ -165,6 +166,11 @@ function goToPage(page: number): void {
 }
 
 // ── actions ───────────────────────────────────────────────────
+// A card or row names its sheet in full: the visible text omits the
+// difficulty, which only the colour shows.
+function sheetLabel(s: Sheet): string {
+    return `${s.song.title} — ${getTypeAbbr(s.type)} ${getDifficultyName(s.difficulty)} ${s.level ?? ""}`;
+}
 function drawRandom(): void {
     if (results.value.length === 0) return;
     songModal.open(pickItem(results.value));
@@ -266,6 +272,24 @@ function retry(): void {
                     >
                         {{ t("page.songs.drawRandom") }}
                     </MvButton>
+                    <span class="mv-browse-view" role="group" :aria-label="t('page.songs.view') as string">
+                        <MvButton
+                            kind="icon"
+                            icon="grid"
+                            :label="t('page.songs.gridView') as string"
+                            :aria-pressed="view === 'grid'"
+                            :class="{ 'mv-browse-view--on': view === 'grid' }"
+                            @click="view = 'grid'"
+                        />
+                        <MvButton
+                            kind="icon"
+                            icon="list"
+                            :label="t('page.songs.listView') as string"
+                            :aria-pressed="view === 'list'"
+                            :class="{ 'mv-browse-view--on': view === 'list' }"
+                            @click="view = 'list'"
+                        />
+                    </span>
                 </div>
             </div>
 
@@ -277,6 +301,15 @@ function retry(): void {
                         : t("description.filterResultEmpty")
                 }}
             </MvEmpty>
+            <BrowseList
+                v-else-if="view === 'list'"
+                :sheets="paginatedResults"
+                :link-to="songModal.linkTo"
+                :is-bookmarked="(s) => selectedSet.has(s.key)"
+                :bookmark-label="t('page.songs.bookmark') as string"
+                :row-label="sheetLabel"
+                @bookmark="toggleSheetSelection"
+            />
             <ul v-else class="mv-browse-grid">
                 <li v-for="s in paginatedResults" :key="s.key">
                     <MvCard
@@ -288,7 +321,7 @@ function retry(): void {
                         :diff="getDifficultyColor(s.difficulty)"
                         :bookmarked="selectedSet.has(s.key)"
                         :bookmark-label="t('page.songs.bookmark') as string"
-                        :label="`${s.song.title} — ${getTypeAbbr(s.type)} ${getDifficultyName(s.difficulty)} ${s.level ?? ''}`"
+                        :label="sheetLabel(s)"
                         @bookmark="toggleSheetSelection(s)"
                     />
                 </li>
@@ -377,6 +410,18 @@ function retry(): void {
     align-items: center;
     gap: var(--s-1) var(--s-4);
 }
+.mv-browse-view {
+    display: inline-flex;
+    gap: var(--s-1);
+}
+// The pressed view button: the icon at full strength, the other muted.
+.mv-browse-view :deep(.mv-button) {
+    color: var(--fg-muted);
+}
+.mv-browse-view :deep(.mv-browse-view--on) {
+    color: var(--fg);
+    background: var(--bg-panel);
+}
 .mv-browse-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -390,12 +435,36 @@ function retry(): void {
 }
 
 @media (min-width: bp.$bp-md) {
-    .mv-browse-grid {
+    .mv-browse-view {
+    display: inline-flex;
+    gap: var(--s-1);
+}
+// The pressed view button: the icon at full strength, the other muted.
+.mv-browse-view :deep(.mv-button) {
+    color: var(--fg-muted);
+}
+.mv-browse-view :deep(.mv-browse-view--on) {
+    color: var(--fg);
+    background: var(--bg-panel);
+}
+.mv-browse-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 }
 @media (min-width: bp.$bp-lg) {
-    .mv-browse-grid {
+    .mv-browse-view {
+    display: inline-flex;
+    gap: var(--s-1);
+}
+// The pressed view button: the icon at full strength, the other muted.
+.mv-browse-view :deep(.mv-button) {
+    color: var(--fg-muted);
+}
+.mv-browse-view :deep(.mv-browse-view--on) {
+    color: var(--fg);
+    background: var(--bg-panel);
+}
+.mv-browse-grid {
         grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 }

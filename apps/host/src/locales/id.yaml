@@ -65,6 +65,9 @@ page:
     reset: Atur ulang
     myList: Daftarku
     typeToNarrow: Ketik lagi untuk mempersempit daftar
+    view: Tampilan
+    gridView: Tampilan kisi
+    listView: Tampilan daftar
     filters: Filter
     pages: Halaman
     previousPage: Halaman sebelumnya

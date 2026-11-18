@@ -65,6 +65,9 @@ page:
     reset: リセット
     myList: マイリスト
     typeToNarrow: 入力を続けて絞り込んでください
+    view: 表示
+    gridView: グリッド表示
+    listView: リスト表示
     filters: フィルター
     pages: ページ
     previousPage: 前のページ

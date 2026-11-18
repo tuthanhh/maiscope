@@ -65,6 +65,9 @@ page:
     reset: Сбросить
     myList: Мой список
     typeToNarrow: Продолжайте вводить, чтобы сузить список
+    view: Вид
+    gridView: Сеткой
+    listView: Списком
     filters: Фильтры
     pages: Страницы
     previousPage: Предыдущая страница

@@ -65,6 +65,9 @@ page:
     reset: 重置
     myList: 我的列表
     typeToNarrow: 继续输入以缩小列表
+    view: 视图
+    gridView: 网格视图
+    listView: 列表视图
     filters: 筛选
     pages: 分页
     previousPage: 上一页

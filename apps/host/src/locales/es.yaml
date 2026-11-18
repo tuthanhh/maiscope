@@ -65,6 +65,9 @@ page:
     reset: Restablecer
     myList: Mi lista
     typeToNarrow: Sigue escribiendo para acotar la lista
+    view: Vista
+    gridView: Vista en cuadrícula
+    listView: Vista en lista
     filters: Filtros
     pages: Páginas
     previousPage: Página anterior
