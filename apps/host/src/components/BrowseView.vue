@@ -3,7 +3,7 @@ import { reactive, computed, watch, ref } from "vue";
 import { useDataStore } from "~/stores/data";
 import useI18n from "~/composables/useI18n";
 import useGameData from "~/composables/useGameData";
-import useSheetDialog from "~/composables/useSheetDialog";
+import useSongModal from "~/composables/useSongModal";
 import useSelectedSheets from "~/composables/useSelectedSheets";
 import LoadingStatus from "~/enums/LoadingStatus";
 import {
@@ -24,6 +24,7 @@ import MvField from "~/components/ui/MvField.vue";
 import MvPager from "~/components/ui/MvPager.vue";
 import MvSelect, { type SelectOption } from "~/components/ui/MvSelect.vue";
 import MvTextInput from "~/components/ui/MvTextInput.vue";
+import SongModal from "~/components/dialogs/SongModal.vue";
 import BrowseFilters, {
     type BrowseForm,
 } from "~/components/browse/BrowseFilters.vue";
@@ -37,7 +38,7 @@ const dataStore = useDataStore();
 const i18n = useI18n();
 const { t } = i18n;
 const { getTypeAbbr, getDifficultyName } = useGameData();
-const { viewSheet } = useSheetDialog();
+const songModal = useSongModal();
 const { selectedSheets, toggleSheetSelection } = useSelectedSheets();
 
 // ── filter form (declared, applied, and reset in one place) ───
@@ -178,7 +179,7 @@ function goToPage(page: number): void {
 // ── actions ───────────────────────────────────────────────────
 function drawRandom(): void {
     if (results.value.length === 0) return;
-    viewSheet(pickItem(results.value));
+    songModal.open(pickItem(results.value));
 }
 // Reset clears the drawer's filters; search, difficulties and the level range
 // are on the surface and cleared there.
@@ -290,6 +291,7 @@ function retry(): void {
             <ul v-else class="mv-browse-grid">
                 <li v-for="s in paginatedResults" :key="s.key">
                     <MvCard
+                        :to="songModal.linkTo(s)"
                         :cover="s.song"
                         :title="s.song.title"
                         :artist="s.song.artist"
@@ -298,7 +300,6 @@ function retry(): void {
                         :bookmarked="selectedSet.has(s.key)"
                         :bookmark-label="t('page.songs.bookmark') as string"
                         :label="`${s.song.title} — ${getTypeAbbr(s.type)} ${getDifficultyName(s.difficulty)} ${s.level ?? ''}`"
-                        @open="viewSheet(s)"
                         @bookmark="toggleSheetSelection(s)"
                     />
                 </li>
@@ -316,6 +317,8 @@ function retry(): void {
                 @page="goToPage"
             />
         </template>
+
+        <SongModal />
 
         <MvDrawer
             v-model="drawerOpen"

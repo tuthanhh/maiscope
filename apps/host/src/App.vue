@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { watch, onMounted } from "vue";
+import { useRoute } from "vue-router";
 import { useDataStore } from "~/stores/data";
 import useI18n from "~/composables/useI18n";
 import useDarkMode from "~/composables/useDarkMode";
@@ -9,12 +10,12 @@ import { GAME } from "~/app/game";
 import config from "~/app/config";
 import MvNavigation from "~/components/layout/MvNavigation.vue";
 import MvLoadingOverlay from "~/components/ui/MvLoadingOverlay.vue";
-import MvSheetDialog from "~/components/dialogs/MvSheetDialog.vue";
 
 defineOptions({ name: "DefaultLayout" });
 
 const i18n = useI18n();
 const dataStore = useDataStore();
+const route = useRoute();
 const { isDarkMode } = useDarkMode();
 
 
@@ -49,8 +50,13 @@ watch(
 
 <template>
     <div class="mv-root mv-app">
+        <!-- Not over a shared song link: the song modal fetches its one
+             song and paints before the Catalog arrives. -->
         <MvLoadingOverlay
-            v-if="dataStore.currentLoadingStatus === LoadingStatus.LOADING"
+            v-if="
+                dataStore.currentLoadingStatus === LoadingStatus.LOADING &&
+                !route.query.song
+            "
         />
 
         <MvNavigation />
@@ -61,7 +67,6 @@ watch(
             <router-view />
         </main>
 
-        <MvSheetDialog />
     </div>
 </template>
 

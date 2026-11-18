@@ -17,9 +17,8 @@ const { isDarkMode } = useDarkMode();
 const engineInView = useEngineInView();
 const route = useRoute();
 
-// The old song page belongs to Songs until the song modal replaces it (11).
 function isActive(name: string): boolean {
-  return route.name === name || (name === "songs" && route.name === "song");
+  return route.name === name;
 }
 
 const destinations = computed<{ name: string; label: string; icon: IconName }[]>(() => [

@@ -619,7 +619,8 @@ Status enum: `pending | approved | rejected | merged`.
 | Contract | Frontend touch-point |
 |----------|---------------------|
 | `GET /catalog` | `stores/data.ts:loadData` (replaced `data.json`) |
-| `hasChart` | `pages/songs.vue`, `pages/song.vue`, `MvSheetDialog.vue` (show visualize affordance) |
+| `GET /songs/{id}` | `components/dialogs/SongModal.vue` (a shared `?song=` link, before the Catalog loads) |
+| `hasChart` | `components/dialogs/SongModal.vue` (Play is enabled only with a chart) |
 | §2 chart | `pages/visualizer.vue`, `composables/useEngine.ts` (auto-load real charts) |
 | §3 sync | IndexedDB catalog cache + manifest revision probe |
 | §4 auth *(phase 2)* | new login UI, token in browser storage |

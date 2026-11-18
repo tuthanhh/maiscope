@@ -17,10 +17,13 @@ const routes: RouteRecordRaw[] = [
     name: "songs",
     component: () => import("~/pages/songs.vue"),
   },
+  // The song page is gone; its links open the song modal over Songs.
   {
     path: "/song",
-    name: "song",
-    component: () => import("~/pages/song.vue"),
+    redirect: (to) => ({
+      name: "songs",
+      query: typeof to.query.id === "string" ? { song: to.query.id } : {},
+    }),
   },
   {
     path: "/visualizer",

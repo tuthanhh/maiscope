@@ -126,6 +126,11 @@ page:
     range: '{from} – {to} of {total}'
     loadFailed: The song list could not be loaded
     bookmark: Bookmark
+    play: Play
+    noChart: No chart yet
+    notFound: Song not found
+    notFoundMessage: No song has this link.
+    songLoadFailed: The song could not be loaded
     min: min
     max: max
     openInVisualizer: Open in Visualizer

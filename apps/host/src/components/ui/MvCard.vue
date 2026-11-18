@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { RouterLink, type RouteLocationRaw } from "vue-router";
+import type { RouteLocationRaw } from "vue-router";
 import MvCover from "./MvCover.vue";
 import MvLevelPill from "./MvLevelPill.vue";
 import MvIcon from "./MvIcon.vue";
@@ -7,10 +7,8 @@ import MvIcon from "./MvIcon.vue";
 // design-direction "Card": the grid item for both libraries. No border, no
 // background, no shadow; the whole card is one link. The bookmark mark is a
 // separate control on the jacket. `designer` is the community card's tell.
-// Without `to` the card is a button that emits `open` — the song browse uses
-// that until the song modal has a URL (frontend-redesign 11).
 defineProps<{
-  to?: RouteLocationRaw;
+  to: RouteLocationRaw;
   cover: { imageUrl?: string; title?: string; artist?: string };
   title?: string;
   artist?: string;
@@ -22,20 +20,12 @@ defineProps<{
   /** The link's accessible name, when the visible text is not enough. */
   label?: string;
 }>();
-defineEmits<{ bookmark: []; open: [] }>();
+defineEmits<{ bookmark: [] }>();
 </script>
 
 <template>
   <div class="mv-card">
-    <!-- Spans, not divs: a button may hold phrasing content only. -->
-    <component
-      :is="to ? RouterLink : 'button'"
-      :to="to"
-      :type="to ? undefined : 'button'"
-      class="mv-card-link"
-      :aria-label="label"
-      @click="to ? undefined : $emit('open')"
-    >
+    <RouterLink :to="to" class="mv-card-link" :aria-label="label">
       <span class="mv-card-jacket">
         <MvCover :item="cover" />
         <MvLevelPill v-if="level" class="mv-card-pill" :level="level" :diff="diff" />
@@ -46,7 +36,7 @@ defineEmits<{ bookmark: []; open: [] }>();
         <MvIcon name="pen" :size="12" />
         <span class="mv-card-designer-name">{{ designer }}</span>
       </span>
-    </component>
+    </RouterLink>
     <button
       v-if="bookmarkLabel"
       type="button"
@@ -68,15 +58,8 @@ defineEmits<{ bookmark: []; open: [] }>();
 }
 .mv-card-link {
   display: block;
-  width: 100%;
-  padding: 0;
-  border: none;
-  background: none;
-  font: inherit;
-  text-align: left;
   color: var(--fg);
   text-decoration: none;
-  cursor: pointer;
 }
 .mv-card-jacket,
 .mv-card-title,
