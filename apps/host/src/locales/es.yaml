@@ -34,7 +34,7 @@ term:
   type: Tipo
   difficulty: Dificultad
   level: Nivel
-  noteDesigner: Diseñador del mapa
+  noteDesigner: Creador del chart
   totalNotes: TOTAL
   region: Región
 description:
@@ -49,7 +49,7 @@ page:
     pastePlaceholder: (120){'{'}4{'}'}1,2,3,4,...
     pasteHint: 'Pega simai sin formato: tus charts o los de la wiki de simai.'
     noteSpeed: Velocidad de notas
-    playSpeed: Velocidad de juego
+    playSpeed: Velocidad de reproducción
     booting: iniciando motor…
     load: Cargar
     loading: cargando…

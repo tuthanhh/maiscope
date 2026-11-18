@@ -34,7 +34,7 @@ term:
   type: Jenis
   difficulty: Kesulitan
   level: Level
-  noteDesigner: Perancang Note
+  noteDesigner: Pembuat chart
   totalNotes: TOTAL
   region: Wilayah
 description:
@@ -49,7 +49,7 @@ page:
     pastePlaceholder: (120){'{'}4{'}'}1,2,3,4,...
     pasteHint: Tempel simai mentah — chart milikmu atau dari wiki simai.
     noteSpeed: Kecepatan not
-    playSpeed: Kecepatan main
+    playSpeed: Kecepatan putar
     booting: memulai mesin…
     load: Muat
     loading: memuat…

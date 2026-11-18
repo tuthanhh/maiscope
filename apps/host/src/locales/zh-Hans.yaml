@@ -3,7 +3,7 @@
 # Every locale carries every key en.yaml has (frontend-redesign 13).
 
 page-title:
-  songs: 歌曲一览
+  songs: 乐曲一览
   visualizer: 谱面预览
   about: 关于本站
   bug-report: 报告问题
@@ -26,7 +26,7 @@ ui:
 term:
   category: 分类
   title: 曲名
-  artist: 创作者
+  artist: 曲师
   version: 版本
   releaseDate: 追加日期
   bpm: BPM
@@ -34,11 +34,11 @@ term:
   type: 类型
   difficulty: 难度
   level: 等级
-  noteDesigner: 谱面制作者
+  noteDesigner: 谱师
   totalNotes: 总计
   region: 地区
 description:
-  loading: 正在加载数据…
+  loading: 正在载入数据…
   unavailableInRegion: '{region} 未收录'
   copied: 已复制到剪贴板！
   filterResultEmpty: 没有符合这些筛选条件的谱面。
@@ -67,13 +67,13 @@ page:
     previousPage: 上一页
     nextPage: 下一页
     range: 共 {total} 项，第 {from} – {to} 项
-    loadFailed: 无法加载乐曲列表
+    loadFailed: 无法载入乐曲列表
     bookmark: 收藏
     play: 游玩
     noChart: 暂无谱面
     notFound: 找不到乐曲
     notFoundMessage: 没有对应此链接的乐曲。
-    songLoadFailed: 无法加载乐曲
+    songLoadFailed: 无法载入乐曲
     songLoadFailedMessage: 请检查网络连接后重试。
     song: 乐曲
     noSheets: 这首乐曲没有谱面。

@@ -3,11 +3,11 @@
 # Every locale carries every key en.yaml has (frontend-redesign 13).
 
 page-title:
-  songs: Danh sách Bài
+  songs: Danh sách bài hát
   visualizer: Trình mô phỏng
   about: Về chúng tôi
-  bug-report: Báo cáo Sự cố
-  source-code: Mã Nguồn
+  bug-report: Báo cáo sự cố
+  source-code: Mã nguồn
   community: Cộng đồng
 nav:
   songs: Bài hát
@@ -26,7 +26,7 @@ ui:
 term:
   category: Phân loại
   title: Tiêu đề
-  artist: Nhạc sĩ
+  artist: Nghệ sĩ
   version: Phiên bản
   releaseDate: Ngày phát hành
   bpm: BPM

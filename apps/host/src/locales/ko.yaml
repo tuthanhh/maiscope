@@ -34,7 +34,7 @@ term:
   type: 유형
   difficulty: 난이도
   level: 레벨
-  noteDesigner: 노트 제작자
+  noteDesigner: 채보 제작자
   totalNotes: 전체 노트 수
   region: 지역
 description:

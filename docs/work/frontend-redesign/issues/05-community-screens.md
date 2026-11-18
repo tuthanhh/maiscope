@@ -31,3 +31,7 @@ chart is never rendered where it could be mistaken for the arcade's.
       (carried from `server-auth-github-oauth` 06)
 - [ ] Account deletion copy says identity removal, not deletion: published
       charts stay up (`server-auth-github-oauth` 06)
+- [ ] The community strings of design-direction "Copy and locales" (Upload,
+      Publish, Rejected, Sign in, Reports, Resolve, Official song, optional,
+      fan chart of, deleted user, the rejection sentence) in all nine locales —
+      moved here from 13, which ships only keys the code reads

@@ -3,7 +3,7 @@
 # Every locale carries every key en.yaml has (frontend-redesign 13).
 
 page-title:
-  songs: 歌曲一覽
+  songs: 樂曲一覽
   visualizer: 譜面預覽
   about: 關於本站
   bug-report: 回報問題
@@ -26,7 +26,7 @@ ui:
 term:
   category: 分類
   title: 曲名
-  artist: 創作者
+  artist: 曲師
   version: 版本
   releaseDate: 追加日期
   bpm: BPM
@@ -34,7 +34,7 @@ term:
   type: 類型
   difficulty: 難易度
   level: 等級
-  noteDesigner: 譜面製作者
+  noteDesigner: 譜師
   totalNotes: 總計
   region: 地區
 description:
@@ -67,7 +67,7 @@ page:
     previousPage: 上一頁
     nextPage: 下一頁
     range: 共 {total} 項，第 {from} – {to} 項
-    loadFailed: 無法載入樂曲列表
+    loadFailed: 無法載入樂曲清單
     bookmark: 收藏
     play: 遊玩
     noChart: 暫無譜面

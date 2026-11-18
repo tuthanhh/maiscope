@@ -7,7 +7,7 @@ removed ones deleted, nothing left referencing a key that no longer exists.
 
 **Status:** done
 
-- [x] Every new string in all nine locale files
+- [x] Every new string in all nine locale files — those a screen reads now; the community strings moved to 05
 - [x] Every removed string deleted from all nine
 - [x] No template references a missing key
 
@@ -34,3 +34,15 @@ Rejected, Sign in, …) land with the screens that read them (05). The
 `--mv-*` compat tokens stay: the untouched playback surface and the About
 page still read them. The translations are mine, not a native speaker's;
 they want a pass by one.
+
+**2026-11-18 — review.** Applied: ru `term.noteDesigner` read "designer's
+notes" — now "Автор чарта"; maimai's own words for artist and chart
+designer in Chinese (曲师/谱师, 曲師/譜師); vi artist "Nghệ sĩ"; play speed
+as playback, not gameplay, in es, ru and id; the chart designer in es, ko
+and id named with each file's word for a chart; 乐曲/樂曲 in the zh song-list
+titles; one verb for loading in zh-Hans (载入) and one word for list in
+zh-Hant (清單); sentence case in ru and vi titles. Answered: en keeps
+"sheet" and "chart" apart on purpose — a sheet is a difficulty entry in
+the Catalog ("No sheets match these filters", as the spec words it), a
+chart is its simai text ("No chart yet", "Chart text"). The community
+strings move to 05's checklist: no key is shipped that nothing reads.
