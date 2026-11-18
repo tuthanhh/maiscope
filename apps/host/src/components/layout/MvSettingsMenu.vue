@@ -1,20 +1,17 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, useId, watch } from "vue";
+import { computed } from "vue";
 import useI18n from "~/composables/useI18n";
+import useDisclosure from "~/composables/useDisclosure";
 import config from "~/app/config";
 import type { LocaleObject } from "~/app/i18n";
 import MvButton from "~/components/ui/MvButton.vue";
 import MvSelect from "~/components/ui/MvSelect.vue";
 
-// The account menu: Locale and About live here, and the external links the
-// old header carried. Sign in and Reports join it when accounts reach the UI
-// (frontend-redesign 05). A disclosure, not an ARIA menu: its contents are a
-// select and links, reached with Tab.
+// The settings menu, behind the gear: Language, About, and the external
+// links. The account has its own control beside it (MvAccountMenu).
 const i18n = useI18n();
 const { t } = i18n;
-const panelId = useId();
-const root = ref<HTMLElement | null>(null);
-const open = ref(false);
+const { root, open, panelId, onFocusOut } = useDisclosure();
 
 const locale = computed({
   get: () => i18n.localeProperties.code,
@@ -23,46 +20,15 @@ const locale = computed({
 const localeOptions = computed(() =>
   (i18n.locales as LocaleObject[]).map((l) => ({ value: l.code, text: l.name ?? l.code })),
 );
-
-// Close on a press outside. `pointerdown` rather than `focusout`: a click on
-// the panel's padding, or a Safari click that never moves focus, would
-// otherwise close it wrongly or not at all.
-function onPointerDown(event: PointerEvent): void {
-  if (!root.value?.contains(event.target as Node)) open.value = false;
-}
-// Escape is heard on the document: a click on the panel's padding leaves
-// focus on <body>, outside this element.
-function onKeyDown(event: KeyboardEvent): void {
-  if (event.key !== "Escape") return;
-  open.value = false;
-  root.value?.querySelector<HTMLElement>(".mv-menu-trigger")?.focus();
-}
-function listen(on: boolean): void {
-  if (on) {
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-  } else {
-    document.removeEventListener("pointerdown", onPointerDown);
-    document.removeEventListener("keydown", onKeyDown);
-  }
-}
-watch(open, listen);
-onBeforeUnmount(() => listen(false));
-
-// Close when focus leaves by keyboard (Tab past the last link).
-function onFocusOut(event: FocusEvent): void {
-  const next = event.relatedTarget as Node | null;
-  if (next && !root.value?.contains(next)) open.value = false;
-}
 </script>
 
 <template>
   <div ref="root" class="mv-menu" @focusout="onFocusOut">
     <MvButton
       kind="icon"
-      icon="user"
+      icon="settings"
       class="mv-menu-trigger"
-      :label="t('nav.menu') as string"
+      :label="t('nav.settings') as string"
       :aria-expanded="open"
       :aria-controls="panelId"
       @click="open = !open"
@@ -72,9 +38,9 @@ function onFocusOut(event: FocusEvent): void {
         <span class="t-label t-muted">{{ t("nav.language") }}</span>
         <MvSelect v-model="locale" :options="localeOptions" :width="180" />
       </label>
-      <MvButton kind="text" :to="{ name: 'about' }" @click="open = false">
+      <RouterLink class="mv-menu-link t-body" :to="{ name: 'about' }" @click="open = false">
         {{ t("page-title.about") }}
-      </MvButton>
+      </RouterLink>
       <a class="mv-menu-link t-body" :href="config.siteReportUrl" target="_blank" rel="noopener">
         {{ t("page-title.bug-report") }}
       </a>

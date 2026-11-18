@@ -223,8 +223,8 @@ beside `release_command`).
       `fly.toml` (`GITHUB_CLIENT_ID`, commented out until then)
 - [ ] Set `GITHUB_CLIENT_SECRET` and `JWT_SECRET` as Fly secrets in the
       dashboard (`openssl rand -base64 48` for the latter)
-- [ ] The frontend's `/auth/callback` route exists and fails closed on
-      `state` (`frontend-redesign` 05)
+- [x] The frontend's `/auth/callback` route exists and fails closed on
+      `state` (`frontend-redesign` 20)
 - [ ] `backup-database.yml` before `deploy.yml`, per ADR-0024. Its runbook
       covers the song-id migration; the deploy also runs the difficulty,
       `users`, revision-bump and sheet-address migrations, all additive. The

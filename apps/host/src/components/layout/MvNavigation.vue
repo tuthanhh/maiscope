@@ -6,7 +6,8 @@ import useDarkMode from "~/composables/useDarkMode";
 import useEngineInView from "~/composables/useEngineInView";
 import MvButton from "~/components/ui/MvButton.vue";
 import MvIcon from "~/components/ui/MvIcon.vue";
-import MvMenu from "./MvMenu.vue";
+import MvSettingsMenu from "./MvSettingsMenu.vue";
+import MvAccountMenu from "./MvAccountMenu.vue";
 import type { IconName } from "~/components/ui/icons";
 import logoLightUrl from "~/assets/brand/logo.svg";
 import logoDarkUrl from "~/assets/brand/logo-dark.svg";
@@ -56,7 +57,9 @@ const destinations = computed<{ name: string; label: string; icon: IconName }[]>
         :label="t('nav.theme') as string"
         @click="isDarkMode = !isDarkMode"
       />
-      <MvMenu />
+      <MvSettingsMenu />
+      <span class="mv-topbar-divider" aria-hidden="true" />
+      <MvAccountMenu />
     </div>
   </header>
 
@@ -128,8 +131,16 @@ const destinations = computed<{ name: string; label: string; icon: IconName }[]>
 .mv-topbar-link.mv-active {
   color: var(--fg);
 }
+// Settings on one side, the account on the other (frontend-redesign 21).
+.mv-topbar-divider {
+  width: var(--line-w);
+  height: 20px;
+  margin: 0 var(--s-2);
+  background: var(--line);
+}
 .mv-topbar-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: var(--s-1);
 }

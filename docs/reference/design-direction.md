@@ -59,13 +59,13 @@ Type families:
 |---|---|
 | `--f-sans` | `Inter, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", "Noto Sans CJK JP", "Apple SD Gothic Neo", "Malgun Gothic", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif` |
 | `--f-mono` | `"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace` |
-| `--f-display` | `"Space Grotesk"`, then the same CJK system faces and `system-ui` as `--f-sans` |
+| `--f-display` | `"JetBrains Mono"`, then the same CJK system faces as `--f-sans`, then `ui-monospace` |
 
-`--f-display` (2026-11-18, `frontend-redesign` 15) gives the brand, the
-`heading`, `title` and `display` roles and the card title a face with more
-character than Inter, where it is large or short enough to stay easy to
-read; body text, controls and figures keep Inter and JetBrains Mono. Like
-Inter it styles Latin only — a Japanese title shows in the system CJK face.
+`--f-display` gives the brand, the `heading`, `title` and `display` roles
+and the card title their own face; body text and controls keep Inter. It
+was Space Grotesk for a day (`frontend-redesign` 15) and is JetBrains Mono
+since 21, at the maintainer's choice — the face maiscope began with. It
+styles Latin only; a Japanese title shows in the system CJK face.
 
 Inter ships as one Latin-subset variable file; the CJK names are system
 fonts and nothing is downloaded for them. The `lang` attribute on `<html>`
@@ -342,13 +342,15 @@ sentence, one text button to retry.
 
 ### Navigation
 
-Desktop: a `--nav-h` top bar, hairline below. Left: the brand in `strong`.
-Centre: Songs, Community, Play as text links, the active one in `--fg`
-and the others in `--fg-muted`. Right: an icon button for theme and the
-account avatar or a Sign in text button. Locale, About and Reports (for
-moderators) live in the avatar menu.
+Desktop: a `--nav-h` top bar, hairline below. Left: the logo and the
+brand. Centre: Songs, Community, Play as text links, the active one in
+`--fg` and the others in `--fg-muted`. Right: the theme icon button and a
+gear opening the settings (Language, About, Report Issue, Source Code);
+then, past a hairline, the account on its own — a Sign in button, or the
+avatar opening the login, role, Sign out and Delete account. Reports, for
+moderators, will join the account menu (05).
 
-Phone: the brand and the avatar in a slim top bar; a `--nav-h` bottom bar
+Phone: the brand, theme, gear and account in a slim top bar; a `--nav-h` bottom bar
 with the three destinations as icon-above-label, `label` type, hairline
 above. The bottom bar hides while the engine canvas is in view.
 
@@ -592,7 +594,8 @@ Search on YouTube, Sheet data, the list and grid toggle labels.
 | Upload from the player | Navigate to the one upload page prefilled | A sheet over the player |
 | Token structure | Three layers, state tables | Two layers; plus a style page now |
 | Muted text | Raised to pass AA | Kept as is |
-| Display face (2026-11-18) | Space Grotesk for brand, headings, titles; Inter body | One rounded face everywhere; a serif display face |
+| Display face (2026-11-18) | JetBrains Mono for brand, headings, titles; Inter body | Space Grotesk (tried in 15); one rounded face everywhere; a serif display face |
+| Top-bar end (2026-11-18) | Settings behind a gear; the account on its own: Sign in, or the avatar | One menu holding both |
 | Brand colour (2026-11-18) | The maintainer's coloured logo, the shell stays monochrome | A monochrome mark |
 | Filters container (2026-11-18) | Centred dialog on desktop, bottom sheet on phones | Edge drawer |
 | Artist filter (2026-11-18) | Combobox: full list on focus, narrowed by typing | `<datalist>` (no open-on-focus, unstyled); plain select of every artist |

@@ -13,11 +13,30 @@ nav:
   songs: 楽曲
   community: コミュニティ
   play: プレイ
-  menu: メニュー
+  settings: 設定
   theme: テーマ
   language: 言語
 home:
   subtitle: maimai 譜面ビジュアライザー
+auth:
+  signIn: 'ログイン'
+  signOut: 'ログアウト'
+  accountMenu: '{login} のアカウントメニュー'
+  deleteAccount: 'アカウントを削除…'
+  deleteTitle: 'アカウントを削除しますか？'
+  deleteBody: 'maiscope から GitHub の名前と画像が削除され、すべての端末でログアウトします。公開したものは「削除されたユーザー」名義で残ります。あとで再びログインすると、新しいアカウントとして始まります。'
+  deleteConfirm: 'アカウントを削除'
+  deleteFailed: 'アカウントを削除できませんでした'
+  deleteFailedMessage: '何も変更されていません。接続を確認してもう一度お試しください。'
+  cancel: 'キャンセル'
+  signingIn: 'ログイン中…'
+  failed: 'ログインが完了しませんでした'
+  failureState: 'このログインはこのタブで始まったものではないため中止しました。ログインボタンからやり直してください。'
+  failureRefused: 'GitHub がログインを受け付けませんでした。リンクの期限切れか、使用済みの可能性があります。'
+  failureDenied: 'GitHub でログインがキャンセルされました。'
+  failureUnreachable: 'GitHub または maiscope に接続できませんでした。接続を確認してもう一度お試しください。'
+  tryAgain: 'もう一度試す'
+  backHome: 'ホームに戻る'
 community:
   coming: ファン譜面はコミュニティライブラリと一緒に公開されます。
 ui:

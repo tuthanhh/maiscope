@@ -63,6 +63,11 @@ export async function fetchJsonWithHeaders<T>(
   return { data: (await response.json()) as T, headers: response.headers };
 }
 
+/** A request whose success has no body (`204`), such as a `DELETE`. */
+export async function fetchNoContent(url: string, init?: RequestInit): Promise<void> {
+  await fetchOk(url, init);
+}
+
 export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return (await fetchJsonWithHeaders<T>(url, init)).data;
 }

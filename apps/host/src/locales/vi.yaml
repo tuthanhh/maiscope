@@ -13,11 +13,30 @@ nav:
   songs: Bài hát
   community: Cộng đồng
   play: Chơi
-  menu: Menu
+  settings: Cài đặt
   theme: Giao diện
   language: Ngôn ngữ
 home:
   subtitle: dự án mô phỏng chart maimai
+auth:
+  signIn: 'Đăng nhập'
+  signOut: 'Đăng xuất'
+  accountMenu: 'Menu tài khoản của {login}'
+  deleteAccount: 'Xóa tài khoản…'
+  deleteTitle: 'Xóa tài khoản của bạn?'
+  deleteBody: 'Tên và ảnh GitHub của bạn bị gỡ khỏi maiscope và bạn bị đăng xuất trên mọi thiết bị. Những gì bạn đã đăng vẫn giữ lại, ghi tên người dùng đã xóa. Đăng nhập lại sau này sẽ bắt đầu một tài khoản mới.'
+  deleteConfirm: 'Xóa tài khoản'
+  deleteFailed: 'Không xóa được tài khoản'
+  deleteFailedMessage: 'Chưa có gì thay đổi. Kiểm tra kết nối rồi thử lại.'
+  cancel: 'Hủy'
+  signingIn: 'Đang đăng nhập…'
+  failed: 'Đăng nhập chưa hoàn tất'
+  failureState: 'Lần đăng nhập này không bắt đầu từ thẻ này nên đã bị dừng. Hãy bắt đầu lại từ nút Đăng nhập.'
+  failureRefused: 'GitHub không chấp nhận đăng nhập — liên kết có thể đã hết hạn hoặc đã được dùng.'
+  failureDenied: 'Đã hủy đăng nhập trên GitHub.'
+  failureUnreachable: 'Không kết nối được tới GitHub hoặc maiscope. Kiểm tra kết nối rồi thử lại.'
+  tryAgain: 'Thử lại'
+  backHome: 'Về trang chủ'
 community:
   coming: Chart do người hâm mộ làm sẽ có cùng thư viện cộng đồng.
 ui:
