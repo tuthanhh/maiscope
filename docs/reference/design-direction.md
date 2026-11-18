@@ -57,14 +57,14 @@ Type families:
 
 | Token | Stack |
 |---|---|
-| `--f-mono` | `"JetBrainsMono Nerd Font", "JetBrainsMono NF", "JetBrains Mono"`, then the CJK system faces (`"Hiragino Sans"` … `"Microsoft YaHei"`), then `ui-monospace, "SF Mono", Menlo, monospace` |
+| `--f-mono` | `"JetBrains Mono"`, then the CJK system faces (`"Hiragino Sans"` … `"Microsoft YaHei"`), then `ui-monospace, "SF Mono", Menlo, monospace` |
 | `--f-sans` | `var(--f-mono)` |
 | `--f-display` | `var(--f-mono)` |
 
 One face everywhere since 2026-11-18 (`frontend-redesign` 22): JetBrains
-Mono, the face maiscope began with, at the maintainer's choice. The Nerd
-Font build is listed first for machines that have it installed; everyone
-else gets the webfont. The three tokens stay, so the roles keep their
+Mono, the face maiscope began with, at the maintainer's choice — the
+webfont, the same for everyone (a locally installed Nerd Font build was
+listed first for a day and dropped). The three tokens stay, so the roles keep their
 names and a later split is one line. The way there: Inter for body and
 headings (07), Space Grotesk for display (15), JetBrains Mono for display
 (21), then mono throughout. It styles Latin only — Japanese, Chinese and
@@ -591,7 +591,7 @@ Search on YouTube, Sheet data, the list and grid toggle labels.
 | Upload from the player | Navigate to the one upload page prefilled | A sheet over the player |
 | Token structure | Three layers, state tables | Two layers; plus a style page now |
 | Muted text | Raised to pass AA | Kept as is |
-| Type (2026-11-18) | JetBrains Mono everywhere, Nerd Font first | Inter body with a display face (Space Grotesk, then JetBrains Mono); one rounded face; a serif display face |
+| Type (2026-11-18) | JetBrains Mono everywhere, one webfont for all | Inter body with a display face (Space Grotesk, then JetBrains Mono); one rounded face; a serif display face |
 | Top-bar end (2026-11-18) | Settings behind a gear; the account on its own: Sign in, or the avatar | One menu holding both |
 | Brand colour (2026-11-18) | The maintainer's coloured logo, the shell stays monochrome | A monochrome mark |
 | Filters container (2026-11-18) | Centred dialog on desktop, bottom sheet on phones | Edge drawer |
