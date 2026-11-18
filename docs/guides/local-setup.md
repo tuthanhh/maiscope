@@ -61,7 +61,7 @@ pnpm dev                      # Vite dev server
 ```
 
 Set `VITE_API_BASE_URL` if the server is not at the default
-`http://localhost:3000/api/v1` — see `apps/host/src/app/game.ts`.
+`http://localhost:3000/api` — see `apps/host/src/app/game.ts`.
 
 ## Troubleshooting
 

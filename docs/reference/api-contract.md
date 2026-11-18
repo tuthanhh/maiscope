@@ -297,8 +297,9 @@ Propose a new sheet, a chart, or an edit.
 > audio, if it ever returns, needs its own decision record.
 
 ### `GET /contributions?status=&mine=`  *(user sees own; moderator+ sees all)*
-List with `{ id, kind, sheetExpr, status, author, createdAt }[]`, paginated the
-same way as §1.2 — `?page=&pageSize=` with a `total` field in the envelope.
+List with `{ id, kind, sheetExpr, status, author, createdAt }[]`, paginated by
+§6's convention (the v1 search this once pointed at, with a `total` field in
+the envelope, is gone).
 
 ### `GET /contributions/{id}`
 Full record incl. `payload`, `diff`, review history.

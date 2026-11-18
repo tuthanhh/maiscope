@@ -59,3 +59,16 @@ that cited §1–§3 point at §0. Row revisions have no reader after
 
 Done when, verified: no route takes a title, and the client's only
 percent-encoding is of ids and difficulty codes (a UTAGE code is not ASCII).
+
+**2026-11-18 — review.** Applied: a blank line left by the removed error
+test failed `cargo fmt --check` (CI's first gate) — fixed, and fmt, clippy
+`-D warnings`, `sqlx prepare --check` and the tests now all run clean
+locally as CI runs them. v1's empty-database Catalog test, the guard for
+`prod-data-and-infra` 06's 500, had no v2 equivalent: `/catalog` and
+`/reference` now each have one, and the Catalog's 304 test checks the
+validators it repeats. `scripts/compression-eval.sh`, the local-setup guide,
+the prod-data runbook and web-delivery 06's open items pointed at
+`/api/v1`. Docs said `sheet_expr` is only the sync's key — the read queries
+also join tombstones on it — and that a snapshot test guards the wire
+contract; both corrected, and schema.md's delta notes are in the past
+tense. Kept: comments that contrast a v2 choice with v1 explain the choice.

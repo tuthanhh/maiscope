@@ -14,7 +14,7 @@ SERVER_DIR="$WORKSPACE_DIR/apps/server"
 
 HOST="${HOST:-localhost}"
 PORT="${PORT:-3000}"
-BASE_URL="http://$HOST:$PORT/api/v1"
+BASE_URL="http://$HOST:$PORT/api"
 ALLOWED_ORIGIN="${ALLOWED_ORIGIN:-http://localhost:1420}"
 DISALLOWED_ORIGIN="http://evil.example"
 
@@ -29,7 +29,7 @@ trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
 
 echo ">> waiting for server to come up"
 for _ in $(seq 1 30); do
-  curl -s -o /dev/null "$BASE_URL/healthcheck" && break
+  curl -sf -o /dev/null "$BASE_URL/healthcheck" && break
   sleep 1
 done
 

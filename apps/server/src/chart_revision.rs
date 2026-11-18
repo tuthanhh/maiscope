@@ -39,7 +39,7 @@ pub enum ChartRevisionOutcome {
 /// the same numbering space `catalog_meta.revision` uses — an independent
 /// `sheets.revision = sheets.revision + 1` would put it in a different
 /// space and could stay silently below whatever `since` a client already
-/// holds, hiding the change from delta polls entirely.
+/// holds, hiding the change from a change feed entirely.
 ///
 /// Returns [`ChartRevisionOutcome::Unchanged`] without writing (no rows, no
 /// revision bump) when `content` hashes to what's already stored —
@@ -143,8 +143,8 @@ pub struct BulkChartOutcome {
 /// chart.** Every chart written is stamped with that single value. This is a
 /// deliberate difference from calling [`apply_chart_revision`] in a loop, which
 /// advanced the counter 6.5k times in one seed. One bump per run that changed
-/// something is what `catalog_sync` already does, and delta sync is unaffected:
-/// a client asking for changes `since=N` still sees every stamped sheet, because
+/// something is what `catalog_sync` already does, and a change feed is unaffected:
+/// a client asking for changes since `N` still sees every stamped sheet, because
 /// they all sit above `N` together.
 ///
 /// Returns zero `applied` and writes nothing at all — no `chart_revisions` row,

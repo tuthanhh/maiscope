@@ -12,8 +12,9 @@ Postgres schema for the maiscope global backend. Two concerns:
 A sheet is addressed by its song's id, its type and its difficulty code
 ([ADR-0026](../adr/0026-v2-api-carries-codes-and-read-fields-only.md)).
 **`sheet_expr = songId|type|difficulty`** was v1's cross-tier key; the sync
-still matches upstream on it, and nothing else reads it (`api-rewrite` 07
-deleted `/api/v1`). The client never computes it.
+still matches upstream on it, and the read queries join `deleted_sheets` on
+it to hide tombstoned sheets. No route takes or sends it since `api-rewrite`
+07 deleted `/api/v1`; the client never computes it.
 
 The server stores **raw fields only**; the client derives `imageUrl` and its
 graph references. `song_no` and `sheet_expr` are denormalized columns no
@@ -34,8 +35,10 @@ The only top-level scalar in `Data`.
 - `revision` — monotonic counter shared by every table that participates in
   sync. `bin/sync_catalog` draws `previous + 1` per run and stamps it onto the
   rows it actually changed; `apply_chart_revision` bumps it the same way for a
-  single chart. `GET /sync/delta?since=N` compares row revisions against this
-  one sequence, so a writer that invents its own counter breaks delta polling.
+  single chart. Row revisions sit in this one sequence so a change feed can
+  ask for rows above `N`; v1's `GET /sync/delta?since=N` did, and none does
+  since `api-rewrite` 07, but a writer that invents its own counter would
+  break the next one.
   **A run that changed nothing does not advance it** — this value feeds the
   `/catalog` ETag, so advancing it daily on a no-op would make every client
   refetch the whole payload. Writers must read it under the singleton's row
@@ -47,7 +50,7 @@ The only top-level scalar in `Data`.
   07) and **nothing writes or reads this column any more.**
   `bin/sync_catalog` upserts by natural key and never deletes, so row identity
   survives every refresh; the column is frozen at whatever the retired
-  `bin/ingest` left. That is exactly what makes delta sync work across daily
+  `bin/ingest` left. That is what let v1's delta sync work across daily
   refreshes.
 
 Both feed the `ETag` on `GET /catalog` and `GET /sync/manifest`, which is
@@ -132,7 +135,7 @@ Normalized out of the `Sheet` object's `Record<...>` maps:
 > payload, not only sheets whose scalar columns changed — they move upstream
 > independently (note counts backfilled after release, a region flipping to
 > available). A sheet whose sub-tables alone changed still gets a fresh
-> `revision`, so `/sync/delta` reports it. The per-sheet `DELETE`s that do the
+> `revision`, so a change feed would report it. The per-sheet `DELETE`s that do the
 > replacing are scoped to a single `sheet_id` and must stay that way.
 
 ### `deleted_songs` / `deleted_sheets`

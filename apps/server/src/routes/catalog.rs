@@ -277,6 +277,30 @@ mod tests {
         conditional.insert(header::IF_NONE_MATCH, first.headers()[header::ETAG].clone());
         let second = catalog(conditional, State(pool)).await.unwrap();
         assert_eq!(second.status(), StatusCode::NOT_MODIFIED);
+        // RFC 7232 §4.1: the 304 repeats the validators the 200 sent.
+        assert_eq!(
+            second.headers()[header::ETAG],
+            first.headers()[header::ETAG]
+        );
+        assert_eq!(
+            second.headers()[header::CACHE_CONTROL],
+            CATALOG_CACHE_CONTROL
+        );
         Ok(())
+    }
+
+    // A database between `migrate` and the first sync — every new
+    // environment's first state — answers an empty Catalog, not a 500
+    // (`prod-data-and-infra` 06, once v1's test; now this one).
+    #[sqlx::test]
+    async fn an_unsynced_database_answers_an_empty_catalog(pool: PgPool) {
+        let response = catalog(HeaderMap::new(), State(pool)).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(response.headers().contains_key(header::ETAG));
+        let catalog = body(response).await;
+        assert_eq!(catalog["songs"], json!([]));
+        for table in ["categories", "versions", "types", "difficulties", "regions"] {
+            assert!(catalog[table].is_array(), "{table}");
+        }
     }
 }

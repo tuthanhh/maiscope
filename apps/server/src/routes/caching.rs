@@ -1,8 +1,8 @@
-//! Conditional-request handling shared by the two endpoints that report
-//! catalog freshness: `GET /catalog` and `GET /sync/manifest` (contract §0),
-//! and `GET /reference` beside them. All read the same `catalog_meta` row and derive the same validator
-//! from it, so the query, the hash, and the `304` path live here once rather
-//! than being kept in step by hand in two handlers.
+//! Conditional-request handling shared by the routes that report catalog
+//! freshness — `GET /catalog`, `GET /reference` and `GET /sync/manifest`
+//! (contract §0). All read the same `catalog_meta` row and derive the same
+//! validator from it, so the query, the hash, and the `304` path live here
+//! once rather than being kept in step by hand in three handlers.
 
 use axum::http::{HeaderMap, HeaderName, StatusCode, header};
 use axum::response::{IntoResponse, Response};

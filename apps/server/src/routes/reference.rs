@@ -153,4 +153,16 @@ mod tests {
         assert_ne!(after.headers()[header::ETAG], old_etag);
         Ok(())
     }
+
+    // As the Catalog: no sync yet is an empty answer, not an error.
+    #[sqlx::test]
+    async fn an_unsynced_database_answers_the_reference_tables(pool: PgPool) {
+        let response = reference(HeaderMap::new(), State(pool)).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(response.headers().contains_key(header::ETAG));
+        let tables = body(response).await;
+        for table in ["categories", "versions", "types", "difficulties", "regions"] {
+            assert!(tables[table].is_array(), "{table}");
+        }
+    }
 }

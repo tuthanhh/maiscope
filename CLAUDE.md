@@ -198,7 +198,8 @@ its type and difficulty *code* — `/api/songs/{id}/sheets/{type}/{code}` on the
 server, `sheet.key = ${id}/${type}/${code}` in the client
 (`utils/data.ts:sheetKey`). Nothing is keyed on a title
 ([ADR-0026](docs/adr/0026-v2-api-carries-codes-and-read-fields-only.md)).
-`sheet_expr` survives only as the sync's upstream match key.
+`sheet_expr` survives as the sync's upstream match key and the read
+queries' tombstone join; no route takes or sends it.
 
 **Raw versus derived.** The server returns raw fields a screen reads, nothing
 else; the client derives `imageUrl` and builds the explicit `sheet.song`

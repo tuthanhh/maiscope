@@ -21,7 +21,8 @@ on its `bevy` feature, so the server never links Bevy
 crates together with `--workspace` would undo that.
 
 There is no shared-types crate: the server emits raw fields the client
-reshapes, and a snapshot test guards the wire contract instead
+reshapes, and the Catalog's mapping and forbidden-keys tests
+(`apps/server/src/routes/catalog.rs`) guard the wire contract instead
 ([ADR-0018](../adr/0018-no-shared-types-crate.md)).
 
 ## Data flow
@@ -44,7 +45,9 @@ A song is its minted UUID (`songs.id`); a sheet is that id plus its type and
 difficulty code — `/api/songs/{id}/sheets/{type}/{code}` on the server,
 `sheet.key = ${id}/${type}/${code}` in the client (`utils/data.ts:sheetKey`)
 ([ADR-0026](../adr/0026-v2-api-carries-codes-and-read-fields-only.md)).
-`sheet_expr` survives only as the sync's upstream match key.
+`sheet_expr` survives as the sync's upstream match key and as the join the
+read queries use to hide tombstoned sheets (`queries/official.rs`); no route
+takes or sends it.
 
 ## Raw versus derived fields
 

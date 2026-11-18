@@ -84,7 +84,7 @@ psql -d "$SCRATCH_DATABASE_URL" -c "
          (SELECT COUNT(*) FROM sheets) AS sheets,
          (SELECT COUNT(*) FROM charts) AS charts,
          (SELECT revision FROM catalog_meta LIMIT 1) AS revision;"
-curl -s https://maiscope-api.fly.dev/api/v1/sync/manifest
+curl -s https://maiscope-api.fly.dev/api/sync/manifest
 
 # 5. Delete the branch in the Neon console; unset the variable; delete the file.
 ```

@@ -43,8 +43,9 @@ is the permanent origin. See Comments for what that settles.
       one that forwards `Fly-Client-IP` (`rate_limit.rs` keys on it; behind a
       second proxy the fallback is `X-Forwarded-For`, which must then carry
       the real client, not Cloudflare's edge)
-- [ ] `VITE_API_BASE_URL` in `deploy-web.yml` becomes the relative `/api/v1`
-- [ ] Cache Rule on `/api/v1/catalog` honouring the server's `Cache-Control`
+- [ ] `VITE_API_BASE_URL` in `deploy-web.yml` becomes the relative `/api`
+      (`/api/v1` until `api-rewrite` 07 deleted it, 2026-11-18)
+- [ ] Cache Rule on `/api/catalog` (and `/api/reference`) honouring the server's `Cache-Control`
       and `ETag`; `/sync/manifest` is `no-cache` and must stay uncached
 - [ ] `CORS_ALLOWED_ORIGINS` reduced to the dev server only; the production
       origin entry removed once nothing cross-origin remains

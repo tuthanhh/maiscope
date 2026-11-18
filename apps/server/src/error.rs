@@ -287,7 +287,6 @@ mod tests {
         );
     }
 
-
     #[tokio::test]
     async fn rate_limited_is_429_with_retry_after_header_and_body() {
         let response = AppError::RateLimited {
