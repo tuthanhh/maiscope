@@ -593,3 +593,5 @@ Search on YouTube, Sheet data, the list and grid toggle labels.
 | Muted text | Raised to pass AA | Kept as is |
 | Display face (2026-11-18) | Space Grotesk for brand, headings, titles; Inter body | One rounded face everywhere; a serif display face |
 | Brand colour (2026-11-18) | The maintainer's coloured logo, the shell stays monochrome | A monochrome mark |
+| Filters container (2026-11-18) | Centred dialog on desktop, bottom sheet on phones | Edge drawer |
+| Artist filter (2026-11-18) | Combobox: full list on focus, narrowed by typing | `<datalist>` (no open-on-focus, unstyled); plain select of every artist |

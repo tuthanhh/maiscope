@@ -69,7 +69,7 @@ function toggleType(type: string): void {
             v-model="form.artist"
             class="mv-filter-control"
             :options="artistOptions"
-            :placeholder="t('ui.all') as string"
+            :placeholder="t('ui.search') as string"
             :more-label="t('page.songs.typeToNarrow') as string"
         />
         <span class="mv-filter-chips">

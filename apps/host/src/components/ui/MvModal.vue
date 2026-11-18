@@ -16,12 +16,18 @@ const props = defineProps<{
 const emit = defineEmits<{ close: [] }>();
 
 const panel = ref<HTMLElement | null>(null);
-const { onKeyDown } = useDialogFocus(toRef(props, "open"), panel, () => emit("close"));
+const { onKeyDown, onScrimPointerDown, onScrimClick } = useDialogFocus(toRef(props, "open"), panel, () => emit("close"));
 </script>
 
 <template>
   <Teleport to="body">
-    <div v-if="open" class="mv-modal-scrim" @click.self="emit('close')" @keydown="onKeyDown">
+    <div
+      v-if="open"
+      class="mv-modal-scrim"
+      @pointerdown="onScrimPointerDown"
+      @click="onScrimClick"
+      @keydown="onKeyDown"
+    >
       <section
         ref="panel"
         class="mv-modal"

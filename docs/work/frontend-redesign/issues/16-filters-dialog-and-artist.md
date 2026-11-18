@@ -29,3 +29,19 @@ autocomplete, `aria-activedescendant` for the highlighted row, options
 chosen on `mousedown` so the input never blurs first. Artist options are
 each Catalog artist once, sorted with `localeCompare`; prefix matches rank
 first. A string "Keep typing to narrow the list" joins the nine locales.
+
+**2026-11-18 — review.** Applied: `aria-expanded` follows whether a list
+is shown, not only whether it was asked for; `aria-selected` marks the
+highlighted row, as ARIA 1.2's list autocomplete has it, and the current
+value is a class; the whole list (padding, scrollbar, the "keep typing"
+line) keeps the input focused, and a blur into the list is ignored for
+touch browsers that skip `mousedown.prevent`; an arrow key on a closed
+list opens it on the first or last row; a closed list forgets its
+highlight; an opened one scrolls into the dialog's view. The scrim closes
+a dialog only when the press began on it — a selection dragged out of the
+artist field no longer closes the filters (the song modal shares the fix
+through `useDialogFocus`). The clear button is a 28px target; the
+placeholder reads "Search", not "ALL". Unverified here: iOS Safari's
+blur on tap — the `relatedTarget` guard is the fallback if it misbehaves.
+The choices are in design-direction's decisions table rather than an ADR:
+they are UI decisions of the kind that table already holds.

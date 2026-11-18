@@ -11,7 +11,8 @@ const FOCUSABLE =
 // A modal dialog's focus contract, shared by the drawer and the modal: while
 // `open`, focus moves into `panel`, Tab wraps inside it, Escape calls
 // `close`, the page behind does not scroll; on closing, focus returns to
-// whatever had it before. Bind the returned `onKeyDown` on the dialog.
+// whatever had it before. Bind the returned `onKeyDown` on the dialog, and
+// `onScrimPointerDown` / `onScrimClick` on its scrim.
 export default function useDialogFocus(
   open: Ref<boolean>,
   panel: Ref<HTMLElement | null>,
@@ -79,5 +80,17 @@ export default function useDialogFocus(
   );
   onBeforeUnmount(unlock);
 
-  return { onKeyDown };
+  // A click on the scrim closes the dialog only when the press also began
+  // there: a text selection dragged out of an input and released over the
+  // scrim fires `click` on the scrim too, and must not close anything.
+  let pressedOnScrim = false;
+  function onScrimPointerDown(event: PointerEvent): void {
+    pressedOnScrim = event.target === event.currentTarget;
+  }
+  function onScrimClick(event: MouseEvent): void {
+    if (pressedOnScrim && event.target === event.currentTarget) close();
+    pressedOnScrim = false;
+  }
+
+  return { onKeyDown, onScrimPointerDown, onScrimClick };
 }

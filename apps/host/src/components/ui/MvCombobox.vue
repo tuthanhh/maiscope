@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, ref, useId, watch } from "vue";
+import { computed, inject, nextTick, ref, useId, watch } from "vue";
 import { fieldKey } from "./fieldContext";
 import MvIcon from "./MvIcon.vue";
 
@@ -46,12 +46,23 @@ const matches = computed(() => {
 const shown = computed(() => matches.value.slice(0, props.limit));
 const optionId = (i: number) => `${listId}-${i}`;
 
+const expanded = computed(() => open.value && shown.value.length > 0);
+
 watch(shown, () => {
   active.value = -1;
 });
 watch(active, (i) => {
-  if (i < 0) return;
-  list.value?.querySelector(`#${CSS.escape(optionId(i))}`)?.scrollIntoView({ block: "nearest" });
+  if (i >= 0) document.getElementById(optionId(i))?.scrollIntoView({ block: "nearest" });
+});
+// A closed list forgets its highlight; an opened one is scrolled into the
+// dialog's view, which may have it below the fold.
+watch(expanded, async (isOpen) => {
+  if (!isOpen) {
+    active.value = -1;
+    return;
+  }
+  await nextTick();
+  list.value?.scrollIntoView({ block: "nearest" });
 });
 
 function choose(value: string): void {
@@ -67,13 +78,13 @@ function onKeyDown(event: KeyboardEvent): void {
   switch (event.key) {
     case "ArrowDown":
       event.preventDefault();
-      if (!open.value) open.value = true;
-      else if (count) active.value = (active.value + 1) % count;
+      open.value = true;
+      if (count) active.value = (active.value + 1) % count;
       break;
     case "ArrowUp":
       event.preventDefault();
-      if (!open.value) open.value = true;
-      else if (count) active.value = active.value <= 0 ? count - 1 : active.value - 1;
+      open.value = true;
+      if (count) active.value = active.value <= 0 ? count - 1 : active.value - 1;
       break;
     case "Enter":
       if (open.value && active.value >= 0) {
@@ -93,6 +104,12 @@ function onKeyDown(event: KeyboardEvent): void {
       break;
   }
 }
+// A tap on the list that still moved focus (some touch browsers ignore the
+// list's `mousedown.prevent`) must not close it before the choice lands.
+function onBlur(event: FocusEvent): void {
+  if (list.value?.contains(event.relatedTarget as Node | null)) return;
+  open.value = false;
+}
 function clear(): void {
   emit("update:modelValue", "");
 }
@@ -107,16 +124,16 @@ function clear(): void {
       class="mv-combobox-input"
       role="combobox"
       aria-autocomplete="list"
-      :aria-expanded="open"
+      :aria-expanded="expanded"
       :aria-controls="listId"
-      :aria-activedescendant="open && active >= 0 ? optionId(active) : undefined"
+      :aria-activedescendant="expanded && active >= 0 ? optionId(active) : undefined"
       autocomplete="off"
       :value="modelValue"
       :placeholder="placeholder"
       @input="onInput"
       @focus="open = true"
       @click="open = true"
-      @blur="open = false"
+      @blur="onBlur"
       @keydown="onKeyDown"
     />
     <button
@@ -132,24 +149,30 @@ function clear(): void {
     <span v-else class="mv-combobox-chevron" aria-hidden="true">
       <MvIcon name="chevron" :size="14" />
     </span>
-    <!-- `mousedown.prevent`: choosing must not blur the input first, or the
-         list closes before the click lands. -->
+    <!-- `mousedown.prevent` on the whole list — rows, padding, scrollbar,
+         the "keep typing" line: none may blur the input, or the list closes
+         before the click lands. -->
     <ul
-      v-show="open && shown.length"
+      v-show="expanded"
       :id="listId"
       ref="list"
       class="mv-combobox-list t-body"
       role="listbox"
+      tabindex="-1"
+      @mousedown.prevent
     >
       <li
         v-for="(option, i) in shown"
         :id="optionId(i)"
         :key="option"
         class="mv-combobox-option"
-        :class="{ 'mv-combobox-option--active': i === active }"
+        :class="{
+          'mv-combobox-option--active': i === active,
+          'mv-combobox-option--current': option === modelValue,
+        }"
         role="option"
-        :aria-selected="option === modelValue"
-        @mousedown.prevent="choose(option)"
+        :aria-selected="i === active"
+        @click="choose(option)"
       >
         {{ option }}
       </li>
@@ -184,7 +207,9 @@ function clear(): void {
   pointer-events: none;
 }
 .mv-combobox-clear {
-  padding: 2px;
+  // A 28px target around the 14px icon, centred on the same spot.
+  right: calc(var(--control-px) - 7px);
+  padding: 7px;
   border: none;
   background: none;
   cursor: pointer;
@@ -213,7 +238,7 @@ function clear(): void {
 .mv-combobox-option--active {
   background: var(--bg-panel);
 }
-.mv-combobox-option[aria-selected="true"] {
+.mv-combobox-option--current {
   font-weight: 600;
 }
 .mv-combobox-more {

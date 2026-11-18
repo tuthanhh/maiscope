@@ -12,14 +12,20 @@ const open = defineModel<boolean>({ required: true });
 
 const titleId = useId();
 const panel = ref<HTMLElement | null>(null);
-const { onKeyDown } = useDialogFocus(open, panel, () => {
+const { onKeyDown, onScrimPointerDown, onScrimClick } = useDialogFocus(open, panel, () => {
   open.value = false;
 });
 </script>
 
 <template>
   <Teleport to="body">
-    <div v-if="open" class="mv-drawer-scrim" @click.self="open = false" @keydown="onKeyDown">
+    <div
+      v-if="open"
+      class="mv-drawer-scrim"
+      @pointerdown="onScrimPointerDown"
+      @click="onScrimClick"
+      @keydown="onKeyDown"
+    >
       <section
         ref="panel"
         class="mv-drawer"
