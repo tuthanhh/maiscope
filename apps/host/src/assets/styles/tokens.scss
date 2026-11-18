@@ -29,10 +29,9 @@
   --n-1000: #000000;
 
   // One face everywhere: JetBrains Mono, as maiscope began (frontend-redesign
-  // 22). The Nerd Font build comes first, for machines that have it
-  // installed; everyone else gets the webfont. Latin only: Japanese, Chinese
-  // and Korean fall through to the CJK system faces.
-  --f-mono: "JetBrainsMono Nerd Font", "JetBrainsMono NF", "JetBrains Mono",
+  // 22), the webfont for everyone. Latin only: Japanese, Chinese and Korean
+  // fall through to the CJK system faces.
+  --f-mono: "JetBrains Mono",
     "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP",
     "Noto Sans CJK JP", "Apple SD Gothic Neo", "Malgun Gothic", "PingFang SC",
     "Microsoft YaHei", ui-monospace, "SF Mono", Menlo, monospace;
