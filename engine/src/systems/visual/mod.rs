@@ -1,5 +1,6 @@
 mod component;
 mod judgement_circle;
+pub mod majdata;
 mod movement;
 pub mod resources;
 pub mod schedule;
