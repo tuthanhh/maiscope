@@ -1,7 +1,6 @@
 # Spec — Visualizer: a MajdataPlay playfield
 
-**Status:** design — awaiting the maintainer's approval (reviewed by a
-builder check; their questions answered 2026-11-18)
+**Status:** approved 2026-11-18 (after a builder check); next, the plan
 **Milestone:** after v2.0 ships
 **Parent:** none (follows [`frontend-redesign`](../frontend-redesign/spec.md))
 
