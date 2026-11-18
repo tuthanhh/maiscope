@@ -22,7 +22,7 @@ concurrency:
 
 env:
   FLY_APP: maiscope-api
-  HEALTHCHECK_URL: https://maiscope-api.fly.dev/api/v1/healthcheck
+  HEALTHCHECK_URL: https://maiscope-api.fly.dev/api/healthcheck
 
 jobs:
   deploy:

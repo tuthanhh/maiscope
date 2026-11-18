@@ -26,7 +26,7 @@ stopped calling v1).
       search pagination boundary) are closed as moot: their endpoints are gone
 - [ ] `tests/snapshots/catalog.json` and the v1 snapshot test are deleted or
       replaced by 03's mapping check
-- [ ] Health checks move first, in their own change: `fly.toml`'s
+- [x] Health checks move first, in their own change: `fly.toml`'s
       `[[http_service.checks]]` path and `deploy.yml`'s `HEALTHCHECK_URL`
       point at `/api/healthcheck`, not `/api/v1/healthcheck` — or the deploy
       gate and Fly's check fail the moment v1 is gone

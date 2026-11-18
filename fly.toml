@@ -82,7 +82,7 @@ interval = "30s"
 timeout = "5s"
 grace_period = "10s"
 method = "GET"
-path = "/api/v1/healthcheck"
+path = "/api/healthcheck"
 
 [[vm]]
 # Deliberately small; raise only with evidence from real traffic.
