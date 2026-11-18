@@ -35,7 +35,4 @@ export type Sheet = {
   song: Song;
   /** `${song.id}/${type}/${difficulty}`: the sheet's identity in the client. */
   key: string;
-
-  // placeholder sheets only (utils/sheet.ts)
-  searchUrl?: string | null;
 };

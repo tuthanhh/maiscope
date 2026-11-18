@@ -76,26 +76,14 @@ export const useDataStore = defineStore("data", () => {
 
   // Lookup maps for the reference tables. Computed once per load and shared
   // across all consumers (rather than rebuilt inside every useGameData() call).
-  const categoryIndexMap = computed(
-    () => new Map(tables.value.categories.map((e, i) => [e.category, i])),
-  );
   const versionMap = computed(
     () => new Map(tables.value.versions.map((e) => [e.version, e])),
-  );
-  const versionIndexMap = computed(
-    () => new Map(tables.value.versions.map((e, i) => [e.version, i])),
   );
   const typeMap = computed(
     () => new Map(tables.value.types.map((e) => [e.type, e])),
   );
-  const typeIndexMap = computed(
-    () => new Map(tables.value.types.map((e, i) => [e.type, i])),
-  );
   const difficultyMap = computed(
     () => new Map(tables.value.difficulties.map((e) => [e.code, e])),
-  );
-  const difficultyIndexMap = computed(
-    () => new Map(tables.value.difficulties.map((e, i) => [e.code, i])),
   );
 
   // Parse a `/api/catalog` body and make it the current catalog; covers
@@ -192,13 +180,9 @@ export const useDataStore = defineStore("data", () => {
     currentSelectedSheets,
     hasBookmark,
     toggleBookmark,
-    categoryIndexMap,
     versionMap,
-    versionIndexMap,
     typeMap,
-    typeIndexMap,
     difficultyMap,
-    difficultyIndexMap,
     loadData,
     loadReference,
   };

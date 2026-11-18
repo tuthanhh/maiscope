@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, useId, watch } from "vue";
 import useI18n from "~/composables/useI18n";
-import useGtag from "~/composables/useGtag";
 import config from "~/app/config";
-import { GAME } from "~/app/game";
 import type { LocaleObject } from "~/app/i18n";
 import MvButton from "~/components/ui/MvButton.vue";
 import MvSelect from "~/components/ui/MvSelect.vue";
@@ -14,21 +12,13 @@ import MvSelect from "~/components/ui/MvSelect.vue";
 // select and links, reached with Tab.
 const i18n = useI18n();
 const { t } = i18n;
-const gtag = useGtag();
 const panelId = useId();
 const root = ref<HTMLElement | null>(null);
 const open = ref(false);
 
 const locale = computed({
   get: () => i18n.localeProperties.code,
-  set: (code: string) => {
-    i18n.setLocale(code);
-    gtag("event", "LocaleChanged", {
-      gameCode: GAME.gameCode,
-      eventSource: "MvMenu",
-      locale: code,
-    });
-  },
+  set: (code: string) => i18n.setLocale(code),
 });
 const localeOptions = computed(() =>
   (i18n.locales as LocaleObject[]).map((l) => ({ value: l.code, text: l.name ?? l.code })),

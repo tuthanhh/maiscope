@@ -3,7 +3,6 @@ import { createPinia } from "pinia";
 import App from "./App.vue";
 import router from "~/app/router";
 import i18n from "~/app/i18n";
-import config from "~/app/config";
 import { installAudioUnlock } from "~/utils/audioUnlock";
 
 import "~/assets/styles/global.scss";
@@ -21,8 +20,6 @@ async function bootstrap() {
   app.use(router);
   app.use(i18n);
 
-  app.config.globalProperties.$config = config;
-  app.config.globalProperties.$gtag = (..._args: unknown[]) => {};
 
   await router.isReady();
   app.mount("#app");

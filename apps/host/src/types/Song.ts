@@ -16,9 +16,7 @@ export type Song = {
   version?: string;
   releaseDate?: string;
 
-  isLocked?: boolean;
 
-  comment?: string;
 
   sheets: Sheet[];
 } & {
