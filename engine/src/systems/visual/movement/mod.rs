@@ -196,6 +196,8 @@ pub fn update_movement(
     let note_speed = chart.note_speed();
     let chart_speed = chart.chart_speed();
     let move_duration = MOVING as f32 / (chart_speed * note_speed);
+    // Paused, nothing on screen advances (visualizer-majdata 01).
+    let dt = chart.visual_delta(time.delta());
 
     for (
         entity,
@@ -212,7 +214,7 @@ pub fn update_movement(
     {
         match &mut *timing {
             NoteTiming::Growing(timer) => {
-                timer.tick(time.delta());
+                timer.tick(dt);
                 let t = timer.fraction();
 
                 if !is_slide(kind) {
@@ -237,7 +239,7 @@ pub fn update_movement(
                 }
             }
             NoteTiming::Moving(timer) => {
-                timer.tick(time.delta());
+                timer.tick(dt);
                 let t = timer.fraction();
 
                 move_tap(&mut transform, kind, t, &layout);
@@ -328,7 +330,7 @@ pub fn update_movement(
                         _ => {}
                     }
                 }
-                timer.tick(time.delta());
+                timer.tick(dt);
 
                 let t = timer.fraction();
 
@@ -363,7 +365,7 @@ pub fn update_movement(
                 }
             }
             NoteTiming::Waiting(timer) => {
-                timer.tick(time.delta());
+                timer.tick(dt);
                 wait_slide(timer.fraction(), children, &mut slide_elements);
                 if timer.just_finished() {
                     // Musical timing → follows the play tempo (/ chart_speed).
@@ -375,7 +377,7 @@ pub fn update_movement(
                 }
             }
             NoteTiming::Sliding(timer) => {
-                timer.tick(time.delta());
+                timer.tick(dt);
                 if let Some(fan) = fan_lanes {
                     fan_trace(
                         timer.fraction(),
@@ -434,7 +436,7 @@ pub fn update_movement(
                     }
                 }
 
-                timer.tick(time.delta());
+                timer.tick(dt);
                 let t = timer.fraction();
 
                 if is_touch {
