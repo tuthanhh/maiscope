@@ -188,7 +188,7 @@ pub fn apply_commands(
                 }
                 let speed = chart.chart_speed();
                 let horizon = t + audio_lead.chart_secs(speed);
-                guide_scheduler.seek(chart.timed_events(), horizon);
+                guide_scheduler.seek(chart.timed_events(), t);
                 metronome.seek(chart.timed_events(), horizon, speed);
             }
             crate::wasm_bridge::EngineCommand::Unload => {

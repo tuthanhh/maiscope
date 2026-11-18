@@ -157,11 +157,15 @@ impl GuideScheduler {
         coalesce(due)
     }
 
-    /// Jump the cursor to `horizon` (chart seconds, lead included) without
-    /// sounding what lies between: the next `advance` sounds only hits after
-    /// it, and the releases of holds that started before it and end after.
-    pub fn seek(&mut self, events: &[TimedEvent], horizon: f64) {
-        self.next = events.partition_point(|e| e.time <= horizon);
+    /// Jump the cursor to `landed` (the chart time a seek landed on, no lead)
+    /// without sounding what lies before it: the next `advance` sounds the
+    /// hits from there on — the note the seek landed on, and any its lead
+    /// already covers — and the releases of holds still held.
+    pub fn seek(&mut self, events: &[TimedEvent], landed: f64) {
+        // A seek to a measure start lands on its downbeat give or take the
+        // timeline's rounding; the note there still sounds.
+        let from = landed - SAME_TIME_SECS;
+        self.next = events.partition_point(|e| e.time < from);
         self.releases = events[..self.next]
             .iter()
             .flat_map(|event| match &event.event {
@@ -177,9 +181,9 @@ impl GuideScheduler {
                     .collect(),
                 _ => Vec::new(),
             })
-            .filter(|release| *release > horizon)
+            .filter(|release| *release >= from)
             .collect();
-        self.last_horizon = horizon;
+        self.last_horizon = from;
     }
 
     /// Forget the chart: the next `advance` starts from the first event.
@@ -228,6 +232,24 @@ fn click_interval_secs(bpm: f32, chart_speed: f32) -> f64 {
     interval
 }
 
+/// Clicks since the chart began at chart time `t`, as playback counts them:
+/// each stretch at its own bpm, at the click interval in force there.
+fn clicks_at(events: &[TimedEvent], t: f64, chart_speed: f32) -> f64 {
+    let Some(first) = events.first() else {
+        return 0.0;
+    };
+    let (mut clicks, mut time, mut bpm) = (0.0, 0.0, first.bpm);
+    for event in events {
+        if event.time >= t {
+            break;
+        }
+        clicks += (event.time - time) / click_interval_secs(bpm, chart_speed);
+        time = event.time;
+        bpm = event.bpm;
+    }
+    clicks + (t - time) / click_interval_secs(bpm, chart_speed)
+}
+
 impl Metronome {
     /// Restart the click grid at `horizon` (chart seconds, lead included) on
     /// the chart's beat, with no click for the jump itself.
@@ -235,9 +257,7 @@ impl Metronome {
         self.bpm_cursor = events
             .partition_point(|e| e.time <= horizon)
             .saturating_sub(1);
-        let bpm = events.get(self.bpm_cursor).map(|e| e.bpm).unwrap_or(120.0);
-        let beats_per_click = click_interval_secs(bpm, chart_speed) * bpm.max(1.0) as f64 / 60.0;
-        self.phase = crate::systems::timeline::beat_at(events, horizon) / beats_per_click;
+        self.phase = clicks_at(events, horizon, chart_speed);
         self.last_elapsed = horizon;
     }
 }
@@ -745,10 +765,22 @@ mod tests {
         let mut guide = GuideScheduler::default();
         guide.advance(&events, 0.1);
         guide.seek(&events, 3.0);
-        assert!(guide.advance(&events, 3.05).is_empty());
         let due = guide.advance(&events, 3.6);
-        assert_eq!(due.len(), 1);
-        assert!((due[0].time - 3.5).abs() < 1e-9);
+        let times: Vec<f64> = due.iter().map(|s| s.time).collect();
+        assert_eq!(times, vec![3.0, 3.5]);
+    }
+
+    /// A seek to a measure start lands on its downbeat: the note there, and
+    /// any within the guide lead after it, still sound (final review M1).
+    #[test]
+    fn a_seek_sounds_the_note_it_lands_on() {
+        let events = parsed("(120){4}1,1,1,1,1,1,1,1,E");
+        let mut guide = GuideScheduler::default();
+        // The timeline's measure starts are rounded: land a hair early.
+        guide.seek(&events, 2.0 - 0.0004);
+        let due = guide.advance(&events, 2.0 + 0.2);
+        let times: Vec<f64> = due.iter().map(|s| s.time).collect();
+        assert_eq!(times, vec![2.0]);
     }
 
     #[test]
@@ -768,5 +800,17 @@ mod tests {
         metro.seek(&events, 1.25, 1.0);
         assert!((metro.phase.fract() - 0.5).abs() < 1e-9);
         assert_eq!(metro.last_elapsed, 1.25);
+    }
+
+    /// The click interval doubles at fast tempos; after a seek the grid is
+    /// the one playback built, interval by interval (final review M2).
+    #[test]
+    fn the_metronome_counts_clicks_across_tempo_changes() {
+        // 120 BPM clicks every 0.5 s for the first second; at 300 BPM a beat
+        // (0.2 s) doubles to 0.8 s. At 1.4 s: 2 clicks + 0.4/0.8.
+        let events = parsed("(120){4}1,1,(300)1,1,1,1,E");
+        let mut metro = Metronome::default();
+        metro.seek(&events, 1.4, 1.0);
+        assert!((metro.phase - 2.5).abs() < 1e-9, "{}", metro.phase);
     }
 }
