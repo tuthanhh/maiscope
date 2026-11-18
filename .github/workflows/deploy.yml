@@ -23,6 +23,7 @@ concurrency:
 env:
   FLY_APP: maiscope-api
   HEALTHCHECK_URL: https://maiscope-api.fly.dev/api/healthcheck
+  MANIFEST_URL: https://maiscope-api.fly.dev/api/sync/manifest
 
 jobs:
   deploy:
@@ -109,6 +110,20 @@ jobs:
           echo "::error::Healthcheck never returned 200. The deploy completed but the app is not serving."
           exit 1
 
+      # The healthcheck never touches the database, so a machine serving
+      # against a schema it cannot query still passes it. The manifest reads
+      # `catalog_meta`: a 200 with a numeric revision means migrations ran
+      # and this build can read what they left.
+      - name: Schema check
+        run: |
+          set -euo pipefail
+          code=$(curl -s -o /tmp/manifest -w '%{http_code}' --max-time 30 "$MANIFEST_URL" || echo 000)
+          if [ "$code" != "200" ] || ! jq -e '.revision | type == "number"' /tmp/manifest >/dev/null; then
+            echo "::error::$MANIFEST_URL answered $code: $(cat /tmp/manifest 2>/dev/null | head -c 300)"
+            exit 1
+          fi
+          echo "manifest: $(cat /tmp/manifest)"
+
       - name: Summary
         if: always()
         env:
@@ -120,6 +135,7 @@ jobs:
             echo "- app: \`${FLY_APP}\`"
             echo "- commit: \`${SHA}\`"
             echo "- healthcheck: ${HEALTHCHECK_URL}"
+            echo "- schema check: ${MANIFEST_URL}"
             echo ""
             echo "The running machine logs this SHA as \`git_sha\` at startup."
           } >> "$GITHUB_STEP_SUMMARY"

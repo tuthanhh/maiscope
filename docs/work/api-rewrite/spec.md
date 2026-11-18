@@ -185,3 +185,22 @@ requirements for the payload.
 
 The frontend calls only `/api/...`, the old routes are deleted, and no URL in
 the system contains a percent-encoded title.
+
+**2026-11-18 — whole-feature review.** Applied: the chart route now hides
+a sheet whose *song* is tombstoned, as the song and sheet routes already
+did, and both sheet queries skip a sheet with no type or difficulty (it has
+no address); tests pin both. `If-None-Match` is compared weakly across a
+list, so a proxy that weakens the tag still gets 304s. New router tests
+cover the Catalog's revalidation through compression, the chart route's
+plain-text 400, and a blob-only chart (`hasChart: false`, 501). `deploy.yml`
+gains a schema check on `/api/sync/manifest` — the healthcheck never
+touches the database. `fly.toml` and `production-v2`'s pre-deploy list now
+say that the first v2 deploy cannot fall back to the previous release (the
+song-id migration replaces `songs.id` under it): its rollback is the backup,
+and the list adds a rehearsal on restored data, the Postgres 18 check and
+the cutover order. The frontend fetches the reference tables `no-cache` as
+the contract says, and reads a JSON error from the chart route. Not done,
+offered as a choice: views (`visible_songs`, `visible_sheets`) giving one
+definition of "served" in place of three predicates kept in step by hand.
+Noted: `isLocked` and `comment` are on the wire though no screen reads them
+since the redesign.

@@ -11,7 +11,10 @@
 //! tombstone in `deleted_songs` / `deleted_sheets` is not served (ADR-0026).
 //! The sync clears the tombstone when the row returns. A sheet is also hidden
 //! when its song is, so a found sheet always has a visible song without
-//! relying on the sync tombstoning both.
+//! relying on the sync tombstoning both. A sheet without a type or a
+//! difficulty has no address (`/songs/{id}/sheets/{type}/{code}`) and is not
+//! served either. The sheet query and the chart query state these rules
+//! alike; keep them in step.
 
 use sqlx::PgConnection;
 use sqlx::types::Uuid;
@@ -77,8 +80,9 @@ pub async fn fetch_official_sheets(
             )) FROM sheet_region_overrides WHERE sheet_id = s.id)
                 AS "region_overrides: RegionOverridesJson"
            FROM sheets s
-           LEFT JOIN difficulties d ON d.difficulty = s.difficulty
-           WHERE ($1::uuid IS NULL OR s.song_id_fk = $1)
+           JOIN difficulties d ON d.difficulty = s.difficulty
+           WHERE s.type IS NOT NULL
+             AND ($1::uuid IS NULL OR s.song_id_fk = $1)
              AND ($2::text IS NULL OR (s.type = $2 AND d.code = $3))
              AND NOT EXISTS (SELECT 1 FROM deleted_sheets t WHERE t.sheet_expr = s.sheet_expr)
              AND NOT EXISTS (
@@ -119,7 +123,11 @@ pub async fn fetch_chart_text(
            JOIN difficulties d ON d.difficulty = s.difficulty
            LEFT JOIN charts c ON c.sheet_id = s.id AND c.format = 'maimai-simai'
            WHERE s.song_id_fk = $1 AND s.type = $2 AND d.code = $3
-             AND NOT EXISTS (SELECT 1 FROM deleted_sheets t WHERE t.sheet_expr = s.sheet_expr)"#,
+             AND NOT EXISTS (SELECT 1 FROM deleted_sheets t WHERE t.sheet_expr = s.sheet_expr)
+             AND NOT EXISTS (
+                 SELECT 1 FROM songs so JOIN deleted_songs ds ON ds.song_id = so.song_id
+                 WHERE so.id = s.song_id_fk
+             )"#,
         song_id,
         r#type,
         difficulty_code
@@ -223,6 +231,67 @@ mod tests {
             fetch_chart_text(&mut conn, first, "dx", "expert").await?,
             ChartText::NoSheet
         ));
+        Ok(())
+    }
+
+    // The sync tombstones a vanished song's sheets with it, but the read path
+    // does not rely on that: a tombstoned song hides its sheets and their
+    // chart text on every route, whatever the sheets' own state.
+    #[sqlx::test]
+    async fn a_tombstoned_song_hides_its_sheets_and_chart_on_its_own(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let (_, second) = seed(&pool).await?;
+        sqlx::query!(
+            "INSERT INTO charts (sheet_id, sheet_expr, format, content)
+             SELECT id, sheet_expr, 'maimai-simai', '&title=B' FROM sheets
+             WHERE sheet_expr = 'b|dx|master'"
+        )
+        .execute(&pool)
+        .await?;
+        let mut conn = pool.acquire().await?;
+        assert!(matches!(
+            fetch_chart_text(&mut conn, second, "dx", "master").await?,
+            ChartText::Inline(_)
+        ));
+
+        sqlx::query!("INSERT INTO deleted_songs (song_id, revision) VALUES ('b', 1)")
+            .execute(&pool)
+            .await?;
+        assert!(
+            fetch_official_songs(&mut conn, Some(second))
+                .await?
+                .is_empty()
+        );
+        assert!(
+            fetch_official_sheets(&mut conn, Some(second), None)
+                .await?
+                .is_empty()
+        );
+        assert!(matches!(
+            fetch_chart_text(&mut conn, second, "dx", "master").await?,
+            ChartText::NoSheet
+        ));
+        Ok(())
+    }
+
+    // The schema lets `type` and `difficulty` be NULL; such a row has no
+    // address, so it is not served rather than served under `undefined`.
+    #[sqlx::test]
+    async fn a_sheet_without_type_or_difficulty_is_not_served(
+        pool: sqlx::PgPool,
+    ) -> sqlx::Result<()> {
+        let (first, _) = seed(&pool).await?;
+        sqlx::query!(
+            "INSERT INTO sheets (song_id_fk, sheet_expr, type, difficulty, source_index)
+             VALUES ($1, 'a||master', NULL, 'master', 5), ($1, 'a|std|', 'std', NULL, 6)",
+            first
+        )
+        .execute(&pool)
+        .await?;
+        let mut conn = pool.acquire().await?;
+        let sheets = fetch_official_sheets(&mut conn, Some(first), None).await?;
+        assert_eq!(sheets.len(), 3, "only the three addressable sheets");
         Ok(())
     }
 

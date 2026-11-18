@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO sheets (song_id_fk, sheet_expr, type, difficulty, source_index)\n             VALUES ($1, 'a||master', NULL, 'master', 5), ($1, 'a|std|', 'std', NULL, 6)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "472965527357ad831c18226bb65c3e454a383286f8bac6422638b729fbbe453c"
+}

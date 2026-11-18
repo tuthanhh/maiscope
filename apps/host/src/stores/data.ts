@@ -67,7 +67,11 @@ export const useDataStore = defineStore("data", () => {
   );
   async function loadReference(): Promise<void> {
     try {
-      reference.value = await fetchJson<Reference>(`${GAME.apiBaseUrl}/reference`);
+      // `no-cache`, as the Catalog: `max-age=3600` would otherwise let the
+      // browser answer with a previous revision's tables (contract §0).
+      reference.value = await fetchJson<Reference>(`${GAME.apiBaseUrl}/reference`, {
+        cache: "no-cache",
+      });
     } catch (err) {
       // Names fall back to their codes until the Catalog brings the tables,
       // or until the connection returns and this is tried once more.

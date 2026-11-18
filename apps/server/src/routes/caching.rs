@@ -21,7 +21,7 @@ pub(crate) const CATALOG_CACHE_CONTROL: &str = "public, max-age=3600";
 /// Catalog changed, so it always revalidates (contract §0).
 pub(crate) const MANIFEST_CACHE_CONTROL: &str = "no-cache";
 
-/// The `catalog_meta` row both endpoints need, plus the validator derived
+/// The `catalog_meta` row these routes need, plus the validator derived
 /// from it.
 pub(crate) struct Freshness {
     /// sha256 over `revision:updateTime`, sent quoted as the `ETag` of every
@@ -33,8 +33,8 @@ pub(crate) struct Freshness {
 impl Freshness {
     /// `catalog_meta` is a singleton written only by the catalog sync, so it
     /// is empty between `migrate` and the first sync — the state every new
-    /// environment starts in. Both callers (`GET /catalog`, `GET
-    /// /sync/manifest`) need a validator even then, so fall back to the same
+    /// environment starts in. Every caller (`GET /catalog`, `GET /reference`,
+    /// `GET /sync/manifest`) needs a validator even then, so fall back to the same
     /// `0000-00-00` / revision-0 sentinel rather than erroring.
     pub(crate) async fn load<'e>(executor: impl sqlx::PgExecutor<'e>) -> Result<Self, AppError> {
         let row = sqlx::query!(
@@ -60,11 +60,22 @@ impl Freshness {
     }
 
     /// True when the client's `If-None-Match` already names this version.
+    /// RFC 9110 §13.1.2: a list of tags, compared weakly, or `*`. A browser
+    /// echoes back the tag it was given, but a proxy in front (Cloudflare)
+    /// may have weakened it to `W/"…"` — an exact match would then never
+    /// answer 304 again, silently.
     pub(crate) fn is_current_for(&self, headers: &HeaderMap) -> bool {
-        headers
+        let Some(value) = headers
             .get(header::IF_NONE_MATCH)
             .and_then(|v| v.to_str().ok())
-            == Some(self.etag().as_str())
+        else {
+            return false;
+        };
+        let etag = self.etag();
+        value
+            .split(',')
+            .map(str::trim)
+            .any(|tag| tag == "*" || tag.strip_prefix("W/").unwrap_or(tag) == etag)
     }
 
     /// The validator headers every response carries — the `200` and the
@@ -104,4 +115,35 @@ fn catalog_hash(revision: i64, update_time: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(format!("{revision}:{update_time}").as_bytes());
     format!("{:x}", hasher.finalize())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::HeaderValue;
+
+    fn freshness() -> Freshness {
+        Freshness {
+            hash: "abc".into(),
+            revision: 1,
+        }
+    }
+
+    fn if_none_match(value: &str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::IF_NONE_MATCH, HeaderValue::from_str(value).unwrap());
+        headers
+    }
+
+    #[test]
+    fn if_none_match_is_compared_weakly_across_a_list() {
+        let f = freshness();
+        for current in ["\"abc\"", "W/\"abc\"", "\"old\", W/\"abc\"", "*"] {
+            assert!(f.is_current_for(&if_none_match(current)), "{current}");
+        }
+        for stale in ["\"old\"", "abc", "W/\"old\", \"other\""] {
+            assert!(!f.is_current_for(&if_none_match(stale)), "{stale}");
+        }
+        assert!(!f.is_current_for(&HeaderMap::new()));
+    }
 }

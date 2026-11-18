@@ -123,7 +123,18 @@ export async function fetchChart(
 ): Promise<string> {
   const res = await fetch(`${sheetUrl(songId, type, difficulty)}/chart`);
   if (!res.ok) {
-    throw new Error(`chart fetch failed (${res.status}): ${await res.text()}`);
+    // The route's own errors are plain text; one the middleware raises
+    // first (a 429) is the JSON envelope. Show the message either way.
+    const body = await res.text();
+    let message = body;
+    if (res.headers.get("content-type")?.includes("json")) {
+      try {
+        message = (JSON.parse(body) as { message?: string }).message ?? body;
+      } catch {
+        // Not JSON after all: the text is the message.
+      }
+    }
+    throw new Error(`chart fetch failed (${res.status}): ${message}`);
   }
   return res.text();
 }

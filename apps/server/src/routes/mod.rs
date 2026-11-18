@@ -535,4 +535,103 @@ mod tests {
         let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(body["error"], "method_not_allowed");
     }
+
+    async fn body_bytes(response: axum::response::Response) -> Vec<u8> {
+        axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec()
+    }
+
+    // Through the assembled stack, compression included: the strong ETag
+    // survives the encoding, and a conditional request gets the 304 with its
+    // validators. Handler tests cannot see the compression layer.
+    #[sqlx::test]
+    async fn the_catalog_revalidates_through_the_whole_stack(pool: PgPool) {
+        let app = router(test_state(pool));
+        let request = |etag: Option<&str>| {
+            let mut builder = Request::builder()
+                .uri("/api/catalog")
+                .header("fly-client-ip", "203.0.113.101")
+                .header("accept-encoding", "gzip");
+            if let Some(etag) = etag {
+                builder = builder.header("if-none-match", etag);
+            }
+            builder.body(Body::empty()).unwrap()
+        };
+        let first = app.clone().oneshot(request(None)).await.unwrap();
+        assert_eq!(first.status(), StatusCode::OK);
+        assert_eq!(first.headers()["content-encoding"], "gzip");
+        let etag = first.headers()["etag"].to_str().unwrap().to_string();
+        assert!(etag.starts_with('"'), "a strong ETag: {etag}");
+
+        let second = app.oneshot(request(Some(&etag))).await.unwrap();
+        assert_eq!(second.status(), StatusCode::NOT_MODIFIED);
+        assert_eq!(second.headers()["etag"], etag.as_str());
+        assert!(second.headers().contains_key("cache-control"));
+    }
+
+    // The chart route's own rejections are plain text, like its other
+    // errors: the engine reads that body as text whatever the status.
+    #[sqlx::test]
+    async fn a_chart_path_it_cannot_parse_is_a_plain_text_400(pool: PgPool) {
+        let response = router(test_state(pool))
+            .oneshot(get_from(
+                "/api/songs/%FF/sheets/dx/master/chart",
+                "203.0.113.102",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert!(
+            response.headers()["content-type"]
+                .to_str()
+                .unwrap()
+                .starts_with("text/plain")
+        );
+    }
+
+    // A chart row holding no inline text (blob-only) is not a chart the
+    // client can load: the sheet says `hasChart: false`, and the chart route
+    // answers 501 rather than an empty 200.
+    #[sqlx::test]
+    async fn a_blob_only_chart_is_not_a_chart_to_load(pool: PgPool) -> sqlx::Result<()> {
+        crate::test_support::seed_difficulties(&pool, &["master"]).await;
+        let song: sqlx::types::Uuid = sqlx::query_scalar(
+            "INSERT INTO songs (song_id, title, source_index) VALUES ('s', 'S', 0) RETURNING id",
+        )
+        .fetch_one(&pool)
+        .await?;
+        sqlx::query(
+            "INSERT INTO sheets (song_id_fk, sheet_expr, type, difficulty, source_index)
+             VALUES ($1, 's|dx|master', 'dx', 'master', 0)",
+        )
+        .bind(song)
+        .execute(&pool)
+        .await?;
+        sqlx::query(
+            "INSERT INTO charts (sheet_id, sheet_expr, format, blob_url)
+             SELECT id, sheet_expr, 'maimai-simai', 's3://charts/s' FROM sheets",
+        )
+        .execute(&pool)
+        .await?;
+        let app = router(test_state(pool));
+        let sheet = format!("/api/songs/{song}/sheets/dx/master");
+
+        let response = app
+            .clone()
+            .oneshot(get_from(&sheet, "203.0.113.103"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body: serde_json::Value = serde_json::from_slice(&body_bytes(response).await).unwrap();
+        assert_eq!(body["hasChart"], false);
+
+        let response = app
+            .oneshot(get_from(&format!("{sheet}/chart"), "203.0.113.103"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+        Ok(())
+    }
 }

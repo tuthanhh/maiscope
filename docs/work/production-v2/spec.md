@@ -204,8 +204,19 @@ What does not:
 ## Before the first v2 deploy
 
 The branch merges and deploys as one. These are not code, so no test catches
-them; the machine refuses to start without the first three, which surfaces as
-a crash loop while the previous release keeps serving.
+them; the machine refuses to start without the first two, which surfaces as a
+crash loop. **The previous release does not keep serving this time**: the
+song-id migration replaces `songs.id` under it, so once the release command
+has run the v1 machine cannot join songs to sheets. Rollback for this deploy
+is restoring the backup below, not the previous release (`fly.toml` says so
+beside `release_command`).
+
+- [ ] Neon runs Postgres 18 — two migrations call `uuidv7()`
+- [ ] Rehearse on real data: restore the backup into the local Postgres 18,
+      run `cargo run --bin migrate`, start the server against it, and check
+      `/api/catalog`'s song count and that no sheet has a NULL `type` or
+      `difficulty` (the read path skips such a sheet — it has no address —
+      so a NULL would be a silently missing sheet)
 
 - [ ] Create the production GitHub OAuth app with the callback
       `https://maiscope.pages.dev/auth/callback`; put its client id in
@@ -220,8 +231,15 @@ a crash loop while the previous release keeps serving.
       sheet-address `UNIQUE` aborts the release command if production ever
       held two sheets at one (song, type, difficulty) — impossible while
       `sheet_expr` is unique, but that is the failure to recognise
+- [ ] Order: `deploy.yml` (server and migrations) first — `deploy.yml`'s
+      schema check reads the manifest — then `deploy-web.yml`. Between the
+      two, the v1 frontend gets JSON 404s; keep the gap short. Not within
+      minutes of the 19:00 UTC `sync-catalog` cron, and no `seed-charts`
+      during it
 - [ ] After the deploy: `/api/reference`, `/api/catalog` and
-      `/api/sync/manifest` answer, and the manifest's revision moved by one
+      `/api/sync/manifest` answer, and the manifest's revision moved by one;
+      one song modal and one chart page load in a browser; dispatch
+      `sync-catalog.yml` once and see it succeed against the new schema
 
 ## Accepted, not solved
 

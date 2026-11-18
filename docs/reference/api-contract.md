@@ -17,8 +17,8 @@ No audio crosses this API. Audio hosting was cut by
 charts on its silent, wall-clock-driven path.
 
 - Base URL: `/api`, with no version segment (`api-rewrite`; §6 *Versioning*).
-- Content type: `application/json; charset=utf-8` unless noted (the chart text
-  is `text/plain`).
+- Content type: `application/json` (UTF-8, as JSON always is) unless noted
+  (the chart text is `text/plain; charset=utf-8`).
 - Identity: a song is its minted UUID; a sheet is that id plus its type and
   difficulty code — `/api/songs/{id}/sheets/{type}/{code}`
   ([ADR-0026](../adr/0026-v2-api-carries-codes-and-read-fields-only.md)).
@@ -55,7 +55,7 @@ lets any screen resolve names without the Catalog
   "versions":     [{ "version": "MAGiCAL", "abbr": "MAGiCAL" }],
   "types":        [{ "type": "dx", "name": "DX（でらっくす）", "abbr": "DX" }],
   "difficulties": [{ "code": "master", "name": "MASTER", "color": "#9e45e2" },
-                   { "code": "協", "name": "【協】", "color": null }],
+                   { "code": "協", "name": "【協】" }],   // no colour: omitted
   "regions":      [{ "region": "jp", "name": "日本版" }] }
 ```
 
@@ -107,6 +107,10 @@ One song with its sheets, shaped exactly as an element of the Catalog's
 lowercase, hyphenated — so a song has one URL; `404 not_found` for an
 unknown song.
 
+The single reads — this one, the sheet and the chart text — send no
+`ETag` or `Cache-Control`: they are fetched once per screen, and the chart
+text is small. Add a validator if one ever shows in the logs.
+
 ### `GET /api/songs/{id}/sheets/{type}/{difficulty}`
 
 One sheet: its own fields as in the Catalog, plus its song under `song`
@@ -133,7 +137,10 @@ statuses and the same redaction: `400` malformed id, `404` no such sheet
 chart row without inline text, `500` with the body `internal error` and
 nothing more. v1's handler put a database error's own text in the body; this
 one cannot. The body is the message alone — no `error` code — so the `501`
-reads `chart for '…' has no inline simai content`.
+reads `chart for '…' has no inline simai content`. A refusal raised before
+the route runs — a `429` from the rate limiter — is the §6 JSON envelope like
+any other; a client reading this body should take `message` when the
+response says `application/json`.
 
 ### `GET /api/sync/manifest`
 
@@ -150,7 +157,9 @@ the previous revision's body for up to an hour. The `ETag`'s `304` saves bytes
 only on a repeat visit at an unchanged revision.
 
 The manifest, the Catalog and the reference tables send the same `ETag`
-value — one validator for one Catalog revision. Caches key by URL, so this is
+value — one validator for one Catalog revision. `If-None-Match` is compared
+weakly and may be a list or `*` (RFC 9110 §13.1.2), so a proxy that
+weakens the tag to `W/"…"` still gets its `304`. Caches key by URL, so this is
 not an identity; do not compare it across routes.
 
 Under `/api/…`, a path that matches no route is `404 not_found` and a route
