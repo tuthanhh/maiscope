@@ -75,6 +75,8 @@ page:
     load: 載入
     loading: 載入中…
     chartText: 譜面文字
+    fullscreen: '全螢幕'
+    exitFullscreen: '結束全螢幕'
     share: 分享
     otherDifficulties: 其他難度
     notes: '{count} 個音符'

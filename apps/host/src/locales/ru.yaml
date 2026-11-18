@@ -75,6 +75,8 @@ page:
     load: Загрузить
     loading: загрузка…
     chartText: Текст чарта
+    fullscreen: 'Во весь экран'
+    exitFullscreen: 'Выйти из полноэкранного режима'
     share: Поделиться
     otherDifficulties: Другие сложности
     notes: 'нот: {count}'

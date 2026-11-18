@@ -98,7 +98,7 @@ For the playfield, the large piece:
 Three pieces, in this order, each shippable on its own (the maintainer
 agreed to the order).
 
-### 1. Player behaviour — small
+### 1. Player behaviour — small — **done 2026-11-18**
 
 - **Cause of the pause bug** (found): every note's animation runs on its
   own `Timer`, ticked by wall time (`timer.tick(time.delta())` in

@@ -18,6 +18,7 @@ import useAutoLead from "~/composables/useAutoLead";
 import useDebugOverlay from "~/composables/useDebugOverlay";
 import usePlayback, { NOTE_SPEED, SPEED } from "~/composables/usePlayback";
 import useChartLoader, { hasDeepLink } from "~/composables/useChartLoader";
+import useFullscreen from "~/composables/useFullscreen";
 import VizStage from "~/components/visualizer/VizStage.vue";
 import VizTransport from "~/components/visualizer/VizTransport.vue";
 import VizSlider from "~/components/visualizer/VizSlider.vue";
@@ -67,6 +68,9 @@ function applyRenderToggles(): void {
 // mount, park it off-screen on unmount — the wasm engine stays attached without
 // re-instantiating. Boot the engine once; subsequent mounts just reattach.
 const stage = ref<InstanceType<typeof VizStage> | null>(null);
+// The stage element (canvas, transport, sliders) is what goes fullscreen.
+const stageEl = ref<HTMLElement | null>(null);
+const fullscreen = useFullscreen(stageEl);
 
 onMounted(async () => {
     try {
@@ -173,7 +177,7 @@ usePageTitle(() => ({ title: t("page-title.visualizer") as string }));
 
 <template>
     <div class="mv-viz">
-        <div class="mv-viz-stage">
+        <div ref="stageEl" class="mv-viz-stage">
             <!-- engine canvas: the Bevy app renders the chart here -->
             <VizStage
                 ref="stage"
@@ -187,8 +191,11 @@ usePageTitle(() => ({ title: t("page-title.visualizer") as string }));
             <VizTransport
                 :loaded="loaded"
                 :playing="playing"
+                :fullscreen-supported="fullscreen.supported"
+                :fullscreen="fullscreen.active.value"
                 @restart="playback.restartFromTop"
                 @toggle="playback.togglePlay"
+                @fullscreen="fullscreen.toggle"
             />
 
             <!-- speed controls: stepped sliders with -/+ steppers -->
@@ -267,6 +274,24 @@ usePageTitle(() => ({ title: t("page-title.visualizer") as string }));
 .mv-viz-stage {
     grid-area: stage;
     min-width: 0;
+}
+// Fullscreen (visualizer-majdata 04): the stage alone, centred on the page
+// background, the canvas as large as the screen allows above the controls
+// (its box is 1000:800, so its width is 1.25 × the height it may take).
+.mv-viz-stage:fullscreen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--s-6);
+    overflow: auto;
+    background: var(--bg);
+}
+.mv-viz-stage:fullscreen .mv-canvas-wrap {
+    width: min(100%, calc((100vh - 240px) * 1.25));
+}
+.mv-viz-stage:fullscreen .mv-sliders {
+    width: min(100%, 640px);
 }
 .mv-viz-info {
     grid-area: info;
