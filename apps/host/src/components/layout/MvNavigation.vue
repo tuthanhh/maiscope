@@ -8,6 +8,7 @@ import MvButton from "~/components/ui/MvButton.vue";
 import MvIcon from "~/components/ui/MvIcon.vue";
 import MvMenu from "./MvMenu.vue";
 import type { IconName } from "~/components/ui/icons";
+import logoUrl from "~/assets/brand/logo.svg";
 
 // design-direction "Navigation": three destinations. A top bar on desktop; on
 // phones a slim top bar (brand, menu) and a bottom bar of icon-above-label
@@ -30,7 +31,10 @@ const destinations = computed<{ name: string; label: string; icon: IconName }[]>
 
 <template>
   <header class="mv-topbar">
-    <RouterLink :to="{ name: 'home' }" class="mv-brand t-strong">maiscope</RouterLink>
+    <RouterLink :to="{ name: 'home' }" class="mv-brand">
+      <img :src="logoUrl" alt="" class="mv-brand-logo" width="28" height="28" />
+      maiscope
+    </RouterLink>
     <nav class="mv-topbar-links" aria-label="Main">
       <RouterLink
         v-for="d in destinations"
@@ -91,8 +95,19 @@ const destinations = computed<{ name: string; label: string; icon: IconName }[]>
   border-bottom: var(--line-w) solid var(--line);
 }
 .mv-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  justify-self: start;
+  font: 700 18px/24px var(--f-display);
+  letter-spacing: -0.01em;
   color: var(--fg);
   text-decoration: none;
+}
+// The logo is the one coloured thing in the shell, by the maintainer's
+// choice; it reads on both themes as drawn.
+.mv-brand-logo {
+  display: block;
 }
 .mv-topbar-links {
   display: flex;

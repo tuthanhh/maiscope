@@ -2,17 +2,22 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <!-- The maiscope logo (src/assets/brand/logo.svg); the .ico for browsers
+         without SVG favicons. Every PNG in public/ is rendered from it. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>maiscope</title>
-    <!-- Inter (titles, body) and JetBrains Mono (labels, numbers): see
+    <!-- Space Grotesk (brand, headings, titles), Inter (body) and JetBrains
+         Mono (labels, numbers): see
          docs/reference/design-direction.md, "Type families". A <link> rather
          than a CSS @import, which browsers ignore unless it leads the sheet. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
     />
   </head>
 

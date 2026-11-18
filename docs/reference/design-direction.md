@@ -59,6 +59,13 @@ Type families:
 |---|---|
 | `--f-sans` | `Inter, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", "Noto Sans CJK JP", "Apple SD Gothic Neo", "Malgun Gothic", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif` |
 | `--f-mono` | `"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace` |
+| `--f-display` | `"Space Grotesk"`, then the same CJK system faces and `system-ui` as `--f-sans` |
+
+`--f-display` (2026-11-18, `frontend-redesign` 15) gives the brand, the
+`heading`, `title` and `display` roles and the card title a face with more
+character than Inter, where it is large or short enough to stay easy to
+read; body text, controls and figures keep Inter and JetBrains Mono. Like
+Inter it styles Latin only — a Japanese title shows in the system CJK face.
 
 Inter ships as one Latin-subset variable file; the CJK names are system
 fonts and nothing is downloaded for them. The `lang` attribute on `<html>`
@@ -125,12 +132,12 @@ Seven roles replace the fourteen sizes in use today.
 | `meta` | mono | 12 / 16 | 400 | 0 | as is | Levels, BPM, note counts, dates, designer line, pager |
 | `body` | sans | 14 / 21 | 400 | 0 | as is | Prose, card artist, inputs, buttons |
 | `strong` | sans | 14 / 21 | 600 | 0 | as is | Card title, table song title |
-| `heading` | sans | 18 / 24 | 600 | -0.01em | as is | Page and drawer headings |
-| `title` | sans | 24 / 28 | 600 | -0.015em | as is | Modal and chart page title |
-| `display` | sans | 48 / 48 | 700 | -0.02em | as is | Home brand only |
+| `heading` | display | 18 / 24 | 600 | -0.01em | as is | Page and drawer headings, Home subtitle |
+| `title` | display | 24 / 28 | 600 | -0.015em | as is | Modal and chart page title |
+| `display` | display | 72 / 72 | 700 | -0.03em | as is | Home brand only |
 
-On phones `title` drops to 20 and `display` to 36; nothing else changes,
-line heights included.
+The card title is `strong` set in the display face. On phones `title`
+drops to 20 and `display` to 52 / 56; nothing else changes.
 Numbers are always mono, including inside sans lines ("174 BPM" sets the
 figure in mono). Japanese text takes `font-feature-settings: "palt"` in
 the sans roles so proportional kana does not gap.
@@ -501,9 +508,15 @@ stays, struck through in `--fg-muted`, when the resolved filter is on.
 
 ### Home
 
-Unchanged in structure: brand in `display`, subtitle in `body`
-`--fg-muted`, two buttons, primary for Songs and ghost for Play.
-Community is reached from the bar.
+A picture, then the brand in `display`, the subtitle in `heading`
+`--fg-muted`, and two buttons, primary for Songs and ghost for Play.
+Community is reached from the bar. The picture is the maintainer's
+image when `apps/host/src/assets/home/` holds a `home-hero` file, and the
+maiscope logo otherwise. The logo (`assets/brand/logo.svg`) is the one
+place the shell carries colour besides the difficulty colours: it is the
+brand, drawn by the maintainer, and it reads on both themes as drawn. It
+also marks the top bar beside the wordmark and is the favicon and app
+icon.
 
 ## Worked example: browse in the new system
 
@@ -562,3 +575,5 @@ Search on YouTube, Sheet data, the list and grid toggle labels.
 | Upload from the player | Navigate to the one upload page prefilled | A sheet over the player |
 | Token structure | Three layers, state tables | Two layers; plus a style page now |
 | Muted text | Raised to pass AA | Kept as is |
+| Display face (2026-11-18) | Space Grotesk for brand, headings, titles; Inter body | One rounded face everywhere; a serif display face |
+| Brand colour (2026-11-18) | The maintainer's coloured logo, the shell stays monochrome | A monochrome mark |

@@ -89,6 +89,9 @@ defineEmits<{ bookmark: [] }>();
   right: var(--s-2);
   bottom: var(--s-2);
 }
+.mv-card-title {
+  font-family: var(--f-display);
+}
 .mv-card-title,
 .mv-card-artist,
 .mv-card-designer-name {

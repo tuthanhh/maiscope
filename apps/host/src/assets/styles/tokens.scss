@@ -32,6 +32,11 @@
     "Noto Sans JP", "Noto Sans CJK JP", "Apple SD Gothic Neo", "Malgun Gothic",
     "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  // The display face: brand, headings, titles, card titles. Latin only; a
+  // Japanese title falls through to the same CJK system faces as the sans.
+  --f-display: "Space Grotesk", "Hiragino Sans", "Hiragino Kaku Gothic ProN",
+    "Yu Gothic", "Noto Sans JP", "Noto Sans CJK JP", "Apple SD Gothic Neo",
+    "Malgun Gothic", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
 
   --s-1: 4px;
   --s-2: 8px;
@@ -120,16 +125,16 @@
   font: 600 14px/21px var(--f-sans);
 }
 .t-heading {
-  font: 600 18px/24px var(--f-sans);
+  font: 600 18px/24px var(--f-display);
   letter-spacing: -0.01em;
 }
 .t-title {
-  font: 600 24px/28px var(--f-sans);
+  font: 600 24px/28px var(--f-display);
   letter-spacing: -0.015em;
 }
 .t-display {
-  font: 700 48px/48px var(--f-sans);
-  letter-spacing: -0.02em;
+  font: 700 72px/72px var(--f-display);
+  letter-spacing: -0.03em;
 }
 @media (max-width: #{bp.$bp-md - 1px}) {
   // Only the sizes drop; line heights stay as the type scale sets them.
@@ -137,7 +142,8 @@
     font-size: 20px;
   }
   .t-display {
-    font-size: 36px;
+    font-size: 52px;
+    line-height: 56px;
   }
 }
 .t-num {
