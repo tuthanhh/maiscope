@@ -141,7 +141,8 @@ pub fn register_systems(app: &mut App) {
         )
         // Runs in every state: the first chart loads during `Loading`, and
         // later re-loads (switching songs) arrive while already `Playing`.
-        .add_systems(Update, visual::apply_commands)
+        // Before the clock, so a seek, load or unload shows the same frame.
+        .add_systems(Update, visual::apply_commands.before(tick_clock))
         .add_systems(Update, check_if_ready.run_if(in_state(AppState::Loading)))
         .add_systems(OnEnter(AppState::Playing), audio::start_bgm)
         // tick_clock must advance the clock before next_event / metronome /
@@ -160,7 +161,13 @@ pub fn register_systems(app: &mut App) {
         )
         .add_systems(
             Update,
-            (visual::update_movement, audio::handle_guide_sounds)
+            // After next_event: notes it despawns (a seek, a load) are gone
+            // before update_movement could queue work on them — an insert on
+            // a despawned entity is an error Bevy reports by panicking.
+            (
+                visual::update_movement.after(visual::next_event),
+                audio::handle_guide_sounds,
+            )
                 .run_if(in_state(AppState::Playing)),
         );
 }
