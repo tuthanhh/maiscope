@@ -8,12 +8,13 @@ import useSelectedSheets from "~/composables/useSelectedSheets";
 import useSongModal from "~/composables/useSongModal";
 import { GAME } from "~/app/game";
 import { ApiError, fetchJson } from "~/utils/api";
-import { attachSheet, coverUrl } from "~/utils";
+import { attachSong, formatNoteCounts, formatReleaseDate } from "~/utils";
 import type { Sheet, Song } from "~/types";
 import MvButton from "~/components/ui/MvButton.vue";
 import MvChip from "~/components/ui/MvChip.vue";
 import MvCover from "~/components/ui/MvCover.vue";
 import MvError from "~/components/ui/MvError.vue";
+import MvLevelLine from "~/components/ui/MvLevelLine.vue";
 import MvModal from "~/components/ui/MvModal.vue";
 
 // design-direction "Song modal": information first; the difficulty chips in
@@ -48,9 +49,7 @@ async function fetchSong(id: string): Promise<void> {
             `${GAME.apiBaseUrl}/songs/${encodeURIComponent(id)}`,
         );
         if (mine !== request) return;
-        song.imageUrl = coverUrl(song.imageName, GAME.dataSourceUrl);
-        for (const sheet of song.sheets) attachSheet(sheet, song);
-        fetched.value = song;
+        fetched.value = attachSong(song, GAME.dataSourceUrl);
     } catch (err) {
         if (mine !== request) return;
         // 400 is an id that is not a UUID: no song has that link either.
@@ -113,21 +112,12 @@ function selectType(type: string): void {
     if (match) modal.select(match);
 }
 
-function colorOf(sheet: Sheet): string | null {
-    const color = getDifficultyColor(sheet.difficulty);
-    return color === "unset" ? null : color;
-}
 
 // ── the selected sheet's figures ──
-const releaseDate = computed(() => song.value?.releaseDate?.replaceAll("-", "/"));
-const NOTE_KEYS = ["total", "tap", "hold", "slide", "touch", "break"];
-const noteCounts = computed(() => {
-    const counts = selected.value?.noteCounts;
-    if (!counts) return "";
-    return NOTE_KEYS.filter((key) => counts[key] != null)
-        .map((key) => `${key === "total" ? t("term.totalNotes") : key.toUpperCase()} ${counts[key]}`)
-        .join(" · ");
-});
+const releaseDate = computed(() => formatReleaseDate(song.value?.releaseDate));
+const noteCounts = computed(() =>
+    formatNoteCounts(selected.value?.noteCounts, t("term.totalNotes") as string),
+);
 
 const isBookmarked = computed(() => !!selected.value && hasBookmark(selected.value.key));
 function toggleBookmark(): void {
@@ -212,7 +202,7 @@ function retry(): void {
                     <MvChip
                         v-for="sheet in sameType"
                         :key="sheet.key"
-                        :diff="colorOf(sheet)"
+                        :diff="getDifficultyColor(sheet.difficulty)"
                         :active="sheet.key === selected.key"
                         @click="modal.select(sheet)"
                     >
@@ -220,16 +210,13 @@ function retry(): void {
                     </MvChip>
                 </div>
 
-                <p class="sm-level" :style="{ '--diff': colorOf(selected) ?? 'var(--fg)' }">
-                    <span class="t-label">{{ getDifficultyName(selected.difficulty) }}</span>
-                    <span class="t-heading t-num sm-level-value">{{ selected.level ?? "?" }}</span>
-                    <span
-                        v-if="selected.internalLevelValue != null"
-                        class="t-meta t-num t-muted"
-                    >
-                        ({{ selected.internalLevelValue.toFixed(1) }})
-                    </span>
-                </p>
+                <MvLevelLine
+                    class="sm-level"
+                    :name="getDifficultyName(selected.difficulty)"
+                    :level="selected.level"
+                    :internal-level-value="selected.internalLevelValue"
+                    :diff="getDifficultyColor(selected.difficulty)"
+                />
 
                 <dl class="sm-facts">
                     <dt class="t-label t-muted">{{ t("term.noteDesigner") }}</dt>
@@ -311,13 +298,7 @@ function retry(): void {
     margin-bottom: var(--s-3);
 }
 .sm-level {
-    display: flex;
-    align-items: baseline;
-    gap: var(--s-3);
     margin: var(--s-6) 0 var(--s-4);
-}
-.sm-level-value {
-    color: var(--diff);
 }
 .sm-facts {
     display: grid;

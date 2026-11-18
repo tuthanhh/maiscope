@@ -8,7 +8,8 @@
 // shrinks it by orders of magnitude.
 
 import { GAME } from "~/app/game";
-import { attachSheet, coverUrl } from "~/utils/data";
+import { attachSong } from "~/utils/data";
+import { fetchJson } from "~/utils/api";
 import type { Sheet, Song } from "~/types";
 
 type EngineModule = typeof import("~/wasm/engine.js");
@@ -135,21 +136,10 @@ export async function fetchSheetInfo(
   type: string,
   difficulty: string,
 ): Promise<Sheet> {
-  const res = await fetch(sheetUrl(songId, type, difficulty));
-  if (!res.ok) {
-    throw new Error(`sheet fetch failed (${res.status}): ${await res.text()}`);
-  }
-  const { song, ...sheet } = (await res.json()) as Omit<Sheet, "song" | "key"> & {
+  const { song, ...sheet } = await fetchJson<Omit<Sheet, "song" | "key"> & {
     song: Omit<Song, "sheets">;
-  };
-  const owner: Song = {
-    ...song,
-    sheets: [],
-    imageUrl: coverUrl(song.imageName, GAME.dataSourceUrl),
-  };
-  const attached = attachSheet(sheet, owner);
-  owner.sheets.push(attached);
-  return attached;
+  }>(sheetUrl(songId, type, difficulty));
+  return attachSong({ ...song, sheets: [sheet as Sheet] }, GAME.dataSourceUrl).sheets[0];
 }
 
 // ── Transport ────────────────────────────────────────────────────────────────

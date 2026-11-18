@@ -37,8 +37,9 @@ export default function useGameData() {
   function getDifficultyName(difficulty: string | undefined) {
     return getDifficultyData(difficulty)?.name ?? String(difficulty).toUpperCase();
   }
-  function getDifficultyColor(difficulty: string | undefined) {
-    return getDifficultyData(difficulty)?.color ?? 'unset';
+  /** The difficulty's colour from the reference table, or null for none. */
+  function getDifficultyColor(difficulty: string | undefined): string | null {
+    return getDifficultyData(difficulty)?.color ?? null;
   }
 
   return {

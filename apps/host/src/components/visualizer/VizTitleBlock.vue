@@ -5,6 +5,8 @@ import useGameData from "~/composables/useGameData";
 import type { Sheet } from "~/types";
 import MvButton from "~/components/ui/MvButton.vue";
 import MvCover from "~/components/ui/MvCover.vue";
+import MvLevelLine from "~/components/ui/MvLevelLine.vue";
+import { formatNoteCounts, formatReleaseDate } from "~/utils/format";
 
 // design-direction "Chart page": the title block under the playback surface.
 // Title and level, the meta line, the actions as text buttons, the jacket
@@ -36,11 +38,6 @@ watch(
 );
 const { getTypeAbbr, getDifficultyName, getDifficultyColor, getVersionAbbr } = useGameData();
 
-function colorOf(sheet: Sheet): string {
-  const color = getDifficultyColor(sheet.difficulty);
-  return color === "unset" ? "var(--fg)" : color;
-}
-
 const meta = computed(() =>
   [
     props.sheet.song.artist,
@@ -48,19 +45,14 @@ const meta = computed(() =>
     props.sheet.song.bpm != null ? `${props.sheet.song.bpm} ${t("term.bpm")}` : null,
   ].filter(Boolean),
 );
-const NOTE_KEYS = ["total", "tap", "hold", "slide", "touch", "break"];
-const counts = computed(() => {
-  const c = props.sheet.noteCounts;
-  if (!c) return "";
-  return NOTE_KEYS.filter((k) => c[k] != null)
-    .map((k) => `${k === "total" ? t("term.totalNotes") : k.toUpperCase()} ${c[k]}`)
-    .join(" · ");
-});
+const counts = computed(() =>
+  formatNoteCounts(props.sheet.noteCounts, t("term.totalNotes") as string),
+);
 const facts = computed(() =>
   [
     getTypeAbbr(props.sheet.type),
     props.sheet.song.version ? getVersionAbbr(props.sheet.song.version) : null,
-    props.sheet.song.releaseDate?.replaceAll("-", "/"),
+    formatReleaseDate(props.sheet.song.releaseDate),
   ].filter(Boolean),
 );
 // Type in the name only when the song has more than one chart type.
@@ -77,13 +69,12 @@ function siblingName(sheet: Sheet): string {
   <section class="viz-title">
     <div class="viz-title-head">
       <h1 ref="heading" class="t-title viz-title-name" tabindex="-1">{{ sheet.song.title }}</h1>
-      <p class="viz-title-level" :style="{ '--diff': colorOf(sheet) }">
-        <span class="t-label">{{ siblingName(sheet) }}</span>
-        <span class="t-heading t-num viz-title-level-value">{{ sheet.level ?? "?" }}</span>
-        <span v-if="sheet.internalLevelValue != null" class="t-meta t-num t-muted">
-          ({{ sheet.internalLevelValue.toFixed(1) }})
-        </span>
-      </p>
+      <MvLevelLine
+        :name="siblingName(sheet)"
+        :level="sheet.level"
+        :internal-level-value="sheet.internalLevelValue"
+        :diff="getDifficultyColor(sheet.difficulty)"
+      />
     </div>
     <p class="t-body t-muted viz-title-meta">{{ meta.join(" · ") }}</p>
 
@@ -150,15 +141,6 @@ function siblingName(sheet: Sheet): string {
   margin: 0;
   outline: none;
   overflow-wrap: anywhere;
-}
-.viz-title-level {
-  display: flex;
-  align-items: baseline;
-  gap: var(--s-2);
-  margin: 0;
-}
-.viz-title-level-value {
-  color: var(--diff);
 }
 .viz-title-meta {
   margin: var(--s-1) 0 var(--s-4);

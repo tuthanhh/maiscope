@@ -35,6 +35,16 @@ export function attachSheet(sheet: Omit<Sheet, 'song' | 'key'>, song: Song): She
   return attached;
 }
 
+/**
+ * A song as `/api/songs/{id}` or a sheet's `song` sends it, made a client
+ * song in place: its cover URL, and each sheet pointing back at it.
+ */
+export function attachSong(song: Song, dataSourceUrl: string): Song {
+  song.imageUrl = coverUrl(song.imageName, dataSourceUrl);
+  for (const sheet of song.sheets) attachSheet(sheet, song);
+  return song;
+}
+
 // Build the client graph from a `/api/catalog` body, in place: each song gets
 // its cover URL, each sheet an explicit `song` and its `key`, and the flat
 // `sheets` list is assembled newest song first. Then freeze it: the graph is

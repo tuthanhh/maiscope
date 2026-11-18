@@ -37,7 +37,7 @@ defineOptions({ name: "BrowseView" });
 const dataStore = useDataStore();
 const i18n = useI18n();
 const { t } = i18n;
-const { getTypeAbbr, getDifficultyName } = useGameData();
+const { getTypeAbbr, getDifficultyName, getDifficultyColor } = useGameData();
 const songModal = useSongModal();
 const { selectedSheets, toggleSheetSelection } = useSelectedSheets();
 
@@ -97,9 +97,6 @@ const difficultyChips = computed(() => {
     );
     return data.value.difficulties.filter((d) => used.has(d.code));
 });
-const difficultyColors = computed(
-    () => new Map(data.value.difficulties.map((d) => [d.code, d.color ?? null])),
-);
 
 function toggleDifficulty(code: string): void {
     const list = form.difficulties;
@@ -302,7 +299,7 @@ function retry(): void {
                         :title="s.song.title"
                         :artist="s.song.artist"
                         :level="s.level"
-                        :diff="difficultyColors.get(s.difficulty) ?? null"
+                        :diff="getDifficultyColor(s.difficulty)"
                         :bookmarked="selectedSet.has(s.key)"
                         :bookmark-label="t('page.songs.bookmark') as string"
                         :label="`${s.song.title} — ${getTypeAbbr(s.type)} ${getDifficultyName(s.difficulty)} ${s.level ?? ''}`"
