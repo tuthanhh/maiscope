@@ -208,9 +208,12 @@ impl ChartPlayback {
         !self.timed_events.is_empty()
     }
 
-    /// Whether playback has advanced past the last event.
-    pub fn is_finished(&self) -> bool {
-        self.next_spawn_index >= self.timed_events.len()
+    /// Whether every note has spawned: what is left, if anything, is rests,
+    /// which would otherwise keep the chart running past its length.
+    pub fn all_notes_spawned(&self) -> bool {
+        !self.timed_events[self.next_spawn_index.min(self.timed_events.len())..]
+            .iter()
+            .any(|e| matches!(e.event, ChartEvent::NoteGroup(_)))
     }
 
     /// Read-only access to the full event list, e.g. for the metronome's BPM

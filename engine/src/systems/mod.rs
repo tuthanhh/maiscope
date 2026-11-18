@@ -68,6 +68,11 @@ fn tick_clock(
     playback.tick(time.delta_secs_f64());
 }
 
+/// The page's timeline reads where the chart is (`wasm_bridge::playback_position`).
+fn publish_playback_state(playback: Res<ChartPlayback>) {
+    crate::wasm_bridge::publish_playback(playback.elapsed_time(), playback.is_playing());
+}
+
 /// Load one chart (`EngineCommand::Load`, drained by `apply_commands`).
 pub(crate) fn ingest_song(
     song: crate::wasm_bridge::SongPayload,
@@ -94,6 +99,7 @@ pub(crate) fn ingest_song(
         commands.entity(entity).despawn();
     }
     playback.load_chart(events);
+    crate::wasm_bridge::bump_chart(timeline::build_timeline(playback.timed_events()).to_json());
     // The guide-sound cursor indexes the old event list; start it over.
     guide_scheduler.reset();
 
@@ -147,6 +153,7 @@ pub fn register_systems(app: &mut App) {
                 visual::next_event,
                 audio::tick_metronome,
                 audio::schedule_guide_sounds,
+                publish_playback_state,
             )
                 .chain()
                 .run_if(in_state(AppState::Playing)),

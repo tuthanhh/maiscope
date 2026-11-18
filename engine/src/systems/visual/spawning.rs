@@ -100,7 +100,7 @@ pub fn next_event(
     // played out. Stopping when the last note *spawns* froze it mid-approach,
     // since a paused chart freezes every note. Notes spawned this frame are
     // not in `on_screen` yet (deferred commands), hence `spawned`.
-    if chart.is_finished() && !spawned && on_screen.is_empty() {
+    if chart.all_notes_spawned() && !spawned && on_screen.is_empty() {
         chart.pause();
     }
 }
@@ -197,6 +197,7 @@ pub fn apply_commands(
                     commands.entity(entity).despawn();
                 }
                 chart.unload();
+                crate::wasm_bridge::bump_chart(String::new());
                 guide_scheduler.reset();
                 bgm_channel.stop();
                 commands.remove_resource::<crate::systems::audio::BgmInstance>();
@@ -839,5 +840,16 @@ mod tests {
         app.world_mut().resource_mut::<ChartPlayback>().seek(0.2);
         app.update();
         assert_eq!(hits(&mut app), vec![0.0, 0.5]);
+    }
+
+    /// Review Focus 5 (piece 2): rests after the last note do not keep the
+    /// chart running past its length, where the timeline ends.
+    #[test]
+    fn the_chart_stops_at_its_length_despite_trailing_rests() {
+        let mut app = app_with_chart("(120){4}1,,,,,,,,E");
+        app.world_mut().resource_mut::<ChartPlayback>().seek(0.3);
+        app.update();
+        app.update();
+        assert!(!app.world().resource::<ChartPlayback>().is_playing());
     }
 }

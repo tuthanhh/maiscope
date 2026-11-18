@@ -3,9 +3,6 @@
 //! same timed events the engine plays, so the graph cannot disagree with
 //! what is heard.
 
-// Until the readout publishes it (visualizer-majdata 09).
-#![allow(dead_code)]
-
 use super::component::{ChartEvent, NoteKind, TimedEvent};
 use super::visual::schedule::note_end;
 

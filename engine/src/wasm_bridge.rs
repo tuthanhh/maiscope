@@ -163,6 +163,65 @@ pub fn take_commands() -> Vec<EngineCommand> {
 
 static FRAME_STATS: Lazy<Mutex<String>> = Lazy::new(|| Mutex::new(String::new()));
 
+// ── Playback readout (visualizer-majdata 09) ────────────────────────────────
+//
+// Published every frame, read by the page's timeline at its own frame rate.
+// The chart id rises with every load and unload, so the page knows when to
+// read the timeline again.
+
+/// `(position in chart seconds, playing, chart id)`.
+static PLAYBACK: Lazy<Mutex<(f64, bool, u32)>> = Lazy::new(|| Mutex::new((0.0, false, 0)));
+/// The loaded chart's `Timeline::to_json`, `""` when none.
+static TIMELINE: Lazy<Mutex<String>> = Lazy::new(|| Mutex::new(String::new()));
+
+pub fn publish_playback(position: f64, playing: bool) {
+    let mut snapshot = PLAYBACK.lock().unwrap();
+    snapshot.0 = position;
+    snapshot.1 = playing;
+}
+
+/// A chart was loaded (its timeline) or unloaded (`""`).
+pub fn bump_chart(timeline_json: String) {
+    let mut snapshot = PLAYBACK.lock().unwrap();
+    snapshot.2 = snapshot.2.wrapping_add(1);
+    *TIMELINE.lock().unwrap() = timeline_json;
+}
+
+pub fn playback_snapshot() -> (f64, bool, u32) {
+    *PLAYBACK.lock().unwrap()
+}
+
+pub fn timeline_json() -> String {
+    TIMELINE.lock().unwrap().clone()
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn playback_position() -> f64 {
+    playback_snapshot().0
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn playback_playing() -> bool {
+    playback_snapshot().1
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn chart_id() -> u32 {
+    playback_snapshot().2
+}
+
+/// The loaded chart's timeline as JSON: `length` (seconds) and `measures`,
+/// each `start` (seconds) and its `tap`/`slide`/`touch`/`hold` counts; `""`
+/// when no chart is loaded.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn timeline() -> String {
+    timeline_json()
+}
+
 pub fn publish_frame_stats(json: String) {
     *FRAME_STATS.lock().unwrap() = json;
 }
@@ -204,5 +263,15 @@ mod tests {
                 EngineCommand::Load(_),
             ]
         ));
+    }
+
+    #[test]
+    fn a_new_chart_bumps_the_id_and_carries_its_timeline() {
+        let (_, _, before) = playback_snapshot();
+        bump_chart(r#"{"length":1.000,"measures":[]}"#.into());
+        bump_chart(r#"{"length":2.000,"measures":[]}"#.into());
+        publish_playback(1.5, false);
+        assert_eq!(playback_snapshot(), (1.5, false, before + 2));
+        assert_eq!(timeline_json(), r#"{"length":2.000,"measures":[]}"#);
     }
 }
