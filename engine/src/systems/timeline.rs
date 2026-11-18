@@ -3,7 +3,7 @@
 //! same timed events the engine plays, so the graph cannot disagree with
 //! what is heard.
 
-// Until Seek and the readout use it (visualizer-majdata 08, 09).
+// Until the readout publishes it (visualizer-majdata 09).
 #![allow(dead_code)]
 
 use super::component::{ChartEvent, NoteKind, TimedEvent};
@@ -87,8 +87,9 @@ impl Timeline {
 /// A note at a measure line belongs to the measure it starts.
 const ON_THE_LINE: f64 = 1e-9;
 
-pub fn build_timeline(events: &[TimedEvent]) -> Timeline {
-    let length = events
+/// When the chart's last note finishes (chart seconds); 0 for no notes.
+pub fn chart_length(events: &[TimedEvent]) -> f64 {
+    events
         .iter()
         .filter_map(|e| match &e.event {
             ChartEvent::NoteGroup(notes) => Some(
@@ -99,8 +100,11 @@ pub fn build_timeline(events: &[TimedEvent]) -> Timeline {
             ),
             _ => None,
         })
-        .fold(0.0, f64::max);
+        .fold(0.0, f64::max)
+}
 
+pub fn build_timeline(events: &[TimedEvent]) -> Timeline {
+    let length = chart_length(events);
     let mut measures = Vec::new();
     loop {
         let start = time_at_beat(events, 4.0 * measures.len() as f64);

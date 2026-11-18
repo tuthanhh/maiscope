@@ -97,7 +97,6 @@ pub fn phase_at(kind: &NoteKind, hit: f64, bpm: f32, note_speed: f32, t: f64) ->
 }
 
 /// The chart time a note hit at `hit` finishes its last phase.
-#[allow(dead_code)] // until the timeline is published (visualizer-majdata 09)
 pub fn note_end(kind: &NoteKind, hit: f64, bpm: f32) -> f64 {
     hit + after_hit(kind, bpm)
         .iter()

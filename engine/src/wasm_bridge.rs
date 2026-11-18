@@ -45,6 +45,8 @@ pub enum EngineCommand {
     Pause,
     Resume,
     Restart,
+    /// Jump to a chart time (seconds), playing or paused (visualizer-majdata 08).
+    Seek(f64),
     /// Clear the chart, every note on screen and the music
     /// (visualizer-majdata 02): the Play page sends it when it is left.
     Unload,
@@ -83,6 +85,12 @@ pub fn resume() {
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn restart() {
     push_command(EngineCommand::Restart);
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn seek(secs: f64) {
+    push_command(EngineCommand::Seek(secs));
 }
 
 #[cfg(target_arch = "wasm32")]

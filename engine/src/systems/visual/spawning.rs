@@ -1,3 +1,4 @@
+use super::schedule::phase_at;
 use super::{
     NOTE_RADIUS,
     component::{
@@ -34,12 +35,43 @@ pub fn next_event(
     mut chart: ResMut<ChartPlayback>,
     note_assets: Res<NoteAssets>,
     layout: Res<ButtonLayout>,
-    on_screen: Query<(), With<NoteTiming>>,
+    on_screen: Query<Entity, With<NoteTiming>>,
 ) {
+    let mut spawned = false;
+
+    // A seek (visualizer-majdata 08): replace whatever is on screen with the
+    // notes live at the new time, playing or paused, so a paused seek shows
+    // the chart there. Spawning then carries on after them (`seek`).
+    if let Some(t) = chart.take_respawn() {
+        for entity in &on_screen {
+            commands.entity(entity).despawn();
+        }
+        let window = t + chart.approach_time();
+        let note_speed = chart.note_speed();
+        for event in chart.timed_events().iter().take_while(|e| e.time <= window) {
+            let ChartEvent::NoteGroup(notes) = &event.event else {
+                continue;
+            };
+            for note in notes {
+                if phase_at(&note.kind, event.time, event.bpm, note_speed, t).is_some() {
+                    spawned = true;
+                    spawn_note(
+                        &mut commands,
+                        note,
+                        is_paired(note, notes),
+                        event.bpm,
+                        event.time,
+                        &note_assets,
+                        &layout,
+                    );
+                }
+            }
+        }
+    }
+
     if !chart.is_playing() {
         return;
     }
-    let mut spawned = false;
 
     // `chart.elapsed_time` is maintained by `tick_clock`: slaved to the BGM's
     // playback position when a song is present (drift-free), or frame-driven when
@@ -51,20 +83,10 @@ pub fn next_event(
         if let ChartEvent::NoteGroup(notes) = event {
             spawned = true;
             for note in &notes {
-                // EACH-ness is per sub-comma offset, not per token. Notes split
-                // by a pseudo-EACH backtick are 1ms apart, so the notation is
-                // explicit that they are *not* an EACH and must not render as
-                // a pair. Groups are at most a handful of notes, so the scan is
-                // cheaper than building a map.
-                let is_paired = notes
-                    .iter()
-                    .filter(|other| other.offset_ms == note.offset_ms)
-                    .count()
-                    >= 2;
                 spawn_note(
                     &mut commands,
                     note,
-                    is_paired,
+                    is_paired(note, &notes),
                     bpm,
                     hit,
                     &note_assets,
@@ -81,6 +103,18 @@ pub fn next_event(
     if chart.is_finished() && !spawned && on_screen.is_empty() {
         chart.pause();
     }
+}
+
+/// EACH-ness is per sub-comma offset, not per token. Notes split by a
+/// pseudo-EACH backtick are 1ms apart, so the notation is explicit that they
+/// are *not* an EACH and must not render as a pair. Groups are at most a
+/// handful of notes, so the scan is cheaper than building a map.
+fn is_paired(note: &Note, group: &[Note]) -> bool {
+    group
+        .iter()
+        .filter(|other| other.offset_ms == note.offset_ms)
+        .count()
+        >= 2
 }
 
 // ── Transport commands ──────────────────────────────────────────────────────
@@ -101,6 +135,7 @@ pub fn apply_commands(
     mut window: Query<&mut Window, With<bevy::window::PrimaryWindow>>,
     mut audio_lead: ResMut<crate::systems::audio::AudioLead>,
     mut guide_scheduler: ResMut<crate::systems::audio::GuideScheduler>,
+    mut metronome: ResMut<crate::systems::audio::Metronome>,
 ) {
     for cmd in crate::wasm_bridge::take_commands() {
         match cmd {
@@ -130,6 +165,23 @@ pub fn apply_commands(
                 chart.set_chart_speed(rate);
             }
             crate::wasm_bridge::EngineCommand::SetNoteSpeed(speed) => chart.set_note_speed(speed),
+            crate::wasm_bridge::EngineCommand::Seek(secs) => {
+                // The clock jumps; `next_event` swaps the notes on screen. The
+                // music follows (its position is chart time), and the guide
+                // sounds and clicks restart there without sounding the gap.
+                chart.seek(secs);
+                let t = chart.elapsed_time();
+                if let Some(instance) = bgm_instance
+                    .as_ref()
+                    .and_then(|h| audio_instances.get_mut(&h.0))
+                {
+                    instance.seek_to(t);
+                }
+                let speed = chart.chart_speed();
+                let horizon = t + audio_lead.chart_secs(speed);
+                guide_scheduler.seek(chart.timed_events(), horizon);
+                metronome.seek(chart.timed_events(), horizon, speed);
+            }
             crate::wasm_bridge::EngineCommand::Unload => {
                 // Leaving the Play page: nothing of this chart may outlive it.
                 for entity in &notes {
@@ -741,5 +793,42 @@ mod tests {
         }
         app.update();
         assert!(!app.world().resource::<ChartPlayback>().is_playing());
+    }
+
+    fn hits(app: &mut App) -> Vec<f64> {
+        let mut hits: Vec<f64> = app
+            .world_mut()
+            .query::<&HitTime>()
+            .iter(app.world())
+            .map(|h| h.0)
+            .collect();
+        hits.sort_by(f64::total_cmp);
+        hits
+    }
+
+    /// Review Focus 1, 2 (piece 2): a seek while paused shows the chart at
+    /// that time — here a hold half-way through, and not the tap before it.
+    #[test]
+    fn a_seek_spawns_what_is_on_screen_at_that_time() {
+        let mut app = app_with_chart("(120){4}1h[1:1],2,E");
+        {
+            let mut chart = app.world_mut().resource_mut::<ChartPlayback>();
+            chart.pause();
+            chart.seek(1.0);
+        }
+        app.update();
+        assert_eq!(hits(&mut app), vec![0.0]);
+    }
+
+    /// Review Focus 3 (piece 2).
+    #[test]
+    fn seeking_twice_leaves_only_the_second_frame() {
+        let mut app = app_with_chart("(120){4}1h[1:1],2,E");
+        app.world_mut().resource_mut::<ChartPlayback>().pause();
+        app.world_mut().resource_mut::<ChartPlayback>().seek(1.0);
+        app.update();
+        app.world_mut().resource_mut::<ChartPlayback>().seek(0.2);
+        app.update();
+        assert_eq!(hits(&mut app), vec![0.0, 0.5]);
     }
 }

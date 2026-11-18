@@ -19,7 +19,17 @@ pub struct ChartPlayback {
     is_playing: bool,
     /// Elapsed playback time in seconds (advances each frame).
     elapsed_time: f64,
+    /// When the last note finishes (chart seconds): where a seek stops.
+    length: f64,
+    /// A seek's target, until `next_event` has put its notes on screen.
+    respawn: Option<f64>,
+    /// A seek's target, until the music reports a position near it.
+    audio_target: Option<f64>,
 }
+
+/// How close the music must come to a seek's target before it drives the
+/// clock again (chart seconds).
+const AUDIO_CAUGHT_UP: f64 = 0.1;
 
 impl Default for ChartPlayback {
     fn default() -> Self {
@@ -30,6 +40,9 @@ impl Default for ChartPlayback {
             chart_speed: 1.0,
             is_playing: true,
             elapsed_time: 0.0,
+            length: 0.0,
+            respawn: None,
+            audio_target: None,
         }
     }
 }
@@ -79,6 +92,7 @@ impl ChartPlayback {
             }
         }
 
+        self.length = crate::systems::timeline::chart_length(&timed);
         self.timed_events = timed;
         self.next_spawn_index = 0;
     }
@@ -112,6 +126,26 @@ impl ChartPlayback {
         self.next_spawn_index = 0;
         self.elapsed_time = 0.0;
         self.is_playing = false;
+        self.length = 0.0;
+        self.respawn = None;
+        self.audio_target = None;
+    }
+
+    /// Jump the clock to `t` (clamped to the chart), playing or paused. Spawning
+    /// resumes after the notes visible at `t`, which `next_event` puts on
+    /// screen (`take_respawn`); the notes and the music are the systems'.
+    pub fn seek(&mut self, t: f64) {
+        let t = t.clamp(0.0, self.length);
+        self.elapsed_time = t;
+        let window = t + self.approach_time();
+        self.next_spawn_index = self.timed_events.partition_point(|e| e.time <= window);
+        self.respawn = Some(t);
+        self.audio_target = Some(t);
+    }
+
+    /// The pending seek target, once: the notes visible there are to spawn.
+    pub fn take_respawn(&mut self) -> Option<f64> {
+        self.respawn.take()
     }
 
     pub fn pause(&mut self) {
@@ -133,7 +167,15 @@ impl ChartPlayback {
     /// Used when a BGM is present — the BGM's playback position already
     /// equals chart-time (it plays at `chart_speed`), so this is a direct
     /// assignment, not a scaled increment.
+    /// After a seek, positions far from its target are the music still
+    /// reporting where it was, and are ignored until it catches up.
     pub fn sync_to_audio_position(&mut self, position: f64) {
+        if let Some(target) = self.audio_target {
+            if (position - target).abs() > AUDIO_CAUGHT_UP {
+                return;
+            }
+            self.audio_target = None;
+        }
         self.elapsed_time = position;
     }
 
@@ -222,5 +264,53 @@ mod tests {
         assert!(!chart.is_playing());
         assert_eq!(chart.chart_speed(), 1.5);
         assert_eq!(chart.note_speed(), 8.0);
+    }
+
+    fn loaded(chart: &str) -> ChartPlayback {
+        let mut playback = ChartPlayback::default();
+        playback.load_chart(simai::parse_chart(chart).unwrap());
+        playback
+    }
+
+    #[test]
+    fn seek_resumes_spawning_after_the_visible_window() {
+        let mut chart = loaded("(120){4}1,1,1,1,1,1,1,1,E");
+        chart.seek(2.0);
+        assert_eq!(chart.elapsed_time(), 2.0);
+        while let Some(event) = chart.advance() {
+            assert!(event.time > 2.0 + chart.approach_time(), "{}", event.time);
+        }
+    }
+
+    #[test]
+    fn seek_stays_inside_the_chart() {
+        let mut chart = loaded("(120){4}1,1,E");
+        chart.seek(-1.0);
+        assert_eq!(chart.elapsed_time(), 0.0);
+        chart.seek(100.0);
+        assert!((chart.elapsed_time() - 0.75).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_seek_asks_for_one_respawn() {
+        let mut chart = loaded("(120){4}1,1,E");
+        chart.seek(0.5);
+        assert_eq!(chart.take_respawn(), Some(0.5));
+        assert_eq!(chart.take_respawn(), None);
+    }
+
+    /// The music takes a moment to reach a seek: until it reports a position
+    /// near the target, the clock keeps the target (or respawned notes would
+    /// be placed, and despawned, at the old time).
+    #[test]
+    fn a_seek_ignores_the_music_until_it_catches_up() {
+        let mut chart = loaded("(120){4}1,1,1,1,1,1,1,1,1,1,1,1,E");
+        chart.seek(5.0);
+        chart.sync_to_audio_position(1.0);
+        assert_eq!(chart.elapsed_time(), 5.0);
+        chart.sync_to_audio_position(5.01);
+        assert_eq!(chart.elapsed_time(), 5.01);
+        chart.sync_to_audio_position(5.2);
+        assert_eq!(chart.elapsed_time(), 5.2);
     }
 }

@@ -157,6 +157,31 @@ impl GuideScheduler {
         coalesce(due)
     }
 
+    /// Jump the cursor to `horizon` (chart seconds, lead included) without
+    /// sounding what lies between: the next `advance` sounds only hits after
+    /// it, and the releases of holds that started before it and end after.
+    pub fn seek(&mut self, events: &[TimedEvent], horizon: f64) {
+        self.next = events.partition_point(|e| e.time <= horizon);
+        self.releases = events[..self.next]
+            .iter()
+            .flat_map(|event| match &event.event {
+                ChartEvent::NoteGroup(notes) => notes
+                    .iter()
+                    .filter_map(|note| match &note.kind {
+                        NoteKind::TapHold { duration, .. }
+                        | NoteKind::TouchHold { duration, .. } => {
+                            Some(event.time + duration.hold_secs(event.bpm) as f64)
+                        }
+                        _ => None,
+                    })
+                    .collect(),
+                _ => Vec::new(),
+            })
+            .filter(|release| *release > horizon)
+            .collect();
+        self.last_horizon = horizon;
+    }
+
     /// Forget the chart: the next `advance` starts from the first event.
     pub fn reset(&mut self) {
         *self = Self::default();
@@ -191,6 +216,31 @@ fn is_audible(kind: &NoteKind) -> bool {
 /// so fast songs click once per bar and slow songs once per beat — always easy
 /// to catch by ear.
 const METRONOME_MIN_CLICK_SECS: f64 = 0.5;
+
+/// The metronome's click interval (chart seconds) at `bpm` and play speed: a
+/// quarter note, doubled until the *wall* gap clears the comfortable minimum.
+fn click_interval_secs(bpm: f32, chart_speed: f32) -> f64 {
+    let chart_speed = chart_speed.max(0.01) as f64;
+    let mut interval = 60.0 / bpm.max(1.0) as f64;
+    while interval / chart_speed < METRONOME_MIN_CLICK_SECS {
+        interval *= 2.0;
+    }
+    interval
+}
+
+impl Metronome {
+    /// Restart the click grid at `horizon` (chart seconds, lead included) on
+    /// the chart's beat, with no click for the jump itself.
+    pub fn seek(&mut self, events: &[TimedEvent], horizon: f64, chart_speed: f32) {
+        self.bpm_cursor = events
+            .partition_point(|e| e.time <= horizon)
+            .saturating_sub(1);
+        let bpm = events.get(self.bpm_cursor).map(|e| e.bpm).unwrap_or(120.0);
+        let beats_per_click = click_interval_secs(bpm, chart_speed) * bpm.max(1.0) as f64 / 60.0;
+        self.phase = crate::systems::timeline::beat_at(events, horizon) / beats_per_click;
+        self.last_elapsed = horizon;
+    }
+}
 
 /// Always-present guide-tap SFX, decoded at startup.
 #[derive(Resource)]
@@ -278,13 +328,7 @@ pub fn tick_metronome(
     }
     let bpm = events[metro.bpm_cursor].bpm.max(1.0);
 
-    // Click interval (chart-time seconds): a quarter note, doubled until the
-    // *wall* gap (chart-time / chart_speed) clears the comfortable minimum.
-    let chart_speed = chart.chart_speed().max(0.01) as f64;
-    let mut beat = 60.0 / bpm as f64;
-    while beat / chart_speed < METRONOME_MIN_CLICK_SECS {
-        beat *= 2.0;
-    }
+    let beat = click_interval_secs(bpm, chart.chart_speed());
 
     // Integrate the click *rate* (Δ chart-time / interval). A BPM/speed change
     // just changes the rate, so the phase stays tempo-correct with no reschedule.
@@ -686,5 +730,43 @@ mod tests {
         assert_eq!(hits(&s.advance(&events, 0.0)), 1);
         s.reset();
         assert_eq!(hits(&s.advance(&events, 0.0)), 1);
+    }
+
+    fn parsed(chart: &str) -> Vec<TimedEvent> {
+        let mut playback = crate::systems::chart_playback::ChartPlayback::default();
+        playback.load_chart(simai::parse_chart(chart).unwrap());
+        playback.timed_events().to_vec()
+    }
+
+    /// Review Focus 3 (piece 2).
+    #[test]
+    fn a_seek_skips_the_guide_sounds_it_jumps_over() {
+        let events = parsed("(120){4}1,1,1,1,1,1,1,1,E");
+        let mut guide = GuideScheduler::default();
+        guide.advance(&events, 0.1);
+        guide.seek(&events, 3.0);
+        assert!(guide.advance(&events, 3.05).is_empty());
+        let due = guide.advance(&events, 3.6);
+        assert_eq!(due.len(), 1);
+        assert!((due[0].time - 3.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_seek_keeps_a_hold_release_that_is_still_due() {
+        let events = parsed("(120){4}1h[1:1],E");
+        let mut guide = GuideScheduler::default();
+        guide.seek(&events, 1.0);
+        let due = guide.advance(&events, 2.1);
+        assert_eq!(due.len(), 1);
+        assert!((due[0].time - 2.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn the_metronome_lands_on_the_beat_after_a_seek() {
+        let events = parsed("(120){4}1,1,1,1,1,1,1,1,E");
+        let mut metro = Metronome::default();
+        metro.seek(&events, 1.25, 1.0);
+        assert!((metro.phase.fract() - 0.5).abs() < 1e-9);
+        assert_eq!(metro.last_elapsed, 1.25);
     }
 }
