@@ -4,8 +4,8 @@ import useI18n from "~/composables/useI18n";
 import {
     formatClock,
     measureAt,
+    keyTarget,
     measureStart,
-    stepMeasure,
     timeMarks,
     type Timeline,
 } from "~/utils/timeline";
@@ -71,8 +71,13 @@ const current = computed(() => (props.timeline ? measureAt(props.timeline, props
 
 let pending: number | null = null;
 let frame: number | null = null;
+// The last seek sent, for a short while: the engine reports reaching it a
+// frame or two later, and keys step from it until then.
+let inflight: { secs: number; at: number } | null = null;
+const INFLIGHT_MS = 250;
 function requestSeek(secs: number): void {
     pending = secs;
+    inflight = { secs, at: performance.now() };
     if (frame !== null) return;
     frame = requestAnimationFrame(() => {
         frame = null;
@@ -105,7 +110,10 @@ function down(e: PointerEvent, part: "graph" | "slider"): void {
     seekFrom(e, part === "slider");
 }
 function move(e: PointerEvent, part: "graph" | "slider"): void {
-    if (dragging.value === part) seekFrom(e, part === "slider");
+    if (dragging.value !== part) return;
+    // A release the element missed (capture lost) ends the drag.
+    if (e.buttons === 0) return up();
+    seekFrom(e, part === "slider");
 }
 function up(): void {
     dragging.value = null;
@@ -113,10 +121,11 @@ function up(): void {
 
 function key(e: KeyboardEvent): void {
     if (off.value || !props.timeline) return;
-    const to = stepMeasure(e.key, current.value, count.value);
+    const recent = inflight && performance.now() - inflight.at < INFLIGHT_MS ? inflight.secs : null;
+    const to = keyTarget(props.timeline, e.key, props.position, recent);
     if (to === null) return;
     e.preventDefault();
-    requestSeek(measureStart(props.timeline, to));
+    requestSeek(to);
 }
 </script>
 
@@ -134,6 +143,7 @@ function key(e: KeyboardEvent): void {
             @pointermove="move($event, 'graph')"
             @pointerup="up"
             @pointercancel="up"
+            @lostpointercapture="up"
         >
             <span v-for="m in marks" :key="m" class="mv-tl-mark" :style="{ left: pct(m) }">
                 {{ formatClock(m) }}
@@ -174,6 +184,7 @@ function key(e: KeyboardEvent): void {
             @pointermove="move($event, 'slider')"
             @pointerup="up"
             @pointercancel="up"
+            @lostpointercapture="up"
         >
             <div class="mv-tl-track">
                 <i class="mv-tl-fill" :style="{ width: off ? '0%' : pct(position) }" />

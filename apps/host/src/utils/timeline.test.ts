@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   formatClock,
+  keyTarget,
   measureAt,
   measureStart,
   stepMeasure,
@@ -66,5 +67,26 @@ describe("formatClock", () => {
     expect(formatClock(65.4)).toBe("1:05");
     expect(formatClock(0)).toBe("0:00");
     expect(formatClock(600)).toBe("10:00");
+  });
+});
+
+describe("keyTarget", () => {
+  const ten: Timeline = {
+    length: 20,
+    measures: Array.from({ length: 10 }, (_, i) => measure(i * 2)),
+  };
+
+  it("steps from where the chart is", () => {
+    expect(keyTarget(ten, "ArrowRight", 3.1, null)).toBe(4);
+  });
+
+  // Two presses inside one frame: the second steps from the first's target,
+  // not from the position the engine has not reached yet (final review M5).
+  it("steps from a seek still on its way", () => {
+    expect(keyTarget(ten, "ArrowRight", 3.1, 4)).toBe(6);
+  });
+
+  it("ignores other keys", () => {
+    expect(keyTarget(ten, "x", 3.1, null)).toBeNull();
   });
 });

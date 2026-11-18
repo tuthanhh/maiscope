@@ -57,6 +57,20 @@ export function stepMeasure(key: string, current: number, count: number): number
   }
 }
 
+// Where a timeline key seeks to (seconds), or null for a key it ignores. It
+// steps from `inflight` — a seek sent but not yet reached — when there is one,
+// so presses faster than the engine's round trip each move a measure.
+export function keyTarget(
+  tl: Timeline,
+  key: string,
+  position: number,
+  inflight: number | null,
+): number | null {
+  const from = measureAt(tl, inflight ?? position);
+  const to = stepMeasure(key, from, tl.measures.length);
+  return to === null ? null : measureStart(tl, to);
+}
+
 // `1:05`.
 export function formatClock(secs: number): string {
   const whole = Math.max(0, Math.floor(secs));
