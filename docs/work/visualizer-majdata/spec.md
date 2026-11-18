@@ -1,7 +1,8 @@
 # Spec — Visualizer: a MajdataPlay playfield
 
-**Status:** approved 2026-11-18 (after a builder check); piece 1 planned in
-[`plan-1-player-behaviour.md`](plan-1-player-behaviour.md)
+**Status:** approved 2026-11-18 (after a builder check); piece 1 done
+([`plan-1-player-behaviour.md`](plan-1-player-behaviour.md)); piece 2 planned in
+[`plan-2-timeline-seek.md`](plan-2-timeline-seek.md)
 **Milestone:** after v2.0 ships
 **Parent:** none (follows [`frontend-redesign`](../frontend-redesign/spec.md))
 
