@@ -28,6 +28,7 @@ auth:
   deleteBody: 'Tên và ảnh GitHub của bạn bị gỡ khỏi maiscope và bạn bị đăng xuất trên mọi thiết bị. Những gì bạn đã đăng vẫn giữ lại, ghi tên người dùng đã xóa. Đăng nhập lại sau này sẽ bắt đầu một tài khoản mới.'
   deleteConfirm: 'Xóa tài khoản'
   deleteFailed: 'Không xóa được tài khoản'
+  deleteFailedMessage: 'Chưa có gì thay đổi. Kiểm tra kết nối rồi thử lại.'
   cancel: 'Hủy'
   signingIn: 'Đang đăng nhập…'
   failed: 'Đăng nhập chưa hoàn tất'

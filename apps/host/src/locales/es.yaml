@@ -28,6 +28,7 @@ auth:
   deleteBody: 'Tu nombre y tu foto de GitHub se quitan de maiscope y se cierra tu sesión en todos los dispositivos. Lo que publicaste se queda, atribuido a un usuario eliminado. Si vuelves a iniciar sesión, empezarás una cuenta nueva.'
   deleteConfirm: 'Eliminar cuenta'
   deleteFailed: 'No se pudo eliminar la cuenta'
+  deleteFailedMessage: 'No se cambió nada. Revisa la conexión y vuelve a intentarlo.'
   cancel: 'Cancelar'
   signingIn: 'Iniciando sesión…'
   failed: 'El inicio de sesión no terminó'

@@ -51,6 +51,24 @@ function randomState(): string {
     .replace(/=+$/, "");
 }
 
+/** No auth request waits longer than this: a hung one would pin "Signing in…". */
+const TIMEOUT_MS = 15_000;
+
+function isTokens(value: unknown): value is Tokens {
+  const v = value as Partial<Tokens> | null;
+  return typeof v?.token === "string" && typeof v?.refreshToken === "string";
+}
+
+/**
+ * Where to land after sign-in: an in-app path (one leading `/`), never the
+ * callback route itself — landing there would replay a spent code.
+ */
+function safeReturn(path: string | null): string {
+  if (!path || !path.startsWith("/") || path.startsWith("//")) return "/";
+  if (path.startsWith("/auth/callback")) return "/";
+  return path;
+}
+
 export class SignInError extends Error {
   constructor(readonly kind: "state" | "refused" | "unreachable") {
     super(kind);
@@ -64,11 +82,13 @@ export const useSessionStore = defineStore("session", () => {
   const ready = ref(false);
   const signedIn = computed(() => user.value !== null);
 
-  function store(tokens: Tokens): void {
-    accessToken.value = tokens.token;
-    write(local, REFRESH_KEY, tokens.refreshToken);
-  }
+  // Every sign-in and every sign-out starts a new epoch. A response that
+  // left under an older one — a refresh in flight when you signed out, the
+  // boot-time `/me` racing a fresh sign-in — is discarded rather than
+  // written over the session that replaced it.
+  let epoch = 0;
   function forget(): void {
+    epoch++;
     accessToken.value = null;
     user.value = null;
     write(local, REFRESH_KEY, null);
@@ -76,25 +96,33 @@ export const useSessionStore = defineStore("session", () => {
 
   // One refresh at a time: refresh tokens rotate, so two concurrent refreshes
   // with one token would sign the second caller out (contract §4).
-  let refreshing: Promise<boolean> | null = null;
-  function refresh(): Promise<boolean> {
-    refreshing ??= (async () => {
+  // `refused` ends the session (401); `unavailable` (network, 429, 5xx,
+  // timeout, a malformed body) keeps it for the next try.
+  type Refresh = "ok" | "refused" | "unavailable";
+  let refreshing: Promise<Refresh> | null = null;
+  function refresh(): Promise<Refresh> {
+    refreshing ??= (async (): Promise<Refresh> => {
       const refreshToken = read(local, REFRESH_KEY);
-      if (!refreshToken) return false;
+      if (!refreshToken) return "refused";
+      const mine = epoch;
       try {
-        store(
-          await fetchJson<Tokens>(`${GAME.apiBaseUrl}/auth/refresh`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ refreshToken }),
-          }),
-        );
-        return true;
+        const tokens = await fetchJson<Tokens>(`${GAME.apiBaseUrl}/auth/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refreshToken }),
+          signal: AbortSignal.timeout(TIMEOUT_MS),
+        });
+        if (mine !== epoch) return "refused";
+        if (!isTokens(tokens)) return "unavailable";
+        accessToken.value = tokens.token;
+        write(local, REFRESH_KEY, tokens.refreshToken);
+        return "ok";
       } catch (err) {
-        // A refused token ends the session; a network failure keeps it for
-        // the next try.
-        if (err instanceof ApiError && err.status === 401) forget();
-        return false;
+        if (err instanceof ApiError && err.status === 401) {
+          if (mine === epoch) forget();
+          return "refused";
+        }
+        return "unavailable";
       }
     })().finally(() => {
       refreshing = null;
@@ -104,37 +132,48 @@ export const useSessionStore = defineStore("session", () => {
 
   /**
    * `fetch` with the access token, refreshed once and retried when the API
-   * says it has expired. Throws `ApiError` like `fetchJson`.
+   * says it has expired. Throws `ApiError` like `fetchJson`: a 401 only when
+   * the session is refused, a 503 when it could not be checked.
    */
   async function authFetch<T>(
     url: string,
     init: RequestInit = {},
     fetcher: (url: string, init: RequestInit) => Promise<T> = fetchJson<T>,
   ): Promise<T> {
-    if (!accessToken.value && !(await refresh())) {
-      throw new ApiError(401, "not signed in");
-    }
+    const ensure = async () => {
+      const result = await refresh();
+      if (result === "refused") throw new ApiError(401, "not signed in");
+      if (result === "unavailable") throw new ApiError(503, "session could not be checked");
+    };
+    if (!accessToken.value) await ensure();
     const send = () =>
       fetcher(url, {
+        signal: AbortSignal.timeout(TIMEOUT_MS),
         ...init,
         headers: { ...init.headers, Authorization: `Bearer ${accessToken.value}` },
       });
     try {
       return await send();
     } catch (err) {
-      if (!(err instanceof ApiError) || err.status !== 401 || !(await refresh())) throw err;
+      if (!(err instanceof ApiError) || err.status !== 401) throw err;
+      await ensure();
       return send();
     }
   }
 
-  /** On load: a stored session is checked against `/me`, which sees a deletion at once. */
+  /**
+   * On load: a stored session is checked against `/me`, which sees a deletion
+   * at once. Only a refused session is forgotten; offline, it stays stored.
+   */
   async function restore(): Promise<void> {
+    const mine = epoch;
     try {
       if (read(local, REFRESH_KEY)) {
-        user.value = await authFetch<SessionUser>(`${GAME.apiBaseUrl}/auth/me`);
+        const me = await authFetch<SessionUser>(`${GAME.apiBaseUrl}/auth/me`);
+        if (mine === epoch) user.value = me;
       }
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) forget();
+      if (err instanceof ApiError && err.status === 401 && mine === epoch) forget();
     } finally {
       ready.value = true;
     }
@@ -150,27 +189,41 @@ export const useSessionStore = defineStore("session", () => {
     );
   }
 
+  /** Clear a sign-in that will not complete (GitHub said cancel or error). */
+  function abandonSignIn(): void {
+    write(session, STATE_KEY, null);
+    write(session, RETURN_KEY, null);
+  }
+
   /**
    * GitHub came back with `code` and `state`. The state must be the one this
    * tab sent — the login-CSRF check (contract §4) — and is used once.
-   * Returns where to land.
+   * Returns where to land: an in-app path, never the callback itself.
    */
   async function completeSignIn(code: string, state: string): Promise<string> {
     const expected = read(session, STATE_KEY);
-    const returnTo = read(session, RETURN_KEY) ?? "/";
-    write(session, STATE_KEY, null);
-    write(session, RETURN_KEY, null);
+    const stored = read(session, RETURN_KEY);
+    abandonSignIn();
     if (!expected || expected !== state) throw new SignInError("state");
+    // This sign-in supersedes whatever the boot-time restore is doing.
+    epoch++;
+    const mine = epoch;
+    let body: SignInResponse;
     try {
-      const body = await fetchJson<SignInResponse>(
+      body = await fetchJson<SignInResponse>(
         `${GAME.apiBaseUrl}/auth/github/callback?code=${encodeURIComponent(code)}`,
+        { signal: AbortSignal.timeout(TIMEOUT_MS) },
       );
-      store(body);
-      user.value = body.user;
-      return returnTo;
     } catch (err) {
       throw new SignInError(err instanceof ApiError && err.status === 400 ? "refused" : "unreachable");
     }
+    if (!isTokens(body) || !body.user) throw new SignInError("unreachable");
+    if (mine === epoch) {
+      accessToken.value = body.token;
+      write(local, REFRESH_KEY, body.refreshToken);
+      user.value = body.user;
+    }
+    return safeReturn(stored);
   }
 
   /**
@@ -194,6 +247,7 @@ export const useSessionStore = defineStore("session", () => {
     signedIn,
     restore,
     signIn,
+    abandonSignIn,
     completeSignIn,
     signOut,
     deleteAccount,

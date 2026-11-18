@@ -28,6 +28,7 @@ auth:
   deleteBody: 'Nama dan foto GitHub-mu dihapus dari maiscope dan kamu keluar di semua perangkat. Yang sudah kamu terbitkan tetap ada, atas nama pengguna yang dihapus. Masuk lagi nanti akan memulai akun baru.'
   deleteConfirm: 'Hapus akun'
   deleteFailed: 'Akun tidak dapat dihapus'
+  deleteFailedMessage: 'Tidak ada yang berubah. Periksa koneksi lalu coba lagi.'
   cancel: 'Batal'
   signingIn: 'Sedang masuk…'
   failed: 'Proses masuk tidak selesai'

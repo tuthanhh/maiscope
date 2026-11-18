@@ -1,0 +1,5 @@
+# Cloudflare Pages: GitHub returns to the registered OAuth callback, a
+# real path; serve the app there (app/oauthCallback.ts moves it into the
+# hash). Pages already falls back to index.html without a 404.html, but the
+# sign-in should not depend on that default.
+/auth/callback /index.html 200

@@ -28,6 +28,7 @@ auth:
   deleteBody: '你的 GitHub 名稱和頭像將從 maiscope 移除，並在所有裝置上登出。你發布的內容會保留，署名為已刪除的使用者。之後再次登入將以新帳號開始。'
   deleteConfirm: '刪除帳號'
   deleteFailed: '無法刪除帳號'
+  deleteFailedMessage: '沒有任何變更。請檢查網路連線後重試。'
   cancel: '取消'
   signingIn: '正在登入…'
   failed: '登入未完成'

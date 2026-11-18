@@ -44,12 +44,22 @@ async function confirmDelete(): Promise<void> {
   deleteFailed.value = false;
   try {
     await session.deleteAccount();
-    confirming.value = false;
+    closeConfirm();
   } catch {
-    deleteFailed.value = true;
+    // A refused session has already signed out: nothing left to delete here.
+    if (!session.signedIn) closeConfirm();
+    else deleteFailed.value = true;
   } finally {
     deleting.value = false;
   }
+}
+// The trigger that opened the menu held focus; the panel closed under it, so
+// the dialog has nothing to return to. Give focus back to the trigger.
+function closeConfirm(): void {
+  confirming.value = false;
+  requestAnimationFrame(() =>
+    root.value?.querySelector<HTMLElement>(".mv-menu-trigger")?.focus(),
+  );
 }
 const root = ref<HTMLElement | null>(null);
 const open = ref(false);
@@ -106,7 +116,14 @@ function onFocusOut(event: FocusEvent): void {
       :aria-controls="panelId"
       @click="open = !open"
     >
-      <img v-if="session.user.avatarUrl" :src="session.user.avatarUrl" alt="" width="28" height="28" />
+      <img
+        v-if="session.user.avatarUrl"
+        :src="session.user.avatarUrl"
+        alt=""
+        width="28"
+        height="28"
+        referrerpolicy="no-referrer"
+      />
       <span v-else class="t-strong">{{ session.user.login.slice(0, 1).toUpperCase() }}</span>
     </button>
     <MvButton
@@ -145,7 +162,7 @@ function onFocusOut(event: FocusEvent): void {
       </template>
     </div>
 
-    <MvModal :open="confirming" :labelledby="confirmTitleId" @close="confirming = false">
+    <MvModal :open="confirming" :labelledby="confirmTitleId" @close="closeConfirm">
       <div class="mv-menu-confirm">
         <h2 :id="confirmTitleId" class="t-heading mv-menu-confirm-title">
           {{ t("auth.deleteTitle") }}
@@ -154,10 +171,10 @@ function onFocusOut(event: FocusEvent): void {
         <MvError
           v-if="deleteFailed"
           :label="t('auth.deleteFailed') as string"
-          :message="t('page.songs.songLoadFailedMessage') as string"
+          :message="t('auth.deleteFailedMessage') as string"
         />
         <div class="mv-menu-confirm-actions">
-          <MvButton kind="ghost" @click="confirming = false">{{ t("auth.cancel") }}</MvButton>
+          <MvButton kind="ghost" @click="closeConfirm">{{ t("auth.cancel") }}</MvButton>
           <MvButton kind="primary" :disabled="deleting" @click="confirmDelete">
             {{ t("auth.deleteConfirm") }}
           </MvButton>

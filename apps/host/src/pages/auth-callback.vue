@@ -36,8 +36,12 @@ const message = computed(() => {
 
 onMounted(async () => {
   const { code, state, error } = route.query;
+  // The code leaves the address bar and history before it is used: a failed
+  // or slow exchange must not leave it on screen, in a bookmark or on reload.
+  await router.replace({ name: "auth-callback" });
   // The user pressed Cancel on GitHub's page.
   if (typeof error === "string") {
+    session.abandonSignIn();
     failure.value = "denied";
     return;
   }

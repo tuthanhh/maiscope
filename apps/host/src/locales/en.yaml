@@ -28,6 +28,7 @@ auth:
   deleteBody: 'Your GitHub name and picture are removed from maiscope and you are signed out on every device. Anything you published stays, credited to a deleted user. Signing in again later starts a fresh account.'
   deleteConfirm: 'Delete account'
   deleteFailed: 'The account could not be deleted'
+  deleteFailedMessage: 'Nothing was changed. Check the connection and try again.'
   cancel: 'Cancel'
   signingIn: 'Signing in…'
   failed: 'Sign-in did not finish'
