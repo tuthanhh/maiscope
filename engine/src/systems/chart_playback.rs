@@ -107,6 +107,8 @@ impl ChartPlayback {
         self.compute_timestamps(events);
         self.elapsed_time = 0.0;
         self.is_playing = true;
+        self.respawn = None;
+        self.audio_target = None;
     }
 
     /// Rewind to the start of the current chart and resume playing. Does not
@@ -116,6 +118,8 @@ impl ChartPlayback {
         self.next_spawn_index = 0;
         self.elapsed_time = 0.0;
         self.is_playing = true;
+        self.respawn = None;
+        self.audio_target = None;
     }
 
     /// Forget the loaded chart: no events, clock at zero, not playing. The
@@ -327,5 +331,24 @@ mod tests {
         assert_eq!(chart.elapsed_time(), 5.01);
         chart.sync_to_audio_position(5.2);
         assert_eq!(chart.elapsed_time(), 5.2);
+    }
+
+    /// Final review, piece 2: a seek still pending must not outlive a restart
+    /// or a new chart — the music would be ignored until it reached the old
+    /// target, and notes would respawn there.
+    #[test]
+    fn a_restart_or_a_new_chart_forgets_a_pending_seek() {
+        let mut chart = loaded("(120){4}1,1,1,1,1,1,1,1,1,1,1,1,E");
+        chart.seek(5.0);
+        chart.restart();
+        assert_eq!(chart.take_respawn(), None);
+        chart.sync_to_audio_position(0.5);
+        assert_eq!(chart.elapsed_time(), 0.5);
+
+        chart.seek(5.0);
+        chart.load_chart(simai::parse_chart("(120){4}1,1,E").unwrap());
+        assert_eq!(chart.take_respawn(), None);
+        chart.sync_to_audio_position(0.25);
+        assert_eq!(chart.elapsed_time(), 0.25);
     }
 }
