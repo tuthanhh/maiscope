@@ -7,22 +7,6 @@ defineOptions({ name: "GameAboutPage" });
 
 const { t } = useI18n();
 
-const roadmap = [
-    {
-        id: "C1",
-        text: "Point client at backend read API, replacing CloudFront; keep current behavior",
-    },
-    {
-        id: "C2",
-        text: "Client-side catalog cache (ETag, then IndexedDB) + offline-first + delta sync via manifest",
-    },
-    {
-        id: "C3",
-        text: "GitHub login + contribution UI (submit chart, my contributions)",
-    },
-    { id: "C4", text: "Chart / audio download + maimai visualization engine" },
-];
-
 usePageTitle(() => ({ title: t("page-title.about") as string }));
 </script>
 
@@ -34,22 +18,29 @@ usePageTitle(() => ({ title: t("page-title.about") as string }));
 
         <h3 class="mv-about-h3">About The Project</h3>
         <p class="mv-about-p">
-            <strong>maiscope</strong> is a song &amp; chart browser for
-            arcade rhythm games such as
+            <strong>maiscope</strong> is a song and chart browser for
             <a href="https://maimai.sega.jp/" target="_blank" rel="noopener"
-                >maimai</a
-            >. It loads community-maintained song data and lets you browse,
-            filter, and inspect charts across difficulties.
+                >maimai でらっくす</a
+            >. Browse the whole song list, filter it by version, category,
+            level and more, bookmark the charts you care about, and open any
+            song to see its difficulties and note counts.
         </p>
         <p class="mv-about-p">
-            It is a port of
+            The <strong>Play</strong> page shows a chart as it plays: notes
+            approach the ring as they do in the game, and a timeline of the
+            chart, measure by measure, lets you jump to any part of it. Pause,
+            slow it down, change the note speed or watch it fullscreen.
+        </p>
+        <p class="mv-about-p">
+            maiscope began as a port of
             <a
                 href="https://github.com/zetaraku/arcade-songs"
                 target="_blank"
                 rel="noopener"
                 >zetaraku/arcade-songs</a
-            >
-            — the original web app.
+            >, rebuilt for maimai on Vue 3, with its own server for the song
+            and chart data and a chart engine written in Rust and compiled to
+            WebAssembly.
         </p>
 
         <h3 class="mv-about-h3">{{ t("page.about.author") }}</h3>
@@ -94,13 +85,6 @@ usePageTitle(() => ({ title: t("page-title.about") as string }));
             </li>
         </ul>
 
-        <h3 class="mv-about-h3">Roadmap</h3>
-        <ul class="mv-about-list">
-            <li v-for="item in roadmap" :key="item.id">
-                <strong>{{ item.id }}</strong> － {{ item.text }}
-            </li>
-        </ul>
-
         <h3 class="mv-about-h3">Acknowledgments</h3>
         <ul class="mv-about-list">
             <li>
@@ -126,10 +110,18 @@ usePageTitle(() => ({ title: t("page-title.about") as string }));
                     href="https://github.com/TeamMajdata/MajdataPlay"
                     target="_blank"
                     rel="noopener"
-                    >MajdataPlay</a
+                    >TeamMajdata/MajdataPlay</a
                 >
-                － the visualizer's slide layouts and hit effects (GPL-3.0), and
-                its "Deluxe" note skin.
+                by
+                <a
+                    href="https://github.com/TeamMajdata"
+                    target="_blank"
+                    rel="noopener"
+                    >TeamMajdata</a
+                >
+                － the open-source maimai player whose slide layouts and hit
+                effects the Play page draws (GPL-3.0), and whose build ships the
+                "Deluxe" note skin used here.
             </li>
             <li>
                 <a href="https://maimai.sega.jp/" target="_blank" rel="noopener"
