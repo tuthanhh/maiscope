@@ -6,8 +6,8 @@ import useDarkMode from "~/composables/useDarkMode";
 import useEngineInView from "~/composables/useEngineInView";
 import MvButton from "~/components/ui/MvButton.vue";
 import MvIcon from "~/components/ui/MvIcon.vue";
-import MvMenu from "./MvMenu.vue";
-import { useSessionStore } from "~/stores/session";
+import MvSettingsMenu from "./MvSettingsMenu.vue";
+import MvAccountMenu from "./MvAccountMenu.vue";
 import type { IconName } from "~/components/ui/icons";
 import logoLightUrl from "~/assets/brand/logo.svg";
 import logoDarkUrl from "~/assets/brand/logo-dark.svg";
@@ -21,7 +21,6 @@ const { isDarkMode } = useDarkMode();
 const logoUrl = computed(() => (isDarkMode.value ? logoDarkUrl : logoLightUrl));
 const engineInView = useEngineInView();
 const route = useRoute();
-const session = useSessionStore();
 
 function isActive(name: string): boolean {
   return route.name === name;
@@ -58,18 +57,9 @@ const destinations = computed<{ name: string; label: string; icon: IconName }[]>
         :label="t('nav.theme') as string"
         @click="isDarkMode = !isDarkMode"
       />
-      <!-- Desktop only: on phones the slim bar has room for the menu, which
-           carries the same Sign in. Hidden until a stored session is
-           checked, so a signed-in reload does not flash it. -->
-      <MvButton
-        v-if="session.ready && !session.signedIn"
-        kind="ghost"
-        class="mv-topbar-signin"
-        @click="session.signIn(route.fullPath)"
-      >
-        {{ t("auth.signIn") }}
-      </MvButton>
-      <MvMenu />
+      <MvSettingsMenu />
+      <span class="mv-topbar-divider" aria-hidden="true" />
+      <MvAccountMenu />
     </div>
   </header>
 
@@ -141,11 +131,16 @@ const destinations = computed<{ name: string; label: string; icon: IconName }[]>
 .mv-topbar-link.mv-active {
   color: var(--fg);
 }
-.mv-topbar-signin {
+// Settings on one side, the account on the other (frontend-redesign 21).
+.mv-topbar-divider {
+  width: var(--line-w);
+  height: 20px;
   margin: 0 var(--s-2);
+  background: var(--line);
 }
 .mv-topbar-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: var(--s-1);
 }
@@ -154,11 +149,6 @@ const destinations = computed<{ name: string; label: string; icon: IconName }[]>
   display: none;
 }
 
-@media (max-width: #{bp.$bp-md - 1px}) {
-  .mv-topbar-signin {
-    display: none;
-  }
-}
 @media (max-width: #{bp.$bp-md - 1px}) {
   .mv-topbar {
     grid-template-columns: 1fr auto;

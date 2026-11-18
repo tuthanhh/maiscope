@@ -52,6 +52,7 @@ that now has uploads, accounts and a second library.
 | 18 | [Title as a searchable list](issues/18-title-picker.md) | Maintainer's ask, 2026-11-18 | done |
 | 19 | [Icon set, app icon refresh, dark logo](issues/19-icons.md) | Maintainer's ask, 2026-11-18 | done |
 | 20 | [Sign-in](issues/20-sign-in.md) | Split out of 05, 2026-11-18 | done |
+| 21 | [Settings and account apart; JetBrains Mono back](issues/21-menus-and-mono.md) | Maintainer's asks, 2026-11-18 | done |
 
 Issue 04 turned out to be two jobs: reading the new API, done with issue 02,
 and the visual and structural redesign `design-direction.md` describes, too

@@ -13,14 +13,13 @@ nav:
   songs: Songs
   community: Community
   play: Play
-  menu: Menu
+  settings: Settings
   theme: Theme
   language: Language
 home:
   subtitle: maimai visualization project
 auth:
   signIn: 'Sign in'
-  signInWithGitHub: 'Sign in with GitHub'
   signOut: 'Sign out'
   accountMenu: 'Account menu for {login}'
   deleteAccount: 'Delete account…'

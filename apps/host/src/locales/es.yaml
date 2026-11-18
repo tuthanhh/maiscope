@@ -13,14 +13,13 @@ nav:
   songs: Canciones
   community: Comunidad
   play: Jugar
-  menu: Menú
+  settings: Ajustes
   theme: Tema
   language: Idioma
 home:
   subtitle: proyecto de visualización de maimai
 auth:
   signIn: 'Iniciar sesión'
-  signInWithGitHub: 'Iniciar sesión con GitHub'
   signOut: 'Cerrar sesión'
   accountMenu: 'Menú de la cuenta de {login}'
   deleteAccount: 'Eliminar cuenta…'

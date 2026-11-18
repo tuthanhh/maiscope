@@ -13,14 +13,13 @@ nav:
   songs: 楽曲
   community: コミュニティ
   play: プレイ
-  menu: メニュー
+  settings: 設定
   theme: テーマ
   language: 言語
 home:
   subtitle: maimai 譜面ビジュアライザー
 auth:
   signIn: 'ログイン'
-  signInWithGitHub: 'GitHub でログイン'
   signOut: 'ログアウト'
   accountMenu: '{login} のアカウントメニュー'
   deleteAccount: 'アカウントを削除…'

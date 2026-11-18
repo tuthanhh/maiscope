@@ -13,14 +13,13 @@ nav:
   songs: 악곡
   community: 커뮤니티
   play: 플레이
-  menu: 메뉴
+  settings: 설정
   theme: 테마
   language: 언어
 home:
   subtitle: maimai 채보 시각화 프로젝트
 auth:
   signIn: '로그인'
-  signInWithGitHub: 'GitHub로 로그인'
   signOut: '로그아웃'
   accountMenu: '{login}의 계정 메뉴'
   deleteAccount: '계정 삭제…'

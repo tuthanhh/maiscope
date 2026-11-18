@@ -13,14 +13,13 @@ nav:
   songs: 乐曲
   community: 社区
   play: 游玩
-  menu: 菜单
+  settings: 设置
   theme: 主题
   language: 语言
 home:
   subtitle: maimai 谱面可视化项目
 auth:
   signIn: '登录'
-  signInWithGitHub: '使用 GitHub 登录'
   signOut: '退出登录'
   accountMenu: '{login} 的账号菜单'
   deleteAccount: '删除账号…'

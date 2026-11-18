@@ -13,14 +13,13 @@ nav:
   songs: Песни
   community: Сообщество
   play: Играть
-  menu: Меню
+  settings: Настройки
   theme: Тема
   language: Язык
 home:
   subtitle: проект визуализации maimai
 auth:
   signIn: 'Войти'
-  signInWithGitHub: 'Войти через GitHub'
   signOut: 'Выйти'
   accountMenu: 'Меню аккаунта {login}'
   deleteAccount: 'Удалить аккаунт…'

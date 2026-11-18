@@ -13,14 +13,13 @@ nav:
   songs: Bài hát
   community: Cộng đồng
   play: Chơi
-  menu: Menu
+  settings: Cài đặt
   theme: Giao diện
   language: Ngôn ngữ
 home:
   subtitle: dự án mô phỏng chart maimai
 auth:
   signIn: 'Đăng nhập'
-  signInWithGitHub: 'Đăng nhập bằng GitHub'
   signOut: 'Đăng xuất'
   accountMenu: 'Menu tài khoản của {login}'
   deleteAccount: 'Xóa tài khoản…'

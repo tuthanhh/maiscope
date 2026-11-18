@@ -13,14 +13,13 @@ nav:
   songs: Lagu
   community: Komunitas
   play: Main
-  menu: Menu
+  settings: Pengaturan
   theme: Tema
   language: Bahasa
 home:
   subtitle: proyek visualisasi maimai
 auth:
   signIn: 'Masuk'
-  signInWithGitHub: 'Masuk dengan GitHub'
   signOut: 'Keluar'
   accountMenu: 'Menu akun {login}'
   deleteAccount: 'Hapus akun…'

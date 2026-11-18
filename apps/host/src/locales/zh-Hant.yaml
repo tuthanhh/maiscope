@@ -13,14 +13,13 @@ nav:
   songs: 樂曲
   community: 社群
   play: 遊玩
-  menu: 選單
+  settings: 設定
   theme: 主題
   language: 語言
 home:
   subtitle: maimai 譜面視覺化專案
 auth:
   signIn: '登入'
-  signInWithGitHub: '使用 GitHub 登入'
   signOut: '登出'
   accountMenu: '{login} 的帳號選單'
   deleteAccount: '刪除帳號…'

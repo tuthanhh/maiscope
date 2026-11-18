@@ -32,11 +32,12 @@
     "Noto Sans JP", "Noto Sans CJK JP", "Apple SD Gothic Neo", "Malgun Gothic",
     "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  // The display face: brand, headings, titles, card titles. Latin only; a
-  // Japanese title falls through to the same CJK system faces as the sans.
-  --f-display: "Space Grotesk", "Hiragino Sans", "Hiragino Kaku Gothic ProN",
+  // The display face: brand, headings, titles, card titles — JetBrains Mono,
+  // the face maiscope began with (frontend-redesign 21; Space Grotesk in 15).
+  // Latin only; a Japanese title falls through to the CJK system faces.
+  --f-display: "JetBrains Mono", "Hiragino Sans", "Hiragino Kaku Gothic ProN",
     "Yu Gothic", "Noto Sans JP", "Noto Sans CJK JP", "Apple SD Gothic Neo",
-    "Malgun Gothic", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    "Malgun Gothic", "PingFang SC", "Microsoft YaHei", ui-monospace, monospace;
 
   --s-1: 4px;
   --s-2: 8px;
