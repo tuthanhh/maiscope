@@ -74,7 +74,8 @@ export default defineConfig(async () => ({
         // visualizer ever draws them, and once web-delivery 05 gates that page
         // off mobile, phone users would have been paying for artwork they could
         // not reach. Served by the StaleWhileRevalidate rule below instead.
-        globIgnores: ["**/*.wasm", "assets/sprites/**"],
+        // MajdataPlay's art (visualizer-majdata 12, 3.1MB) is the same case.
+        globIgnores: ["**/*.wasm", "assets/sprites/**", "assets/majdata/**"],
         // index.html is not in the precache manifest, so there is nothing for a
         // navigation fallback to point at. The navigation rule below is the
         // whole story.
@@ -119,11 +120,14 @@ export default defineConfig(async () => ({
           },
           // Stale-while-revalidate rather than cache-first, because these
           // filenames are NOT content-hashed — they are copied verbatim from
-          // public/assets/sprites. Cache-first would pin a sprite change until
-          // the entry expired; this serves the cached copy instantly and
-          // replaces it in the background, so a deploy still lands.
+          // public/assets/sprites and public/assets/majdata. Cache-first would
+          // pin a sprite change until the entry expired; this serves the cached
+          // copy instantly and replaces it in the background, so a deploy still
+          // lands.
           {
-            urlPattern: ({ url }) => url.pathname.includes("/assets/sprites/"),
+            urlPattern: ({ url }) =>
+              url.pathname.includes("/assets/sprites/") ||
+              url.pathname.includes("/assets/majdata/"),
             handler: "StaleWhileRevalidate",
             options: {
               cacheName: "engine-sprites",

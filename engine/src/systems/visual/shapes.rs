@@ -1,6 +1,7 @@
 //! Note visual builders.
 //!
-//! Most note visuals are **textured sprites** loaded from `assets/sprites/` and
+//! Most note visuals are **textured sprites** — MajdataPlay's, from
+//! `assets/majdata/` (visualizer-majdata 15) — and
 //! handed out as cloned [`Handle<Image>`] via [`NoteAssets`]. Only the
 //! touch-hold countdown arc stays a lyon vector [`Shape`], because it is redrawn
 //! every frame from [`build_countdown_path`].
@@ -11,35 +12,17 @@
 //! visual-tuning knobs — adjust these to match the source art, not the spawn
 //! sites.
 
-use bevy::prelude::{Color, Handle, Image, Sprite, Vec2};
+use bevy::prelude::{Color, Handle, Image, Rect, Sprite, Vec2};
 use bevy_prototype_lyon::prelude::*;
 
+use super::component::HoldNoteElement;
+use super::majdata::{SKIN_SCALE, sprite_pixels, sprite_px};
 use crate::systems::visual::{NOTE_RADIUS, RADIUS, resources::NoteAssets};
 
-// ── Sprite footprint constants (world units, tune to the art) ────────────────
-
-const SIZE_TAP: f32 = NOTE_RADIUS * 2.0;
-const SIZE_STAR: f32 = NOTE_RADIUS * 2.0;
-/// Touch centre dot (`TouchPoint.png`) — small, matching the original dot.
-const SIZE_TOUCH: f32 = NOTE_RADIUS * 0.4;
-/// Touch "just" hit flash (`TouchJust.png`) — covers the touch hit area.
-const SIZE_TOUCH_JUST: f32 = NOTE_RADIUS * 2.0;
-/// Touch / TouchHold approach triangle (`Touch_01.png` / `TouchHold_0n.png`,
-/// 112×82). Sized so the 4 triangles, once converged just before the hit, span
-/// roughly a tap/hold note (~2·NOTE_RADIUS). Height keeps the source aspect.
-const TRI_W: f32 = NOTE_RADIUS * 1.5;
-const TRI_ASPECT: f32 = 82.0 / 112.0;
-/// Hold end caps (`hold_start.jpg` / `hold_end.jpg`, 122×61). Width = beam
-/// width; height keeps the 1:2 source ratio. Anchored at the inner edge so each
-/// cap sits flush on the beam end (head `BOTTOM_CENTER` at y=0, tail
-/// `TOP_CENTER` at y=-len) — set at the spawn site.
-const HOLD_CAP_W: f32 = NOTE_RADIUS * 2.0;
-const HOLD_CAP_H: f32 = NOTE_RADIUS; // 61/122 * width
-/// Hold body beam (`hold.png`, 122×200): full width, **unit height** — Y is
-/// scaled at runtime to the live bar length, so the sprite stretches with the
-/// hold. Centre-anchored; the mover offsets it by `-len/2`.
-const HOLD_BODY_W: f32 = NOTE_RADIUS * 2.0;
-const HOLD_BODY_H: f32 = 1.0;
+// ── Sprite sizes ─────────────────────────────────────────────────────────────
+// Note art is MajdataPlay's (visualizer-majdata 15) and keeps its proportions
+// to the ring: each sprite's size is its pixel size × `SKIN_SCALE`
+// (`majdata::sprite_px`). The effects keep the sizes below.
 const SIZE_HEXAGON: f32 = NOTE_RADIUS * 1.5;
 const SIZE_HALO: f32 = NOTE_RADIUS * 1.5;
 /// Touch death burst (`TouchEff.png`) and its star parts (`TouchEffparts_0n.png`).
@@ -47,18 +30,20 @@ const SIZE_TOUCH_EFFECT: f32 = NOTE_RADIUS * 1.0;
 const SIZE_TOUCH_EFFECT_STAR: f32 = NOTE_RADIUS * 1.0;
 /// Hard-coded tint for the (white) touch burst halo.
 const HALO_COLOR: Color = Color::srgb(1.0, 0.9, 0.2);
-/// `Judge/Normal.png` glow-dot offset from the texture centre, as a fraction of
-/// the full sprite size. Measured from the art: the dot sits at y ≈ 5.46% from
-/// the top, i.e. 0.5 − 0.0546. The dot lies on the ring's top edge, so this is
-/// simultaneously (a) the anchor that pins the dot to the note centre and (b)
-/// the ring's radius as a fraction of the sprite — used to size the sprite so a
-/// `Transform` scale of 1.0 makes the ring coincide with the judgement circle.
+/// `NoteGuideSkins/Normal.png` glow-dot offset from the texture centre, as a
+/// fraction of the full sprite size. Measured from the art: the dot sits at
+/// y ≈ 5.46% from the top, i.e. 0.5 − 0.0546. The dot lies on the ring's top
+/// edge, so this is simultaneously (a) the anchor that pins the dot to the note
+/// centre and (b) the ring's radius as a fraction of the sprite — used to size
+/// the sprite so a `Transform` scale of 1.0 makes the ring coincide with the
+/// judgement circle.
 pub(super) const NORMAL_HALO_DOT_OFFSET: f32 = 0.4454;
-/// Note halo ring (`Judge/Normal.png`) drawn behind tap/star/hold. Sized so the
-/// ring's radius (`NORMAL_HALO_DOT_OFFSET` · size) equals `RADIUS` at scale 1.0.
+/// Note halo ring sized so the ring's radius (`NORMAL_HALO_DOT_OFFSET` · size)
+/// equals `RADIUS` at scale 1.0.
 const SIZE_NORMAL_HALO: f32 = RADIUS / NORMAL_HALO_DOT_OFFSET;
-/// Hold tail glow dot (`Hold_End_dot.png`).
-const SIZE_HOLD_END_DOT: f32 = NOTE_RADIUS * 0.8;
+/// The caps of MajdataPlay's hold image, top (head) and bottom (tail), in its
+/// pixels; the rows between them stretch with the hold.
+const HOLD_CAP_PX: f32 = 58.0;
 
 // ── Sprite builders ──────────────────────────────────────────────────────────
 
@@ -70,84 +55,130 @@ fn sprite(image: bevy::prelude::Handle<bevy::prelude::Image>, size: Vec2) -> Spr
     }
 }
 
-/// Tap note (`sprites/Tap/tap.png`). Untinted — the art carries its own colour.
-pub(super) fn tap_sprite(assets: &NoteAssets) -> Sprite {
-    sprite(assets.tap.clone(), Vec2::splat(SIZE_TAP))
+/// A MajdataPlay sprite at its own size on our playfield.
+fn skin(image: Handle<Image>, path: &str) -> Sprite {
+    sprite(image, sprite_px(path))
 }
 
-/// Tap break variant (`tap_break.png`), same footprint as `tap_sprite`.
-pub(super) fn tap_break_sprite(assets: &NoteAssets) -> Sprite {
-    sprite(assets.tap_break.clone(), Vec2::splat(SIZE_TAP))
+/// Which variant of a note's art to draw. Break wins over each, as in
+/// MajdataPlay.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum Art {
+    Normal,
+    Each,
+    Break,
+}
+
+/// Tap note (`skin/TapSkins/tap*.png`). Untinted — the art carries its colour.
+pub(super) fn tap_sprite(assets: &NoteAssets, art: Art) -> Sprite {
+    match art {
+        Art::Normal => skin(assets.tap.clone(), "skin/TapSkins/tap.png"),
+        Art::Each => skin(assets.tap_each.clone(), "skin/TapSkins/tap_each.png"),
+        Art::Break => skin(assets.tap_break.clone(), "skin/TapSkins/tap_break.png"),
+    }
 }
 
 /// Tap EX outline overlay (`tap_ex.png`), drawn on top of the note.
 pub(super) fn tap_ex_sprite(assets: &NoteAssets) -> Sprite {
-    sprite(assets.tap_ex.clone(), Vec2::splat(SIZE_TAP))
+    skin(assets.tap_ex.clone(), "skin/TapSkins/tap_ex.png")
 }
 
-/// Slide / spark star (`sprites/Slide/Star.png`), tinted per note colour.
-pub(super) fn star_sprite(assets: &NoteAssets) -> Sprite {
-    sprite(assets.star.clone(), Vec2::splat(SIZE_STAR))
-}
-
-/// Star break variant (`star_break.png`), same footprint as `star_sprite`.
-pub(super) fn star_break_sprite(assets: &NoteAssets) -> Sprite {
-    sprite(assets.star_break.clone(), Vec2::splat(SIZE_STAR))
+/// Star (`skin/StarSkins/star*.png`): a slide's head or a `$` star. `double`:
+/// it leads more than one slide.
+pub(super) fn star_sprite(assets: &NoteAssets, art: Art, double: bool) -> Sprite {
+    match (art, double) {
+        (Art::Normal, false) => skin(assets.star.clone(), "skin/StarSkins/star.png"),
+        (Art::Each, false) => skin(assets.star_each.clone(), "skin/StarSkins/star_each.png"),
+        (Art::Break, false) => skin(assets.star_break.clone(), "skin/StarSkins/star_break.png"),
+        (Art::Normal, true) => skin(assets.star_double.clone(), "skin/StarSkins/star_double.png"),
+        (Art::Each, true) => skin(
+            assets.star_each_double.clone(),
+            "skin/StarSkins/star_each_double.png",
+        ),
+        (Art::Break, true) => skin(
+            assets.star_break_double.clone(),
+            "skin/StarSkins/star_break_double.png",
+        ),
+    }
 }
 
 /// Star EX outline overlay (`star_ex.png`), drawn on top of the star.
 pub(super) fn star_ex_sprite(assets: &NoteAssets) -> Sprite {
-    sprite(assets.star_ex.clone(), Vec2::splat(SIZE_STAR))
+    skin(assets.star_ex.clone(), "skin/StarSkins/star_ex.png")
 }
 
-/// Hold head/tail cap (`hold_*_start/end.png`). The caller passes the variant
-/// handle (normal / break / ex) and sets the anchor at the spawn site.
-pub(super) fn hold_cap_sprite(image: Handle<Image>) -> Sprite {
-    sprite(image, Vec2::new(HOLD_CAP_W, HOLD_CAP_H))
+/// The image and file of a hold's art (`skin/HoldSkins/`); `ex` is the EX
+/// overlay.
+pub(super) fn hold_art(assets: &NoteAssets, art: Art, ex: bool) -> (Handle<Image>, &'static str) {
+    match (art, ex) {
+        (_, true) => (assets.hold_ex.clone(), "skin/HoldSkins/hold_ex.png"),
+        (Art::Normal, _) => (assets.hold.clone(), "skin/HoldSkins/hold.png"),
+        (Art::Each, _) => (assets.hold_each.clone(), "skin/HoldSkins/hold_each.png"),
+        (Art::Break, _) => (assets.hold_break.clone(), "skin/HoldSkins/hold_break.png"),
+    }
 }
 
-/// Hold body beam (`hold_*_mid.png`), unit height; Y scaled at runtime. The
-/// caller passes the variant handle (normal / break / ex).
-pub(super) fn hold_beam_sprite(image: Handle<Image>) -> Sprite {
-    sprite(image, Vec2::new(HOLD_BODY_W, HOLD_BODY_H))
+/// One part of a hold, cut out of its single MajdataPlay image with
+/// `Sprite.rect`: the head (top cap), the body (the rows between the caps,
+/// unit height — Y is scaled at runtime to the live bar length) or the tail
+/// (bottom cap).
+pub(super) fn hold_part_sprite(image: Handle<Image>, path: &str, part: &HoldNoteElement) -> Sprite {
+    let px = sprite_pixels(path);
+    let width = px.x * SKIN_SCALE;
+    let cap = HOLD_CAP_PX * SKIN_SCALE;
+    let (rect, size) = match part {
+        HoldNoteElement::Head => (
+            Rect::new(0.0, 0.0, px.x, HOLD_CAP_PX),
+            Vec2::new(width, cap),
+        ),
+        HoldNoteElement::Tail => (
+            Rect::new(0.0, px.y - HOLD_CAP_PX, px.x, px.y),
+            Vec2::new(width, cap),
+        ),
+        _ => (
+            Rect::new(0.0, HOLD_CAP_PX, px.x, px.y - HOLD_CAP_PX),
+            Vec2::new(width, 1.0),
+        ),
+    };
+    Sprite {
+        rect: Some(rect),
+        ..sprite(image, size)
+    }
 }
 
-/// Touch note centre dot (`sprites/Touch/TouchPoint.png`), tinted per colour.
+/// Touch note centre dot (`skin/TouchSkins/touch_point.png`).
 pub(super) fn touch_circle_sprite(assets: &NoteAssets) -> Sprite {
-    sprite(assets.touch.clone(), Vec2::splat(SIZE_TOUCH))
+    skin(assets.touch.clone(), "skin/TouchSkins/touch_point.png")
 }
 
-/// Touch "just" hit flash (`sprites/Touch/TouchJust.png`), shown briefly at the
-/// moment a touch is struck. Sized to cover the converged touch hit area.
+/// Touch "just" hit flash (`skin/TouchSkins/touch_just.png`), shown briefly at
+/// the moment a touch is struck.
 pub(super) fn touch_just_sprite(assets: &NoteAssets) -> Sprite {
-    sprite(assets.touch_just.clone(), Vec2::splat(SIZE_TOUCH_JUST))
+    skin(assets.touch_just.clone(), "skin/TouchSkins/touch_just.png")
 }
 
-/// Touch approach triangle (`Touch_01.png`, points +Y). Rotated to its
-/// direction at the spawn site; rendered with the art's own colour.
+/// Touch approach petal (`skin/TouchSkins/touch.png`, points +Y). Rotated to
+/// its direction at the spawn site; rendered with the art's own colour.
 pub(super) fn touch_triangle_sprite(assets: &NoteAssets) -> Sprite {
-    sprite(
-        assets.touch_triangle.clone(),
-        Vec2::new(TRI_W, TRI_W * TRI_ASPECT),
-    )
+    skin(assets.touch_triangle.clone(), "skin/TouchSkins/touch.png")
 }
 
-/// TouchHold directional triangle `idx` (0..4 → `TouchHold_01..04.png`, points
-/// +Y). The art is pre-coloured per direction, so it renders untinted.
+/// TouchHold petal `idx` (0..4 → `touchhold_0..3.png`, points +Y). The art is
+/// pre-coloured per direction, so it renders untinted.
 pub(super) fn touch_hold_triangle_sprite(assets: &NoteAssets, idx: usize) -> Sprite {
-    sprite(
+    skin(
         assets.touch_hold[idx].clone(),
-        Vec2::new(TRI_W, TRI_W * TRI_ASPECT),
+        &format!("skin/TouchHoldSkins/touchhold_{idx}.png"),
     )
 }
 
-/// Hexagon pop effect (`sprites/Effect/Hex.png`), tinted.
+/// Hexagon pop effect (`effects/Hex.png`), tinted.
 pub(super) fn hexagon_sprite(assets: &NoteAssets) -> Sprite {
     sprite(assets.hexagon.clone(), Vec2::splat(SIZE_HEXAGON))
 }
 
 /// Expanding hold / touch halo (`sprites/Effect/Circle.png`), tinted.
-/// Touch death burst halo (`sprites/Touch/TouchEff.png`) — replaces the generic
+/// Touch death burst halo (`effects/TouchEff.png`) — replaces the generic
 /// `Circle.png` halo; tinted yellow and scaled + faded by `animate_touch_spark`.
 pub(super) fn touch_effect_sprite(assets: &NoteAssets) -> Sprite {
     Sprite {
@@ -174,9 +205,17 @@ pub(super) fn normal_halo_sprite(assets: &NoteAssets) -> Sprite {
     sprite(assets.normal_halo.clone(), Vec2::splat(SIZE_NORMAL_HALO))
 }
 
-/// Glow dot pinned to the hold tail end (`Hold_End_dot.png`).
+/// Glow dot pinned to the hold tail end (`skin/NoteGuideSkins/Hold_End.png`).
 pub(super) fn hold_end_dot_sprite(assets: &NoteAssets) -> Sprite {
-    sprite(assets.hold_end_dot.clone(), Vec2::splat(SIZE_HOLD_END_DOT))
+    skin(
+        assets.hold_end_dot.clone(),
+        "skin/NoteGuideSkins/Hold_End.png",
+    )
+}
+
+/// The judgement ring with its eight key marks (`skin/outline.png`).
+pub(super) fn ring_sprite(assets: &NoteAssets) -> Sprite {
+    skin(assets.ring.clone(), "skin/outline.png")
 }
 
 pub(super) fn hold_halo_sprite(assets: &NoteAssets) -> Sprite {

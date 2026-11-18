@@ -38,8 +38,8 @@ SKIN = "Assets/StreamingAssets/Skins/default"
 EFFECTS = "Assets/Sprites/Game/EffectSprites"
 SOURCES = (SLIDES, SKIN, EFFECTS)
 
-# Note art only: no judgement text, SlideOK, guide or background art — the
-# visualizer has no gameplay overlay.
+# Note art only: no judgement text, SlideOK, each-line or background art —
+# the visualizer has no gameplay overlay.
 SKIN_FOLDERS = (
     "TapSkins",
     "StarSkins",
@@ -50,6 +50,15 @@ SKIN_FOLDERS = (
     "TouchHoldSkins",
 )
 SKIN_FILES = ("outline.png",)
+# The ring behind each approaching note, and the dot at a hold's tail.
+GUIDE_FILES = (
+    "Normal.png",
+    "Each.png",
+    "Break.png",
+    "Hold_End.png",
+    "Hold_Each_End.png",
+    "Hold_Break_End.png",
+)
 EFFECT_FILES = (
     "Hex.png",
     "StarWhite.png",
@@ -174,6 +183,8 @@ def main(argv=None):
                 _copy(os.path.join(skin, folder, name), out, f"skin/{folder}/{name}", copied)
     for name in SKIN_FILES:
         _copy(os.path.join(skin, name), out, f"skin/{name}", copied)
+    for name in GUIDE_FILES:
+        _copy(os.path.join(skin, "NoteGuideSkins", name), out, f"skin/NoteGuideSkins/{name}", copied)
     for name in EFFECT_FILES:
         _copy(os.path.join(args.src, EFFECTS, name), out, f"effects/{name}", copied)
 

@@ -88,13 +88,18 @@ static SIZES: Lazy<HashMap<&'static str, Vec2>> = Lazy::new(|| {
         .collect()
 });
 
-/// A MajdataPlay sprite's size on our playfield, from its pixel size, so the
-/// art keeps MajdataPlay's proportions to the ring. `path` is relative to
+/// A MajdataPlay sprite's pixel size. `path` is relative to
 /// `engine/assets/majdata/`.
-pub fn sprite_px(path: &str) -> Vec2 {
+pub fn sprite_pixels(path: &str) -> Vec2 {
     let size = SIZES.get(path).copied();
     debug_assert!(size.is_some(), "no MajdataPlay sprite {path}");
-    size.unwrap_or(Vec2::splat(100.0)) * SKIN_SCALE
+    size.unwrap_or(Vec2::splat(100.0))
+}
+
+/// A MajdataPlay sprite's size on our playfield, from its pixel size, so the
+/// art keeps MajdataPlay's proportions to the ring.
+pub fn sprite_px(path: &str) -> Vec2 {
+    sprite_pixels(path) * SKIN_SCALE
 }
 
 #[cfg(test)]

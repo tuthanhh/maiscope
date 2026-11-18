@@ -8,11 +8,11 @@ use super::{
     },
     resources::{ButtonLayout, NoteAssets},
     shapes::{
-        COUNTDOWN_EDGE_COLORS, COUNTDOWN_SWEEP_S, NORMAL_HALO_DOT_OFFSET, countdown_edge,
-        hold_beam_sprite, hold_cap_sprite, hold_end_dot_sprite, normal_halo_sprite,
-        star_break_sprite, star_ex_sprite, star_sprite, tap_break_sprite, tap_ex_sprite,
-        tap_sprite, touch_circle_sprite, touch_effect_sprite, touch_effect_star_sprite,
-        touch_hold_triangle_sprite, touch_triangle_sprite, touch_triangle_start_distance,
+        Art, COUNTDOWN_EDGE_COLORS, COUNTDOWN_SWEEP_S, NORMAL_HALO_DOT_OFFSET, countdown_edge,
+        hold_art, hold_end_dot_sprite, hold_part_sprite, normal_halo_sprite, star_ex_sprite,
+        star_sprite, tap_ex_sprite, tap_sprite, touch_circle_sprite, touch_effect_sprite,
+        touch_effect_star_sprite, touch_hold_triangle_sprite, touch_triangle_sprite,
+        touch_triangle_start_distance,
     },
     slide_path,
 };
@@ -59,7 +59,7 @@ pub fn next_event(
                     spawn_note(
                         &mut commands,
                         note,
-                        is_paired(note, notes),
+                        notes,
                         event.bpm,
                         event.time,
                         &note_assets,
@@ -88,7 +88,7 @@ pub fn next_event(
                 spawn_note(
                     &mut commands,
                     note,
-                    is_paired(note, &notes),
+                    &notes,
                     bpm,
                     hit,
                     &note_assets,
@@ -112,12 +112,29 @@ pub fn next_event(
 /// pseudo-EACH backtick are 1ms apart, so the notation is explicit that they
 /// are *not* an EACH and must not render as a pair. Groups are at most a
 /// handful of notes, so the scan is cheaper than building a map.
+///
+/// A headless slide is a further track of a star (`1-5*-3`), not a note of its
+/// own: it does not make the star an EACH (MajdataPlay draws that star with its
+/// `_double` art, not `_each`).
 fn is_paired(note: &Note, group: &[Note]) -> bool {
     group
         .iter()
         .filter(|other| other.offset_ms == note.offset_ms)
+        .filter(|other| !matches!(other.kind, NoteKind::HeadlessSlide { .. }))
         .count()
         >= 2
+}
+
+/// A slide's head star that leads more than one slide (`1-5*-3`): the later
+/// tracks are headless slides from the same key in the same group. MajdataPlay
+/// draws it with its `_double` art.
+fn leads_several_slides(note: &Note, group: &[Note]) -> bool {
+    let NoteKind::Slide { head_button, .. } = note.kind else {
+        return false;
+    };
+    group.iter().any(|other| {
+        matches!(other.kind, NoteKind::HeadlessSlide { start_button, .. } if start_button == head_button)
+    })
 }
 
 // ── Transport commands ──────────────────────────────────────────────────────
@@ -230,13 +247,22 @@ pub fn apply_commands(
 fn spawn_note(
     commands: &mut Commands,
     note: &Note,
-    is_paired: bool,
+    group: &[Note],
     bpm: f32,
     hit: f64,
     assets: &NoteAssets,
     layout: &ButtonLayout,
     layouts: &SlideLayouts,
 ) {
+    let is_paired = is_paired(note, group);
+    // MajdataPlay's art variant: break wins over each.
+    let art = if note.is_break {
+        Art::Break
+    } else if is_paired {
+        Art::Each
+    } else {
+        Art::Normal
+    };
     // The timer is a placeholder: `update_movement` sets the phase from the
     // chart clock on the note's first frame.
     let mut e = commands.spawn((
@@ -251,11 +277,7 @@ fn spawn_note(
             let pos = tap_pos(*id, layout) * super::RADIUS;
             let dir = layout.tap[*id - 1];
             let angle = dir.y.atan2(dir.x) - FRAC_PI_2;
-            let base = if note.is_break {
-                tap_break_sprite(assets)
-            } else {
-                tap_sprite(assets)
-            };
+            let base = tap_sprite(assets, art);
             e.insert((
                 base,
                 Transform::from_translation(pos.extend(2.0)).with_scale(Vec3::ZERO),
@@ -278,7 +300,7 @@ fn spawn_note(
                     .with_rotation(Quat::from_rotation_z(angle))
                     .with_scale(Vec3::ZERO),
             ));
-            e.with_children(|p| spawn_hold_children(p, assets, note.is_break, note.is_ex));
+            e.with_children(|p| spawn_hold_children(p, assets, art, note.is_ex));
         }
 
         NoteKind::Touch { value, group } => {
@@ -312,11 +334,7 @@ fn spawn_note(
             let pos = tap_pos(*button, layout) * super::RADIUS;
             let dir = layout.tap[*button - 1];
             let angle = dir.y.atan2(dir.x) - FRAC_PI_2;
-            let base = if note.is_break {
-                star_break_sprite(assets)
-            } else {
-                star_sprite(assets)
-            };
+            let base = star_sprite(assets, art, false);
             e.insert((
                 base,
                 Transform::from_translation(pos.extend(2.0)).with_scale(Vec3::ZERO),
@@ -355,16 +373,11 @@ fn spawn_note(
             let head_sprite = match note.kind {
                 NoteKind::Slide {
                     plain_head: true, ..
-                } => Some(tap_sprite(assets)),
-                NoteKind::Slide { .. } => Some(star_sprite(assets)),
+                } => Some(tap_sprite(assets, art)),
+                NoteKind::Slide { .. } => {
+                    Some(star_sprite(assets, art, leads_several_slides(note, group)))
+                }
                 _ => None,
-            };
-            let art = if note.is_break {
-                ArrowArt::Break
-            } else if is_paired {
-                ArrowArt::Each
-            } else {
-                ArrowArt::Normal
             };
             e.insert((Transform::default(), Visibility::Visible));
             e.with_children(|p| {
@@ -428,29 +441,27 @@ fn spawn_ex_overlay(parent: &mut RelatedSpawnerCommands<ChildOf>, ex: Sprite) {
     parent.spawn((ex, Transform::from_xyz(0.0, 0.0, 0.1)));
 }
 
-/// Spawn one head/body/tail slice triple at depth `z`. The mover animates every
-/// `HoldNoteElement` child by its marker, so base and EX-overlay triples both
-/// stretch/track correctly.
+/// Spawn one head/body/tail triple at depth `z`, cut out of one MajdataPlay
+/// hold image. The mover animates every `HoldNoteElement` child by its
+/// marker, so base and EX-overlay triples both stretch/track correctly.
 fn spawn_hold_slices(
     parent: &mut RelatedSpawnerCommands<ChildOf>,
-    head: Handle<Image>,
-    body: Handle<Image>,
-    tail: Handle<Image>,
+    (image, path): (Handle<Image>, &str),
     z: f32,
 ) {
     parent.spawn((
-        hold_cap_sprite(head),
+        hold_part_sprite(image.clone(), path, &HoldNoteElement::Head),
         Anchor::BOTTOM_CENTER,
         Transform::from_xyz(0.0, 0.0, z),
         HoldNoteElement::Head,
     ));
     parent.spawn((
-        hold_beam_sprite(body),
+        hold_part_sprite(image.clone(), path, &HoldNoteElement::Body),
         Transform::from_xyz(0.0, -0.001, z).with_scale(Vec3::new(1.0, 0.001, 1.0)),
         HoldNoteElement::Body,
     ));
     parent.spawn((
-        hold_cap_sprite(tail),
+        hold_part_sprite(image, path, &HoldNoteElement::Tail),
         Anchor::TOP_CENTER,
         Transform::from_xyz(0.0, -0.001, z),
         HoldNoteElement::Tail,
@@ -460,34 +471,17 @@ fn spawn_hold_slices(
 fn spawn_hold_children(
     parent: &mut RelatedSpawnerCommands<ChildOf>,
     assets: &NoteAssets,
-    is_break: bool,
+    art: Art,
     is_ex: bool,
 ) {
     // Faint concentric halo behind the head. The hold parent already carries the
     // radial rotation, so the halo inherits it (identity rotation here).
     spawn_note_halo(parent, assets, Quat::IDENTITY);
 
-    // break → swap the base slices for the break variant.
-    let (head, body, tail) = if is_break {
-        (
-            &assets.hold_break_head,
-            &assets.hold_break_body,
-            &assets.hold_break_tail,
-        )
-    } else {
-        (&assets.hold_head, &assets.hold_body, &assets.hold_tail)
-    };
-    spawn_hold_slices(parent, head.clone(), body.clone(), tail.clone(), 0.0);
-
-    // ex → overlay the EX outline slices on top (same markers ⇒ same motion).
+    spawn_hold_slices(parent, hold_art(assets, art, false), 0.0);
+    // ex → overlay the EX outline on top (same markers ⇒ same motion).
     if is_ex {
-        spawn_hold_slices(
-            parent,
-            assets.hold_ex_head.clone(),
-            assets.hold_ex_body.clone(),
-            assets.hold_ex_tail.clone(),
-            0.1,
-        );
+        spawn_hold_slices(parent, hold_art(assets, art, true), 0.1);
     }
 
     // Glow dot pinned to the tail end (mover drives its y to -len).
@@ -589,7 +583,7 @@ fn spawn_approach_triangles(
     }
 }
 
-/// MajdataPlay's arrow art: normal, each, break.
+/// MajdataPlay's arrow art, indexed by `Art`: normal, each, break.
 const SLIDE_PATHS: [&str; 3] = [
     "skin/SlideSkins/slide.png",
     "skin/SlideSkins/slide_each.png",
@@ -598,17 +592,9 @@ const SLIDE_PATHS: [&str; 3] = [
 /// A fan's rows, each with its own image.
 pub(super) const WIFI_ROWS: usize = 11;
 
-fn wifi_path(art: ArrowArt, row: usize) -> String {
+fn wifi_path(art: Art, row: usize) -> String {
     let variant = ["", "each_", "break_"][art as usize];
     format!("skin/WifiSkins/wifi_{variant}{row}.png")
-}
-
-/// Which MajdataPlay arrow art a slide uses.
-#[derive(Clone, Copy)]
-enum ArrowArt {
-    Normal = 0,
-    Each = 1,
-    Break = 2,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -617,7 +603,7 @@ fn spawn_slide_children(
     built: &slide_path::BuiltSlide,
     head_sprite: Option<Sprite>,
     head_button: usize,
-    art: ArrowArt,
+    art: Art,
     layout: &ButtonLayout,
     assets: &NoteAssets,
 ) {
@@ -647,7 +633,7 @@ fn spawn_slide_children(
     };
     for (lane, start) in starts.into_iter().enumerate() {
         parent.spawn((
-            star_sprite(assets),
+            star_sprite(assets, art, false),
             Transform::from_translation(start.extend(3.0)),
             Visibility::Hidden,
             SlideElement::TraceStar(lane),
@@ -834,5 +820,120 @@ mod tests {
             .unwrap()
             .len();
         assert_eq!(arrows, bars);
+    }
+
+    // ── MajdataPlay's art (visualizer-majdata 15) ──────────────────────────
+
+    /// Every sprite in the world after `chart` spawns its first notes.
+    fn sprites(chart: &str) -> (App, Vec<Sprite>) {
+        let mut app = app_with_chart(chart);
+        app.update();
+        app.update();
+        let sprites = app
+            .world_mut()
+            .query::<&Sprite>()
+            .iter(app.world())
+            .cloned()
+            .collect();
+        (app, sprites)
+    }
+
+    fn uses(sprites: &[Sprite], image: &Handle<Image>) -> bool {
+        sprites.iter().any(|s| s.image == *image)
+    }
+
+    /// Review Focus 4.
+    #[test]
+    fn variants_pick_their_art() {
+        let (app, s) = sprites("(120){4}1/5,E");
+        assert!(
+            uses(&s, &app.world().resource::<NoteAssets>().tap_each),
+            "each tap"
+        );
+        let (app, s) = sprites("(120){4}1b,E");
+        assert!(
+            uses(&s, &app.world().resource::<NoteAssets>().tap_break),
+            "break tap"
+        );
+        let (app, s) = sprites("(120){4}1x,E");
+        assert!(
+            uses(&s, &app.world().resource::<NoteAssets>().tap_ex),
+            "ex tap"
+        );
+        let (app, s) = sprites("(120){4}1-5[8:1]/5-1[8:1],E");
+        assert!(
+            uses(&s, &app.world().resource::<NoteAssets>().slide[1]),
+            "each slide"
+        );
+        assert!(
+            uses(&s, &app.world().resource::<NoteAssets>().star_each),
+            "each star"
+        );
+        let (app, s) = sprites("(120){4}1-5[8:1]*-3[8:1],E");
+        assert!(
+            uses(&s, &app.world().resource::<NoteAssets>().star_double),
+            "double star"
+        );
+        let (app, s) = sprites("(120){4}1h[4:1]/5h[4:1],E");
+        assert!(
+            uses(&s, &app.world().resource::<NoteAssets>().hold_each),
+            "each hold"
+        );
+    }
+
+    #[test]
+    fn note_sizes_follow_majdataplay_scale() {
+        let size_of = |chart: &str, pick: fn(&NoteAssets) -> Handle<Image>| {
+            let (app, s) = sprites(chart);
+            let image = pick(app.world().resource::<NoteAssets>());
+            s.iter()
+                .find(|s| s.image == image)
+                .and_then(|s| s.custom_size)
+        };
+        assert_eq!(
+            size_of("(120){4}1,E", |a| a.tap.clone()),
+            Some(sprite_px("skin/TapSkins/tap.png"))
+        );
+        assert_eq!(
+            size_of("(120){4}1$,E", |a| a.star.clone()),
+            Some(sprite_px("skin/StarSkins/star.png"))
+        );
+        assert_eq!(
+            size_of("(120){4}B1,E", |a| a.touch_triangle.clone()),
+            Some(sprite_px("skin/TouchSkins/touch.png"))
+        );
+    }
+
+    /// Holds keep their head / body / tail, cut out of one MajdataPlay image:
+    /// 58 px caps, the middle stretched.
+    #[test]
+    fn a_hold_is_cut_from_one_image() {
+        let mut app = app_with_chart("(120){4}1h[4:1],E");
+        app.update();
+        app.update();
+        let hold = app.world().resource::<NoteAssets>().hold.clone();
+        let mut parts = app.world_mut().query::<(&Sprite, &HoldNoteElement)>();
+        let mut heights = Vec::new();
+        for (sprite, element) in parts.iter(app.world()) {
+            if matches!(
+                element,
+                HoldNoteElement::Head | HoldNoteElement::Body | HoldNoteElement::Tail
+            ) {
+                assert_eq!(sprite.image, hold);
+                heights.push((
+                    format!("{element:?}"),
+                    sprite.rect.expect("a rect").height(),
+                ));
+            }
+        }
+        heights.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(
+            heights,
+            vec![
+                ("Body".into(), 84.0),
+                ("Head".into(), 58.0),
+                ("Tail".into(), 58.0)
+            ]
+        );
     }
 }

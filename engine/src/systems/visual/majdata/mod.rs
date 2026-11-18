@@ -6,5 +6,5 @@
 mod layouts;
 mod shapes;
 
-pub use layouts::{SlideLayouts, sprite_px};
+pub use layouts::{SKIN_SCALE, SlideLayouts, sprite_pixels, sprite_px};
 pub use shapes::{place, prefab_for, shape_end};

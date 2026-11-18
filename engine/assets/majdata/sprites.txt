@@ -13,6 +13,12 @@ skin/HoldSkins/hold_each_on.png 122 200
 skin/HoldSkins/hold_ex.png 122 200
 skin/HoldSkins/hold_off.png 122 200
 skin/HoldSkins/hold_on.png 122 200
+skin/NoteGuideSkins/Break.png 1080 1080
+skin/NoteGuideSkins/Each.png 1080 1080
+skin/NoteGuideSkins/Hold_Break_End.png 64 64
+skin/NoteGuideSkins/Hold_Each_End.png 64 64
+skin/NoteGuideSkins/Hold_End.png 64 64
+skin/NoteGuideSkins/Normal.png 1080 1080
 skin/SlideSkins/slide.png 70 94
 skin/SlideSkins/slide_break.png 70 94
 skin/SlideSkins/slide_each.png 70 94

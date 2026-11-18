@@ -2,8 +2,8 @@
 
 **Status:** approved 2026-11-18 (after a builder check); piece 1 done
 ([`plan-1-player-behaviour.md`](plan-1-player-behaviour.md)); piece 2 done
-([`plan-2-timeline-seek.md`](plan-2-timeline-seek.md)); piece 3 planned in
-[`plan-3-majdata-playfield.md`](plan-3-majdata-playfield.md)
+([`plan-2-timeline-seek.md`](plan-2-timeline-seek.md)); piece 3 built
+([`plan-3-majdata-playfield.md`](plan-3-majdata-playfield.md)), its phone frame-rate check pending
 **Milestone:** after v2.0 ships
 **Parent:** none (follows [`frontend-redesign`](../frontend-redesign/spec.md))
 
@@ -154,7 +154,7 @@ agreed to the order).
   - Clicking or dragging either seeks; keyboard: arrows step one measure,
     Page Up/Down ten, Home/End. Disabled until a chart is loaded.
 
-### 3. MajdataPlay playfield — large
+### 3. MajdataPlay playfield — large — **built 2026-11-18; the phone frame-rate check is pending**
 
 - **Extraction script** (`scripts/extract-majdata.*`, run by hand against a
   local MajdataPlay checkout at a pinned commit): copies the needed sprites

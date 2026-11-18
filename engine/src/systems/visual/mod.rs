@@ -31,22 +31,22 @@ pub fn report_sprite_loads(
         return;
     }
 
-    let handles: [(&str, &Handle<Image>); 30] = [
+    let handles: Vec<(&str, &Handle<Image>)> = vec![
         ("tap", &assets.tap),
         ("tap_break", &assets.tap_break),
+        ("tap_each", &assets.tap_each),
         ("tap_ex", &assets.tap_ex),
         ("star", &assets.star),
         ("star_break", &assets.star_break),
+        ("star_each", &assets.star_each),
         ("star_ex", &assets.star_ex),
-        ("hold_head", &assets.hold_head),
-        ("hold_body", &assets.hold_body),
-        ("hold_tail", &assets.hold_tail),
-        ("hold_break_head", &assets.hold_break_head),
-        ("hold_break_body", &assets.hold_break_body),
-        ("hold_break_tail", &assets.hold_break_tail),
-        ("hold_ex_head", &assets.hold_ex_head),
-        ("hold_ex_body", &assets.hold_ex_body),
-        ("hold_ex_tail", &assets.hold_ex_tail),
+        ("star_double", &assets.star_double),
+        ("star_break_double", &assets.star_break_double),
+        ("star_each_double", &assets.star_each_double),
+        ("hold", &assets.hold),
+        ("hold_break", &assets.hold_break),
+        ("hold_each", &assets.hold_each),
+        ("hold_ex", &assets.hold_ex),
         ("hold_end_dot", &assets.hold_end_dot),
         ("normal_halo", &assets.normal_halo),
         ("touch", &assets.touch),
@@ -61,8 +61,10 @@ pub fn report_sprite_loads(
         ("touch_effect_star_1", &assets.touch_effect_stars[1]),
         ("slide", &assets.slide[0]),
         ("hexagon", &assets.hexagon),
+        ("ring", &assets.ring),
         ("halo", &assets.halo),
     ];
+    let count = handles.len();
 
     let mut pending = false;
     for (name, handle) in handles {
@@ -77,7 +79,7 @@ pub fn report_sprite_loads(
     }
 
     if !pending && !*done {
-        info!("all 29 note sprites loaded OK");
+        info!("all {count} note sprites loaded OK");
         *done = true;
     }
 }
