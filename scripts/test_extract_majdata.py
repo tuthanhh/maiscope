@@ -135,5 +135,19 @@ class Pin(unittest.TestCase):
                 self.assertEqual(extract.main(["--src", tmp, "--out", out]), 2)
 
 
+class SkinSource(unittest.TestCase):
+    def test_skin_comes_from_skin_folder(self):
+        """--skin names a skin folder (a MajdataPlay build's Skins/<name>);
+        its files replace the checkout's default skin."""
+        with tempfile.TemporaryDirectory() as skin:
+            os.makedirs(os.path.join(skin, "TapSkins"))
+            with open(os.path.join(skin, "TapSkins", "tap.png"), "wb") as f:
+                f.write(png_bytes(3, 2))
+            self.assertEqual(
+                extract.skin_files(skin),
+                [("TapSkins/tap.png", os.path.join(skin, "TapSkins", "tap.png"))],
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

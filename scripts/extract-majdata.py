@@ -145,6 +145,24 @@ def _head(src):
     return out.stdout.strip()
 
 
+def skin_files(skin):
+    """[(path inside the skin, file)] for the note art the engine draws, from
+    a MajdataPlay skin folder. Mine-note variants are left out: the parser
+    has no mine notes."""
+    files = []
+    for folder in SKIN_FOLDERS:
+        if not os.path.isdir(os.path.join(skin, folder)):
+            continue
+        for name in sorted(os.listdir(os.path.join(skin, folder))):
+            if name.endswith(".png") and "mine" not in name:
+                files.append((f"{folder}/{name}", os.path.join(skin, folder, name)))
+    for name in SKIN_FILES:
+        files.append((name, os.path.join(skin, name)))
+    for name in GUIDE_FILES:
+        files.append((f"NoteGuideSkins/{name}", os.path.join(skin, "NoteGuideSkins", name)))
+    return [(rel, path) for rel, path in files if os.path.exists(path)]
+
+
 def _copy(src_file, out, rel, copied):
     dest = os.path.join(out, rel)
     os.makedirs(os.path.dirname(dest), exist_ok=True)
@@ -158,6 +176,11 @@ def main(argv=None):
     parser.add_argument("--src", required=True, help="MajdataPlay checkout at PIN")
     parser.add_argument(
         "--out", default=os.path.join(here, "..", "engine", "assets", "majdata")
+    )
+    parser.add_argument(
+        "--skin",
+        help="a MajdataPlay skin folder for the note art (e.g. a build's "
+        "Skins/Deluxe); default: the checkout's Skins/default",
     )
     args = parser.parse_args(argv)
 
@@ -176,15 +199,15 @@ def main(argv=None):
     os.makedirs(out, exist_ok=True)
 
     copied = []
-    skin = os.path.join(args.src, SKIN)
-    for folder in SKIN_FOLDERS:
-        for name in sorted(os.listdir(os.path.join(skin, folder))):
-            if name.endswith(".png"):
-                _copy(os.path.join(skin, folder, name), out, f"skin/{folder}/{name}", copied)
-    for name in SKIN_FILES:
-        _copy(os.path.join(skin, name), out, f"skin/{name}", copied)
-    for name in GUIDE_FILES:
-        _copy(os.path.join(skin, "NoteGuideSkins", name), out, f"skin/NoteGuideSkins/{name}", copied)
+    skin = os.path.abspath(args.skin) if args.skin else os.path.join(args.src, SKIN)
+    files = skin_files(skin)
+    wanted = {rel for rel, _ in skin_files(os.path.join(args.src, SKIN))}
+    lacking = sorted(wanted - {rel for rel, _ in files})
+    if lacking:
+        print(f"the skin lacks {', '.join(lacking)}", file=sys.stderr)
+        return 2
+    for rel, path in files:
+        _copy(path, out, f"skin/{rel}", copied)
     for name in EFFECT_FILES:
         _copy(os.path.join(args.src, EFFECTS, name), out, f"effects/{name}", copied)
 
@@ -211,18 +234,29 @@ def main(argv=None):
     with open(os.path.join(out, "SOURCE.md"), "w", encoding="utf-8") as f:
         f.write(
             "# MajdataPlay art and slide layouts\n\n"
-            "Everything in this folder comes from "
+            "The slide layouts and the effects come from "
             "[MajdataPlay](https://github.com/TeamMajdata/MajdataPlay) at commit\n"
-            f"`{PIN}`, and is licensed under the GPL-3.0 (see `LICENSE` and\n"
-            "`LICENSE-THIRD-PARTY` at the repository root). The skin is likely derived\n"
-            "from SEGA's maimai art; see the SEGA notice in `LICENSE-THIRD-PARTY`.\n\n"
-            "- `skin/`: from `Assets/StreamingAssets/Skins/default`, copied unchanged\n"
+            f"`{PIN}`, licensed under the GPL-3.0 (see `LICENSE` and\n"
+            "`LICENSE-THIRD-PARTY` at the repository root).\n\n"
+            + (
+                "- `skin/`: from `Assets/StreamingAssets/Skins/default` at that commit,\n"
+                "  copied unchanged. It is likely derived from SEGA's maimai art; see the\n"
+                "  SEGA notice in `LICENSE-THIRD-PARTY`.\n"
+                if not args.skin
+                else f"- `skin/`: the `{os.path.basename(skin)}` skin shipped with MajdataPlay's\n"
+                "  Windows build, copied unchanged. It is not part of MajdataPlay's source\n"
+                "  and carries no licence of its own; it looks like SEGA's maimai DX art.\n"
+                "  See the SEGA notice in `LICENSE-THIRD-PARTY`.\n"
+            )
+            + 
             "- `effects/`: from `Assets/Sprites/Game/EffectSprites`, copied unchanged\n"
             "- `slides.txt`: each prefab in `Assets/Prefabs/Game/Slides`, its arrows'\n"
             "  positions and angles in draw order\n"
             "- `sprites.txt`: each PNG's pixel size\n\n"
             "Do not edit these files. To regenerate them, check out that commit and run\n"
-            "`python3 scripts/extract-majdata.py --src <checkout>`.\n"
+            "`python3 scripts/extract-majdata.py --src <checkout>`"
+            + (f" `--skin <MajdataPlay build>/Skins/{os.path.basename(skin)}`" if args.skin else "")
+            + ".\n"
         )
 
     print(f"{len(copied)} images, {count} slide prefabs -> {out}")

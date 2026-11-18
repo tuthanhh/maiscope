@@ -119,9 +119,10 @@ mod tests {
     #[test]
     fn sprite_sizes_follow_majdataplay_scale() {
         let close = |a: Vec2, b: Vec2| (a - b).length() < 1e-3;
+        // The Deluxe skin's tap is 180 px, its transparent margin included.
         assert!(close(
             sprite_px("skin/TapSkins/tap.png"),
-            Vec2::splat(122.0 * RADIUS / 480.0)
+            Vec2::splat(180.0 * RADIUS / 480.0)
         ));
         assert!(close(
             sprite_px("skin/SlideSkins/slide.png"),

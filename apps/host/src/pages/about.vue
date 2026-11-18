@@ -128,7 +128,8 @@ usePageTitle(() => ({ title: t("page-title.about") as string }));
                     rel="noopener"
                     >MajdataPlay</a
                 >
-                － the visualizer's note art and slide layouts (GPL-3.0).
+                － the visualizer's slide layouts and hit effects (GPL-3.0), and
+                its "Deluxe" note skin.
             </li>
             <li>
                 <a href="https://maimai.sega.jp/" target="_blank" rel="noopener"
