@@ -77,6 +77,8 @@ page:
     chartText: 채보 텍스트
     fullscreen: '전체 화면'
     exitFullscreen: '전체 화면 종료'
+    timeline: '타임라인'
+    measure: '마디 {n}'
     share: 공유
     otherDifficulties: 다른 난이도
     notes: 노트 {count}개

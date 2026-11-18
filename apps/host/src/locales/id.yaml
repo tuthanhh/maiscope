@@ -77,6 +77,8 @@ page:
     chartText: Teks chart
     fullscreen: 'Layar penuh'
     exitFullscreen: 'Keluar dari layar penuh'
+    timeline: 'Lini masa'
+    measure: 'Birama {n}'
     share: Bagikan
     otherDifficulties: Tingkat kesulitan lain
     notes: '{count} not'

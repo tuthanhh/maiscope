@@ -1,8 +1,8 @@
 # Spec — Visualizer: a MajdataPlay playfield
 
 **Status:** approved 2026-11-18 (after a builder check); piece 1 done
-([`plan-1-player-behaviour.md`](plan-1-player-behaviour.md)); piece 2 planned in
-[`plan-2-timeline-seek.md`](plan-2-timeline-seek.md)
+([`plan-1-player-behaviour.md`](plan-1-player-behaviour.md)); piece 2 done
+([`plan-2-timeline-seek.md`](plan-2-timeline-seek.md))
 **Milestone:** after v2.0 ships
 **Parent:** none (follows [`frontend-redesign`](../frontend-redesign/spec.md))
 
@@ -125,7 +125,7 @@ agreed to the order).
   missing for non-video elements on iPhone Safari; there the toggle is
   hidden.
 
-### 2. Timeline and seeking — medium
+### 2. Timeline and seeking — medium — **done 2026-11-18**
 
 - **`Seek(t)`** mailbox command: sets the chart clock to `t`, despawns
   everything on screen, finds the next note to spawn by binary search over
