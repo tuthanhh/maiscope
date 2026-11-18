@@ -50,10 +50,18 @@ requests time out after 15s, and a malformed token body is not stored.
 explicitly, rather than by its no-404.html default. The delete dialog has
 its own failure message, closes if the session was refused meanwhile, and
 returns focus to the account trigger; the avatar is fetched with
-`referrerpolicy="no-referrer"`. Open: a Content-Security-Policy, the
-remaining mitigation for a refresh token in `localStorage` — it must allow
-the wasm engine, the cover CDN and the per-environment API origin, so it is
-its own change. Accepted: the code reaches Pages' access log on GitHub's
+`referrerpolicy="no-referrer"`. Deferred: a Content-Security-Policy, the
+remaining mitigation for a refresh token in `localStorage` — recorded in
+production-v2's "Accepted, not solved", to revisit with 05. When it is
+built: inject a `<meta>` from a build-only Vite plugin (`apply: "build"`,
+the dev server's HMR script would be blocked); `script-src 'self'
+'wasm-unsafe-eval'`, `worker-src 'self' blob:` (the engine glue makes blob
+workers), `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com`,
+`font-src https://fonts.gstatic.com`, `img-src 'self' data: blob:` plus the
+cover CDN and `avatars.githubusercontent.com`, `connect-src 'self'` plus the
+API origin (from `VITE_API_BASE_URL`) and the cover CDN, `object-src
+'none'`; verify with `pnpm preview --port 1420` (the API's CORS allows only
+that port) and the console. Accepted: the code reaches Pages' access log on GitHub's
 first request (a redirect URI cannot carry a fragment); it is single-use
 and short-lived.
 
