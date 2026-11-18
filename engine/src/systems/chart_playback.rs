@@ -104,6 +104,16 @@ impl ChartPlayback {
         self.is_playing = true;
     }
 
+    /// Forget the loaded chart: no events, clock at zero, not playing. The
+    /// chart and note speeds are the user's settings and survive. Notes on
+    /// screen and the music are `apply_commands`' to clear (`Unload`).
+    pub fn unload(&mut self) {
+        self.timed_events.clear();
+        self.next_spawn_index = 0;
+        self.elapsed_time = 0.0;
+        self.is_playing = false;
+    }
+
     pub fn pause(&mut self) {
         self.is_playing = false;
     }
@@ -221,6 +231,21 @@ mod tests {
             chart.visual_delta(Duration::from_millis(16)),
             Duration::ZERO
         );
+    }
+
+    #[test]
+    fn unload_empties_the_chart_and_keeps_the_user_speeds() {
+        let mut chart = ChartPlayback::default();
+        chart.load_chart(simai::parse_chart("(120){4}1,2,3,4,E").unwrap());
+        chart.set_chart_speed(1.5);
+        chart.set_note_speed(8.0);
+        chart.tick(1.0);
+        chart.unload();
+        assert!(chart.timed_events().is_empty());
+        assert_eq!(chart.elapsed_time(), 0.0);
+        assert!(!chart.is_playing());
+        assert_eq!(chart.chart_speed(), 1.5);
+        assert_eq!(chart.note_speed(), 8.0);
     }
 
     #[test]

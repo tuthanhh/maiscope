@@ -45,6 +45,9 @@ pub enum EngineCommand {
     Pause,
     Resume,
     Restart,
+    /// Clear the chart, every note on screen and the music
+    /// (visualizer-majdata 02): the Play page sends it when it is left.
+    Unload,
     SetSongSpeed(f32),
     SetNoteSpeed(f32),
     /// Diagnostics: MSAA sample count on the main camera (1 = off, 2, 4, 8).
@@ -80,6 +83,12 @@ pub fn resume() {
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn restart() {
     push_command(EngineCommand::Restart);
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn unload() {
+    push_command(EngineCommand::Unload);
 }
 
 /// Set the playback speed multiplier (affects both the audio rate and the chart

@@ -95,6 +95,7 @@ pub fn apply_commands(
     camera: Query<Entity, With<crate::plugins::camera::MainCamera>>,
     mut window: Query<&mut Window, With<bevy::window::PrimaryWindow>>,
     mut audio_lead: ResMut<crate::systems::audio::AudioLead>,
+    mut guide_scheduler: ResMut<crate::systems::audio::GuideScheduler>,
 ) {
     for cmd in crate::wasm_bridge::take_commands() {
         match cmd {
@@ -124,6 +125,17 @@ pub fn apply_commands(
                 chart.set_chart_speed(rate);
             }
             crate::wasm_bridge::EngineCommand::SetNoteSpeed(speed) => chart.set_note_speed(speed),
+            crate::wasm_bridge::EngineCommand::Unload => {
+                // Leaving the Play page: nothing of this chart may outlive it.
+                for entity in &notes {
+                    commands.entity(entity).despawn();
+                }
+                chart.unload();
+                guide_scheduler.reset();
+                bgm_channel.stop();
+                commands.remove_resource::<crate::systems::audio::BgmInstance>();
+                commands.remove_resource::<crate::systems::audio::BgmSource>();
+            }
             crate::wasm_bridge::EngineCommand::Restart => {
                 // Rewind the audio (the clock anchor) and clear every spawned note.
                 if let Some(instance) = bgm_instance
