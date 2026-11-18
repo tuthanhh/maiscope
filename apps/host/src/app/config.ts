@@ -1,22 +1,15 @@
 export interface AppConfig {
   siteTitle: string;
-  siteUrl: string;
-  siteDescriptionEn: string;
-  siteDescriptionJp: string;
   siteReportUrl: string;
   sourceCodeUrl: string;
-  indexAccessCounterUrl?: string;
-  [key: string]: unknown;
 }
 
+// The menu's external links and About point here: this project's repository,
+// not the upstream arcade-songs it was ported from (About credits that).
 const config: AppConfig = {
   siteTitle: "maiscope",
-  siteUrl: "https://arcade-songs.zetaraku.dev/",
-  siteDescriptionEn: "A song browser of various arcade games including ______.",
-  siteDescriptionJp: "______を含む様々なアーケードゲームの楽曲ブラウザ。",
-  siteReportUrl: "https://github.com/zetaraku/arcade-songs/issues",
-  sourceCodeUrl: "https://github.com/zetaraku/arcade-songs",
-  indexAccessCounterUrl: undefined,
+  siteReportUrl: "https://github.com/tuthanhh/maiscope/issues",
+  sourceCodeUrl: "https://github.com/tuthanhh/maiscope",
 };
 
 export default config;

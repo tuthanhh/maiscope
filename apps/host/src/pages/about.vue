@@ -71,21 +71,21 @@ usePageTitle(() => ({ title: t("page-title.about") as string }));
         <ul class="mv-about-list">
             <li>
                 <a
-                    href="https://github.com/tuthanhh/maiscope-frontend"
+                    href="https://github.com/tuthanhh/maiscope"
                     target="_blank"
                     rel="noopener"
-                    >tuthanhh/maiscope-frontend</a
+                    >tuthanhh/maiscope</a
                 >
                 － this project.
                 <a
-                    href="https://github.com/tuthanhh/maiscope-frontend/issues/new?labels=bug"
+                    href="https://github.com/tuthanhh/maiscope/issues/new?labels=bug"
                     target="_blank"
                     rel="noopener"
                     >Report a bug</a
                 >
                 ·
                 <a
-                    href="https://github.com/tuthanhh/maiscope-frontend/issues/new?labels=enhancement"
+                    href="https://github.com/tuthanhh/maiscope/issues/new?labels=enhancement"
                     target="_blank"
                     rel="noopener"
                     >Request a feature</a
