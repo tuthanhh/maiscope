@@ -1,6 +1,13 @@
 import { ref, type Ref } from "vue";
 import type { LocationQuery } from "vue-router";
-import { fetchChart, fetchSheetInfo, loadChart, pause, setSpeed } from "~/composables/useEngine";
+import {
+    fetchChart,
+    fetchSheetInfo,
+    loadChart,
+    pause,
+    setNoteSpeed,
+    setSpeed,
+} from "~/composables/useEngine";
 import type { Playback } from "~/composables/usePlayback";
 import { resumeAudio } from "~/utils/audioUnlock";
 import { sheetKey } from "~/utils/data";
@@ -52,6 +59,14 @@ export default function useChartLoader(playback: Playback): {
         disposed = true;
     }
 
+    // The engine keeps its speeds across charts and pages, while the sliders
+    // start fresh with each page: after every load, the engine takes what the
+    // sliders show.
+    function syncSpeeds(): void {
+        setSpeed(playback.speed.value);
+        setNoteSpeed(playback.noteSpeed.value);
+    }
+
     // Deep-link: /visualizer?song=..&type=..&difficulty=.. (e.g. from the sheet
     // dialog) auto-fetches that chart from the backend.
     async function autoLoad(query: LocationQuery): Promise<void> {
@@ -99,7 +114,7 @@ export default function useChartLoader(playback: Playback): {
                 pause();
                 playback.markLoaded(false);
             }
-            if (playback.speed.value !== 1) setSpeed(playback.speed.value);
+            syncSpeeds();
         } catch (err: unknown) {
             if (key === lastKey) errorMsg.value = err instanceof Error ? err.message : String(err);
         } finally {
@@ -121,7 +136,7 @@ export default function useChartLoader(playback: Playback): {
             // the link itself changes, never over pasted text.
             sheetInfo.value = null; // pasted chart has no catalog metadata
             resumeAudio(); // this click is a gesture — unlock sound
-            if (playback.speed.value !== 1) setSpeed(playback.speed.value);
+            syncSpeeds();
         } catch (err: unknown) {
             errorMsg.value = err instanceof Error ? err.message : String(err);
         } finally {

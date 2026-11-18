@@ -196,8 +196,14 @@ pub fn update_movement(
     let note_speed = chart.note_speed();
     let chart_speed = chart.chart_speed();
     let move_duration = MOVING as f32 / (chart_speed * note_speed);
-    // Paused, nothing on screen advances (visualizer-majdata 01).
+    // Paused, nothing on screen advances (visualizer-majdata 01). Nothing runs
+    // either: each phase's first-frame setup (a hold's halo, a touch's burst)
+    // keys on `timer.elapsed().is_zero()`, which stays true while the timers
+    // stand still, and would re-run on every paused frame.
     let dt = chart.visual_delta(time.delta());
+    if dt.is_zero() {
+        return;
+    }
 
     for (
         entity,
@@ -457,5 +463,53 @@ pub fn update_movement(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hold_kind() -> NoteKind {
+        simai::parse_chart("(120){4}1h[4:1],E")
+            .unwrap()
+            .into_iter()
+            .find_map(|event| match event {
+                simai::ChartEvent::NoteGroup(notes) => Some(notes[0].kind.clone()),
+                _ => None,
+            })
+            .expect("a hold in the chart")
+    }
+
+    /// A hold caught by pause on the frame it starts holding: its first-frame
+    /// setup (the halo) must run once, not on every paused frame — `dt` is
+    /// zero while paused, so `timer.elapsed()` stays zero (final review,
+    /// visualizer-majdata piece 1).
+    #[test]
+    fn a_paused_hold_spawns_its_halo_once() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<Image>()
+            .init_resource::<NoteAssets>()
+            .init_resource::<ButtonLayout>()
+            .init_resource::<ChartPlayback>()
+            .add_systems(Update, update_movement);
+        app.world_mut().resource_mut::<ChartPlayback>().pause();
+        app.world_mut().spawn((
+            Sprite::default(),
+            Transform::default(),
+            NoteTiming::Holding(Timer::from_seconds(1.0, TimerMode::Once)),
+            hold_kind(),
+            Visibility::default(),
+        ));
+        for _ in 0..5 {
+            app.update();
+        }
+        let halos = app
+            .world_mut()
+            .query_filtered::<(), With<HoldHalo>>()
+            .iter(app.world())
+            .count();
+        assert!(halos <= 1, "{halos} halos spawned while paused");
     }
 }

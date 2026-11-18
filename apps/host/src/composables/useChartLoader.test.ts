@@ -11,6 +11,7 @@ const engine = vi.hoisted(() => ({
   loadChart: vi.fn(),
   pause: vi.fn(),
   setSpeed: vi.fn(),
+  setNoteSpeed: vi.fn(),
 }));
 vi.mock("~/composables/useEngine", () => engine);
 vi.mock("~/utils/audioUnlock", () => ({ resumeAudio: vi.fn() }));
@@ -21,6 +22,7 @@ import type { Playback } from "./usePlayback";
 function fakePlayback(): Playback {
   return {
     speed: ref(1),
+    noteSpeed: ref(8),
     markLoaded: vi.fn(),
   } as unknown as Playback;
 }
@@ -40,6 +42,17 @@ describe("useChartLoader", () => {
     resolveChart("(120){4}1,E");
     await pending;
     expect(engine.loadChart).toHaveBeenCalledWith("(120){4}1,E");
+  });
+
+  // The engine keeps its speeds across charts and pages; the sliders start
+  // fresh with each page. Whatever they show is what the new chart plays at.
+  it("hands the engine the speeds the sliders show", async () => {
+    const loader = useChartLoader(fakePlayback());
+    const pending = loader.autoLoad({ song: "s", type: "dx", difficulty: "master" });
+    resolveChart("(120){4}1,E");
+    await pending;
+    expect(engine.setSpeed).toHaveBeenCalledWith(1);
+    expect(engine.setNoteSpeed).toHaveBeenCalledWith(8);
   });
 
   it("drops a chart that arrives after the page has gone", async () => {
