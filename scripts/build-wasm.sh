@@ -48,5 +48,10 @@ echo ">> sync sprites -> $ASSETS_OUT/sprites"
 rm -rf "$ASSETS_OUT/sprites"
 mkdir -p "$ASSETS_OUT"
 cp -R "$ENGINE_DIR/assets/sprites" "$ASSETS_OUT/sprites"
+# MajdataPlay's art (visualizer-majdata 12); the text layouts are embedded at
+# compile time, but copying the folder whole keeps its SOURCE.md beside it.
+echo ">> sync majdata -> $ASSETS_OUT/majdata"
+rm -rf "$ASSETS_OUT/majdata"
+cp -R "$ENGINE_DIR/assets/majdata" "$ASSETS_OUT/majdata"
 
 echo ">> done. host imports from ~/wasm/engine.js"

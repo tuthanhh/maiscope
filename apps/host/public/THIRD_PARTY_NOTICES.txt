@@ -1,4 +1,12 @@
-maiscope ships parts of the following third-party works.
+maiscope is free software under the GNU General Public License, version 3 or
+(at your option) any later version. It ships parts of the following
+third-party works.
+
+MajdataPlay (https://github.com/TeamMajdata/MajdataPlay) — the visualizer's
+note art, hit effects and slide layouts, from commit
+158c78a1bfd2793d9adba33d476c3b37d64599fc. Licensed under the GNU General
+Public License, version 3. Copyright (c) the MajdataPlay contributors. The
+skin is likely derived from maimai art by SEGA, which retains its rights.
 
 Lucide (https://lucide.dev) — icon shapes in src/components/ui/icons.ts,
 from lucide-static 0.460.0.

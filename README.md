@@ -48,6 +48,9 @@ See [docs/guides/local-setup.md](docs/guides/local-setup.md).
 
 ## License
 
-MIT — see [LICENSE](./LICENSE). Third-party licenses (including the upstream
-`zetaraku/arcade-songs` MIT notice this frontend is ported from) are in
-[LICENSE-THIRD-PARTY](./LICENSE-THIRD-PARTY).
+GPL-3.0-or-later — see [LICENSE](./LICENSE) and
+[ADR-0027](docs/adr/0027-maiscope-is-gpl-3.md). The visualizer's art and slide
+layouts come from [MajdataPlay](https://github.com/TeamMajdata/MajdataPlay)
+(GPL-3.0). Third-party licenses (MajdataPlay, the upstream
+`zetaraku/arcade-songs` MIT notice this frontend is ported from, and the SEGA
+notice) are in [LICENSE-THIRD-PARTY](./LICENSE-THIRD-PARTY).

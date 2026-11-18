@@ -2,6 +2,7 @@
 name = "simai"
 version = "0.1.0"
 edition = "2024"
+license = "GPL-3.0-or-later"
 description = "simai chart parser, free of Bevy so the server can link it"
 
 [dependencies]
