@@ -2,9 +2,26 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- The maiscope logo (src/assets/brand/logo.svg); the .ico for browsers
+         without SVG favicons. Every PNG in public/ is rendered from it, and favicon.svg is a copy of
+         it whose handle follows the browser's theme: re-render both when the
+         logo changes, and bump ?v= here and in vite.config.ts's manifest so
+         browsers and installed apps that cached the old icon fetch the new. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2" sizes="48x48" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>maiscope</title>
+    <!-- Space Grotesk (brand, headings, titles), Inter (body) and JetBrains
+         Mono (labels, numbers): see
+         docs/reference/design-direction.md, "Type families". A <link> rather
+         than a CSS @import, which browsers ignore unless it leads the sheet. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Space+Grotesk:wght@600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+    />
   </head>
 
   <body>

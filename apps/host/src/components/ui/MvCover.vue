@@ -2,9 +2,9 @@
 import { computed } from "vue";
 import MvJacket from "./MvJacket.vue";
 
-// Cover art with a deterministic generative fallback. Wherever a song/sheet
-// jacket is shown (browse cards & rows, the sheet dialog) the real cover →
-// generative jacket fallback and the seed derivation live here, once.
+// Cover art with a deterministic generative fallback. Wherever a jacket is
+// shown (cards, the song modal, the chart page) the real cover → generative
+// jacket fallback and the seed derivation live here, once.
 const props = defineProps<{
   item: { imageUrl?: string; title?: string; artist?: string };
 }>();

@@ -59,6 +59,13 @@ Type families:
 |---|---|
 | `--f-sans` | `Inter, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", "Noto Sans CJK JP", "Apple SD Gothic Neo", "Malgun Gothic", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif` |
 | `--f-mono` | `"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace` |
+| `--f-display` | `"Space Grotesk"`, then the same CJK system faces and `system-ui` as `--f-sans` |
+
+`--f-display` (2026-11-18, `frontend-redesign` 15) gives the brand, the
+`heading`, `title` and `display` roles and the card title a face with more
+character than Inter, where it is large or short enough to stay easy to
+read; body text, controls and figures keep Inter and JetBrains Mono. Like
+Inter it styles Latin only — a Japanese title shows in the system CJK face.
 
 Inter ships as one Latin-subset variable file; the CJK names are system
 fonts and nothing is downloaded for them. The `lang` attribute on `<html>`
@@ -96,6 +103,7 @@ scrim.
 | `--line-strong` | `--n-300` | `--n-700` | Input borders, focused hairline |
 | `--inverse-bg` | `--n-900` | `--n-100` | Primary button, active chip |
 | `--inverse-fg` | `--n-0` | `--n-1000` | Text on inverse |
+| `--inverse-hover` | `--n-700` | `--n-300` | Primary button hover and active |
 | `--scrim` | `rgb(255 255 255 / .7)` | `rgb(0 0 0 / .72)` | Behind modal and drawer |
 | `--focus` | `--fg` | `--fg` | Focus outline |
 | `--danger-fg` | `--n-900` | `--n-100` | Error text; errors are not red, they are framed |
@@ -124,14 +132,15 @@ Seven roles replace the fourteen sizes in use today.
 | `meta` | mono | 12 / 16 | 400 | 0 | as is | Levels, BPM, note counts, dates, designer line, pager |
 | `body` | sans | 14 / 21 | 400 | 0 | as is | Prose, card artist, inputs, buttons |
 | `strong` | sans | 14 / 21 | 600 | 0 | as is | Card title, table song title |
-| `heading` | sans | 18 / 24 | 600 | -0.01em | as is | Page and drawer headings |
-| `title` | sans | 24 / 28 | 600 | -0.015em | as is | Modal and chart page title |
-| `display` | sans | 48 / 48 | 700 | -0.02em | as is | Home brand only |
+| `heading` | display | 18 / 24 | 600 | -0.01em | as is | Page and drawer headings, Home subtitle |
+| `title` | display | 24 / 28 | 600 | -0.015em | as is | Modal and chart page title |
+| `display` | display | 72 / 72 | 700 | -0.03em | as is | Home brand only |
 
-On phones `title` drops to 20 and `display` to 36; nothing else changes.
+The card title is `strong` set in the display face. On phones `title`
+drops to 20 and `display` to 52 / 56; nothing else changes.
 Numbers are always mono, including inside sans lines ("174 BPM" sets the
 figure in mono). Japanese text takes `font-feature-settings: "palt"` in
-the sans roles so proportional kana does not gap.
+the sans and display roles so proportional kana does not gap.
 
 ### Component tokens
 
@@ -177,6 +186,23 @@ Only these; everything else reads the semantic layer directly.
 State tables use: default, hover, active or selected, focus, disabled.
 Blank means unchanged from default.
 
+The components live in `apps/host/src/components/ui/`, one `Mv*` file each.
+Their props follow one naming rule:
+
+- **`label`** is the text that names the component. Where it is drawn
+  (`MvField`, `MvError`) it is visible; where the component has no visible
+  text of its own (an icon `MvButton`, a bare `MvTextInput` or `MvSelect`,
+  `MvPager`, `MvModal` with nothing to point `labelledby` at, a `MvCard`
+  whose text is not enough) it becomes the accessible name.
+- **`<part>Label`** (`prevLabel`, `retryLabel`, `closeLabel`,
+  `bookmarkLabel`) names a control the component draws inside itself.
+- **`diff`** is a difficulty colour: a string, or `null` for none, which
+  draws `--fg`. On `MvChip` alone, leaving it out (`undefined`) means the
+  chip is a filter chip rather than a difficulty chip.
+- **Dialogs** differ on purpose: `MvDrawer` is page state and takes
+  `v-model`; `MvModal` is URL state, so it takes `open` and emits `close`
+  for the owner to turn into a navigation.
+
 ### Button
 
 Four kinds. Height `--control-h`, padding `0 var(--control-px)`, radius
@@ -214,6 +240,15 @@ A `label` above a control, `--s-1` between, `--s-4` below the control.
 Controls inside: text input, select, textarea, chip row, file picker.
 Help or error text under the control in `meta`, `--fg-muted` for help,
 `--fg` for error.
+
+### Combobox
+
+A text input over a list of known values (`MvCombobox`): Browse's title
+search and the drawer's Artist. Focus or a click drops the whole list open, as a select would;
+typing narrows it, names that start with the text first; arrows and Enter
+choose, Escape closes the list and not the dialog around it. Free text
+stays valid. The list is `--bg` with a `--line-strong` hairline, the active
+row on `--bg-panel`, at most 200 rows with a line asking for more typing.
 
 ### Text input, select, textarea
 
@@ -278,8 +313,11 @@ shared and so Back closes it.
 
 ### Drawer
 
-Filters. Width `--drawer-w` from the right on desktop, full width from the
-bottom on phones, `--bg-panel`, hairline edge, over `--scrim`. Heading in
+Filters. On desktop a dialog floating in the middle of the screen,
+`--modal-w` wide and at most 80vh, scrolling inside, with a hairline border
+and `--r` corners; on phones full width from the bottom. `--bg-panel`, over
+`--scrim`. (Until 2026-11-18 it was a `--drawer-w` panel against the right
+edge; the maintainer preferred it centred, `frontend-redesign` 16.) Heading in
 `heading`, a Reset text button, fields stacked, no footer. Applying is
 live; there is no Apply button.
 
@@ -316,9 +354,12 @@ above. The bottom bar hides while the engine canvas is in view.
 
 ### Cover and jacket, loading
 
-A jacket that has not loaded shows `--bg-sunken`; no spinner. The page
-loading overlay is `--scrim` with a single `label` reading LOADING,
-shown only on first launch without a cached Catalog.
+A jacket that has not loaded shows `--bg-sunken`; no spinner. There is no
+page loading overlay: Browse, the one screen that needs the Catalog, shows
+"Loading data…" in place of its empty state on first launch without a
+cached Catalog. The chart page and a shared song link paint from their own
+fetches and the reference tables, which an app-wide overlay would have
+hidden (frontend-redesign 12).
 
 ## Screens
 
@@ -347,10 +388,14 @@ shown only on first launch without a cached Catalog.
 ```
 
 Surface: search, difficulty chips, level range, result count, My list
-toggle, the Filters button. Drawer: category, version, designer, region
+toggle, the grid/list toggle, the Filters button. Drawer: category, version, designer, region
 and its override toggle, type chips, BPM range, exact-match toggles,
 Reset. "Draw a random sheet" becomes a text button in the result line.
-The list view is gone.
+The list view, dropped at first, is back since 2026-11-18 (`frontend-redesign`
+17): rows of a 48px jacket, the title in the display face over the artist,
+type and difficulty in `meta`, the level pill and the bookmark mark; on
+phones type and difficulty sit under the artist. The choice is remembered
+per browser.
 
 ### Song modal
 
@@ -479,9 +524,16 @@ stays, struck through in `--fg-muted`, when the resolved filter is on.
 
 ### Home
 
-Unchanged in structure: brand in `display`, subtitle in `body`
-`--fg-muted`, two buttons, primary for Songs and ghost for Play.
-Community is reached from the bar.
+A picture, then the brand in `display`, the subtitle in `heading`
+`--fg-muted`, and two buttons, primary for Songs and ghost for Play.
+Community is reached from the bar. The picture is the maintainer's
+image when `apps/host/src/assets/home/` holds a `home-hero` file, and the
+maiscope logo otherwise. The logo (`assets/brand/logo.svg`) is the one
+place the shell carries colour besides the difficulty colours: it is the
+brand, drawn by the maintainer. The dark theme uses `logo-dark.svg`, the
+same drawing with a lighter handle. It
+also marks the top bar beside the wordmark and is the favicon and app
+icon.
 
 ## Worked example: browse in the new system
 
@@ -495,8 +547,8 @@ of the existing screens.
 | Filters button | ghost, with a sliders icon, opens the drawer |
 | Difficulty chips | chip row, difficulty form, `--s-2` gaps, wraps on phone |
 | Level range | two selects at 96px with an en dash in `--fg-muted` between, under a LEVEL label |
-| Result line | `label` count at left, My list text button with a star icon and the bookmark count, Draw text button, right |
-| Grid | 2 / 3 / 4 columns, `--card-gap`, cards as specified |
+| Result line | `label` count at left, My list text button with the bookmark icon (the card's mark; one concept, one icon) and the bookmark count, Draw text button, right |
+| Grid | 2 / 3 / 4 columns, `--card-gap`, cards as specified, 24 a page (whole rows at every column count) |
 | Card title | `strong`, ellipsis |
 | Card artist | `body`, `--fg-muted`, ellipsis |
 | Level pill | as specified, `--diff` from the sheet's difficulty |
@@ -530,7 +582,7 @@ Search on YouTube, Sheet data, the list and grid toggle labels.
 |---|---|---|
 | Where style comes from | Sans and mono pairing, monochrome | Mono only; one accent colour |
 | Sans coverage | Latin webfont, system CJK | CJK webfont; system-only stack |
-| Browse view | Grid only | Grid default with list kept |
+| Browse view | Grid default with list kept (reversed 2026-11-18; was grid only) | Grid only |
 | Filters | Search plus difficulty and level on the surface, rest in a drawer | Search only; full panel collapsed |
 | Card tap | Song modal, information first | Song page; two taps on the card |
 | Song page | Removed; modal has a URL | Kept as the comparison table |
@@ -540,3 +592,8 @@ Search on YouTube, Sheet data, the list and grid toggle labels.
 | Upload from the player | Navigate to the one upload page prefilled | A sheet over the player |
 | Token structure | Three layers, state tables | Two layers; plus a style page now |
 | Muted text | Raised to pass AA | Kept as is |
+| Display face (2026-11-18) | Space Grotesk for brand, headings, titles; Inter body | One rounded face everywhere; a serif display face |
+| Brand colour (2026-11-18) | The maintainer's coloured logo, the shell stays monochrome | A monochrome mark |
+| Filters container (2026-11-18) | Centred dialog on desktop, bottom sheet on phones | Edge drawer |
+| Artist filter (2026-11-18) | Combobox: full list on focus, narrowed by typing | `<datalist>` (no open-on-focus, unstyled); plain select of every artist |
+| UI icons (2026-11-18) | Lucide's shapes vendored into `icons.ts` | The prototype's hand-drawn paths; an icon package at runtime |

@@ -45,6 +45,9 @@ before `song-public-id` makes the assumption load-bearing.
 - **The signal already exists.** `SyncStats` computes both `songs_vanished`
   (`catalog_sync.rs:190`) and `songs_inserted`. Their coincidence in one run is
   the rename signature. This feature adds no detection logic, only reporting.
+  (Since `api-rewrite`'s review, a song *returning* — its tombstone cleared —
+  counts as appearing too: a title corrected back to one upstream used before
+  brings its old `song_id` back instead of inserting a new one. ADR-0026.)
 - **Loud, not automatic.** A tripped alarm exits non-zero so GitHub mails a
   failed run. Nothing is merged, renamed or reconciled automatically —
   `api-rewrite` rejected heuristic rematching, and this must not smuggle it back

@@ -15,29 +15,52 @@ visible as an unexpected logout.
 
 **Blocked by:** 02, 03
 
-**Status:** todo
+**Status:** done
 
-- [ ] `POST /auth/refresh` takes `{ "refreshToken": "<opaque>" }`
-- [ ] Presented token hashed and matched against `users.refresh_token_hash`;
+- [x] `POST /auth/refresh` takes `{ "refreshToken": "<opaque>" }`
+- [x] Presented token hashed and matched against `user_sessions.refresh_token_hash`;
       no match → `401`
-- [ ] A token past `users.refresh_token_expires_at` → `401`, even if the hash
+- [x] A token past `user_sessions.expires_at` → `401`, even if the hash
       matches
-- [ ] A user with `deleted_at` set → `401`; reactivation happens through the
+- [x] A user with `deleted_at` set → `401`; reactivation happens through the
       OAuth callback (issue 03), never through refresh
-- [ ] On success: issue a new JWT **and** a new refresh token, replacing the stored
-      hash and setting `refresh_token_expires_at` to **now + 30 days** (rotation)
-- [ ] Response: `{ "token": "<jwt>", "refreshToken": "<opaque>" }`
-- [ ] `GET /auth/me` uses the `AuthUser` extractor and returns
-      `{ id, login, avatarUrl, role }`
-- [ ] `GET /auth/me` without a token, or with an expired one, returns `401`
-- [ ] Both routes registered under `/api` — the version segment is retired in
+- [x] On success: issue a new JWT **and** a new refresh token, replacing that
+      session row's hash and setting its `expires_at` to **now + 30 days**
+      (rotation). Other sessions of the same user are untouched
+- [x] Rotation is one conditional `UPDATE user_sessions … WHERE
+      refresh_token_hash = $old AND expires_at > now()` joined to a live
+      (`deleted_at IS NULL`) user, `RETURNING …`, so of two concurrent refreshes
+      with one token exactly one succeeds; it sets `updated_at = now()`
+- [x] CORS admits the auth routes: `POST` and `DELETE` beside `GET`, and the
+      `Authorization` and `Content-Type` request headers. Today the layer allows
+      `GET` only, so every authenticated cross-origin call fails preflight
+- [x] Response: `{ "token": "<jwt>", "refreshToken": "<opaque>" }`
+- [x] A body that is not `{ "refreshToken": string }` → `400` in the contract's
+      error shape, not axum's plain-text rejection
+- [x] `GET /auth/me` uses the `AuthUser` extractor and returns
+      `{ id, login, avatarUrl, role }`. It reads the `users` row (the JWT
+      carries neither `login` nor `avatarUrl`), so unlike other `AuthUser`
+      routes it sees a deletion at once: a tombstoned row is `401`
+- [x] `GET /auth/me` without a token, or with an expired one, returns `401`
+- [x] Both routes registered under `/api` — the version segment is retired in
       v2 ([`api-rewrite`](../../api-rewrite/spec.md)), and this feature builds on
       the v2 branch, so it never sees `/api/v1`
-- [ ] Tests: refresh rotates and invalidates the previous token; an expired
+- [x] Tests: refresh rotates and invalidates the previous token; an expired
       token is rejected; a deleted user is rejected; `me` returns the
       authenticated user; all reject unauthenticated calls
 
 ## Comments
+
+**2026-11-17 — built.** The rotation is a single `UPDATE … FROM users …
+RETURNING`; under READ COMMITTED a racing second refresh waits on the row
+lock, re-evaluates its `WHERE` against the new hash and matches nothing, so
+no explicit lock is taken. Every refusal is the same
+`401 invalid refresh token`: unknown, expired, rotated and deleted all leave
+the client one move, and distinguishing them would only inform a thief.
+`/me` returns the row's role, not the JWT's. The `#[expect(dead_code)]`
+markers from issue 02 fired as unfulfilled the moment these routes mounted,
+and are gone. The contract's §4 and §6 are updated here rather than left
+for issue 05.
 
 **2026-09-16 — the refresh token stays in client storage, and it is not a
 preference.**
@@ -57,7 +80,7 @@ So the token stays in the response body, the client stores it, and requests use
   CSP on the Pages deploy is the mitigation that remains available.
 - Rotation on every use means a stolen token is usable once and the theft
   surfaces as an unexpected logout — but rotation bounds nothing on its own,
-  which is why `refresh_token_expires_at` exists. **30 days.**
+  which is why `user_sessions.expires_at` exists. **30 days.**
 
 A custom domain (`maiscope.dev` + `api.maiscope.dev`) would make same-site
 cookies possible and is deliberately **optional**: `CORS_ALLOWED_ORIGINS` is
@@ -65,3 +88,20 @@ already config-driven, so adopting one later needs no code change, and buying
 one now would add infra work to the branch whose length is the milestone's
 largest risk.
 
+
+**2026-11-17 — review.** Applied: the concurrency test now forces the
+overlap — it holds the session row's lock until `pg_stat_activity` shows
+both refreshes waiting on it — so it proves the re-check path rather than
+passing on a serial run, and asserts the loser's 401. The refresh commits
+only after the new JWT is encoded (done with issue 03's review). The
+`deleted_at` guard in the rotation reads `users` as of statement start, so a
+deletion committing mid-statement can let one rotation through; that is
+bounded by issue 06's single-transaction deletion, which removes the rotated
+row, and is documented on `rotate_session`. Router tests now cover
+`POST /api/auth/refresh` and an unlisted origin's preflight.
+
+Not changed, by design: rotation has no reuse detection. If a thief rotates
+first, the owner's next refresh fails — the "unexpected logout" the spec
+names as the signal — and the thief's row lives until it expires or the
+account is deleted. Reuse detection would need the old hashes kept per
+session; the spec accepted the simpler rule.

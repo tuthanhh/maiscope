@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT refresh_token_hash FROM user_sessions WHERE user_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "refresh_token_hash",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_sessions",
+            "name": "refresh_token_hash"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f5ae5c6cb4283811533a4ee94f63efe7eb0a41dc437ef15273c74d5b7f67a2f8"
+}

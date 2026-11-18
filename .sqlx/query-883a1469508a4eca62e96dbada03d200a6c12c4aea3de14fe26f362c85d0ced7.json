@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO songs (song_id, title, artist, source_index)\n             VALUES ('upstream-key', 'Title', 'Artist', 0) RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "883a1469508a4eca62e96dbada03d200a6c12c4aea3de14fe26f362c85d0ced7"
+}

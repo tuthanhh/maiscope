@@ -1,16 +1,10 @@
-# maiscope API Contract (v1)
+# maiscope API Contract
 
-Defines the HTTP surface the global backend (`apps/server`, Rust/Axum/Postgres)
-exposes so the frontend (`apps/host/src/`) can drop its static `data.json`
-dependency: live catalog, per-sheet chart text for the visualizer, and a
-revision-probe sync tier. Auth (§4) is phase 2; §5 is superseded by
+The HTTP surface `apps/server` (Rust/Axum/Postgres) exposes to the frontend
+(`apps/host/src/`): the official Catalog and its reference tables, one song,
+one sheet, a sheet's chart text, the freshness probe (§0), and accounts (§4).
+§5 is superseded by
 [ADR-0013](../adr/0013-community-charts-beside-the-catalog.md).
-
-> **This document describes `/api/v1`, which is frozen.** A from-scratch
-> replacement is planned — see [`api-rewrite`](../work/api-rewrite/spec.md).
-> It is developed on a branch and replaces this API at merge; the two never
-> serve simultaneously, and it drops the version segment entirely (`/api/...`).
-> No further behaviour lands here.
 
 Each section carries its implementation status:
 
@@ -19,297 +13,242 @@ Each section carries its implementation status:
   [ROADMAP](../ROADMAP.md).
 
 No audio crosses this API. Audio hosting was cut by
-[ADR-0002](../adr/0002-chart-data-only-no-audio-hosting.md); v1 plays charts on the
-engine's silent, wall-clock-driven path.
+[ADR-0002](../adr/0002-chart-data-only-no-audio-hosting.md); the engine plays
+charts on its silent, wall-clock-driven path.
 
-- Base URL: `/api/v1`
-- Content type: `application/json; charset=utf-8` unless noted (binary endpoints).
-- Cross-tier identity key: **`sheetExpr`** = `` `${songId}|${type}|${difficulty}` ``
-  (see `utils/sheet.ts:computeSheetExpr`). Path-encode it; `|` → `%7C`.
+- Base URL: `/api`, with no version segment (`api-rewrite`; §6 *Versioning*).
+- Content type: `application/json` (UTF-8, as JSON always is) unless noted
+  (the chart text is `text/plain; charset=utf-8`).
+- Identity: a song is its minted UUID; a sheet is that id plus its type and
+  difficulty code — `/api/songs/{id}/sheets/{type}/{code}`
+  ([ADR-0026](../adr/0026-v2-api-carries-codes-and-read-fields-only.md)).
+  Nothing is addressed by a title.
 - Timestamps: RFC 3339 / ISO 8601 UTC.
 - Auth: `Authorization: Bearer <jwt>` where required. Public reads need no token.
 
-The frontend rehydrates a frozen, prototype-linked object graph in
-`utils/data.ts:preprocessData`. **The server returns raw fields only** — it does
-NOT send derived fields (`songNo`, `imageUrl`, `imageUrlM`, `sheetExpr`,
-`notePercents`, `$canonicalSheet`). The client computes those, as it does today.
+**The server returns raw fields a screen reads, nothing else.** The client
+derives `imageUrl` and its graph references (`sheet.song`, `sheet.key`) in
+`utils/data.ts`, and resolves names and colours through the reference tables.
 
 ---
 
-## 1. Catalog — replaces static `data.json`  *(shipped)*
+## 0. Reads — `/api`  *(shipped)*
 
-Fills: `stores/data.ts:loadData`, which previously fetched a flat `data.json`
-from CloudFront.
+Authored from scratch (`api-rewrite`). Payloads carry raw fields that a
+screen reads and nothing else, and name a difficulty by its `code`
+([ADR-0026](../adr/0026-v2-api-carries-codes-and-read-fields-only.md)); the
+client resolves names and colours through the reference tables and derives
+`imageUrl` itself. Errors use the §6 envelope.
 
-### `GET /catalog`
+### `GET /api/healthcheck`
 
-Full snapshot. Shape is **byte-identical to today's `data.json`** so
-`preprocessData` is unchanged. Drives the offline-first first paint.
+`{ "status": "good" }`. Outside every rate limiter.
 
-Query params (all optional):
-| param | type | meaning |
-|-------|------|---------|
-| `region` | string | filter sheets to a region (else all) |
+### `GET /api/reference`
 
-Freshness is negotiated with `If-None-Match`, not a `since` param — see Headers
-below.
+The five reference tables, each in its table's order — the boot fetch that
+lets any screen resolve names without the Catalog
+([ADR-0021](../adr/0021-catalog-snapshot-plus-reference-tables-no-server-search.md)):
 
-Response `200`:
 ```jsonc
-{
-  "songs": [ /* Song[] — see §1.1 */ ],
-  "categories": [{ "category": "string" }],
-  "versions":   [{ "version": "string", "abbr?": "string", "releaseDate?": "YYYY-MM-DD" }],
-  "types":      [{ "type": "string", "name": "string", "abbr?": "string", "iconUrl?": "string", "iconHeight?": 0 }],
-  "difficulties": [{ "difficulty": "string", "name": "string", "color?": "string", "iconUrl?": "string", "iconHeight?": 0 }],
-  "regions":    [{ "region": "string", "name": "string" }],
-  "updateTime": "YYYY-MM-DD"   // bumped whenever any canonical row changes;
-                               // "0000-00-00" before the first catalog sync
-}
-```
-> `difficulties` covers every value a sheet's `difficulty` holds: the five
-> standard rows first, then one row per UTAGE tag (`【協】`, no `color` or icon),
-> ordered by byte value.
-
-> `sheets` is intentionally absent — `preprocessData` derives it from
-> `songs[].sheets`. Keep it that way.
-
-Headers: `ETag: "<sha256(revision:updateTime)>"` — the same value
-`GET /sync/manifest` reports as `catalogHash` (§3). A matching `If-None-Match`
-returns `304 Not Modified` with an empty body, repeating the `ETag` and
-`Cache-Control` (RFC 7232 §4.1 — the client needs them to refresh the
-freshness of the copy it already holds). `Cache-Control: public,
-max-age=3600` — the catalog changes at most once a day, on the scheduled
-`bin/sync_catalog` run, and only when that run found a real difference, so
-an hour of unconditional client-side caching trades a small staleness window
-for skipping the network round-trip entirely within it (`server-restructure`
-issue 07).
-
-### 1.1 `Song` / `Sheet` payload shape
-
-Matches `types/Song.ts` and `types/Sheet.ts` (raw fields, no derived):
-```jsonc
-// Song
-{
-  "songId": "string|null",
-  "category?": "string",
-  "title?": "string",
-  "artist?": "string",
-  "bpm?": 0,
-  "imageName?": "string",        // client resolves to imageUrl via dataSourceUrl
-  "version?": "string",
-  "releaseDate?": "YYYY-MM-DD",
-  "isNew?": false,
-  "isLocked?": false,
-  "comment?": "string",
-  "sheets": [ /* Sheet[] */ ]
-}
-// Sheet
-{
-  "type?": "string",
-  "difficulty?": "string",
-  "level?": "string",
-  "levelValue?": 0,
-  "internalLevel?": "string",
-  "internalLevelValue?": 0,
-  "noteDesigner?": "string",
-  "noteCounts?": { "total": 0, "tap": 0, "hold": 0, "slide": 0, "touch": 0, "break": 0 },
-  "regions?": { "intl": true, "jp": true },
-  "regionOverrides?": { "<region>": { /* partial Sheet */ } },
-  "isSpecial?": false,
-  "hasChart": false    // true if a chart row exists for this sheetExpr
-}
-```
-`hasChart` is the only addition vs. today — it lets `songs.vue`/`song.vue` show a
-"visualize" affordance without a probe request. It is server truth, not derived,
-so it belongs in the payload.
-
-### `GET /songs/{songId}`
-Single song with its sheets (same shape as §1.1). `404` if unknown.
-
-### `GET /sheets/{sheetExpr}`
-Single sheet, `sheetExpr` URL-encoded. `404` if no match — mirrors the client's
-`makeDummySheet` fallback path in `utils/sheet.ts`.
-
-### 1.2 `GET /sheets/search`
-
-Filtered, paginated sheet list — powers the browse page's search/filter UI.
-Unlike `GET /catalog` (full snapshot for the offline-first cache), this
-endpoint does the filtering in SQL and returns only a page of results.
-
-Query params (all optional — omitting all returns the full unfiltered,
-paginated sheet list):
-
-| param | type | meaning |
-|-------|------|---------|
-| `title` | string | substring match on song title (case-insensitive), or exact match if `matchExactTitle` is set |
-| `matchExactTitle` | boolean | see above |
-| `artist` | string | same substring/exact behavior as `title`, on artist |
-| `matchExactArtist` | boolean | see above |
-| `categories` | string[] | matches if any of `sheet.category`'s `\|`-delimited parts is in this list |
-| `versions` | string[] | exact match |
-| `types` | string[] | exact match |
-| `difficulties` | string[] | exact match |
-| `minLevelValue` / `maxLevelValue` | number | inclusive range on level value (or internal level value if `useInternalLevel`) |
-| `useInternalLevel` | boolean | see above |
-| `minBPM` / `maxBPM` | number | inclusive range |
-| `noteDesigners` | string[] | exact match |
-| `region` | string | prefix `!` excludes; otherwise includes. When combined with `useRegionOverride`, the region's override values (level/internalLevel/noteDesigner) substitute for the base sheet's before other filters evaluate. A sheet with a region-specific override counts as belonging to that region even without a separate availability row |
-| `useRegionOverride` | boolean | see above |
-| `page` | integer | 1-indexed, default 1 |
-| `pageSize` | integer | default 22, max 100 |
-
-Response `200`:
-```jsonc
-{
-  "sheets": [ /* Sheet[] — same shape as GET /sheets/{sheetExpr}, see §1.1 */ ],
-  "total": 0   // DEPRECATED, see below
-}
+{ "categories":   [{ "category": "POPS＆アニメ" }],
+  "versions":     [{ "version": "MAGiCAL", "abbr": "MAGiCAL" }],
+  "types":        [{ "type": "dx", "name": "DX（でらっくす）", "abbr": "DX" }],
+  "difficulties": [{ "code": "master", "name": "MASTER", "color": "#9e45e2" },
+                   { "code": "協", "name": "【協】" }],   // no colour: omitted
+  "regions":      [{ "region": "jp", "name": "日本版" }] }
 ```
 
-Headers: `X-Total-Count: <n>` — total matches before pagination, for computing
-page count.
+`abbr` and `color` are omitted when absent, as every absent v2 field is. The
+tables change only with the Catalog, so
+they share its `ETag` (`304` on `If-None-Match`) and its
+`Cache-Control: public, max-age=3600`.
 
-> **Both are sent, permanently.** The header is the convention going forward
-> ([ADR-0015](../adr/0015-pagination-total-as-a-response-header.md)), but v1 is
-> frozen, so the body's `total` stays until v1 is deleted wholesale rather than
-> being removed from a version nobody is evolving. Read the header.
->
-> The header is listed in `Access-Control-Expose-Headers` — it has to be, or a
-> cross-origin browser client cannot read it at all.
+### `GET /api/catalog`
 
-No `superFilter` equivalent — the client-side arbitrary-JS filter was removed
-from the app (never had UI wiring); revisit if/when the app needs it again.
+The whole official library — the snapshot browse filters in memory — with the
+five reference arrays of `GET /api/reference` beside `songs`:
+
+```jsonc
+{ "songs": [{
+    "id": "0195f3c2-…",            // the song's UUID; the only song key
+    "category": "POPS＆アニメ", "title": "…", "artist": "…", "bpm": 150,
+    "imageName": "….png", "version": "MAGiCAL", "releaseDate": "2024-01-02",
+    "isLocked": false, "comment": "…",
+    "sheets": [{
+      "type": "dx", "difficulty": "master",   // difficulties.code; UTAGE: "協"
+      "level": "13+", "levelValue": 13.7,
+      "internalLevel": "13.8", "internalLevelValue": 13.8,
+      "noteDesigner": "…",
+      "noteCounts": { "total": 900, "tap": 500, … },
+      "regions": { "jp": true, "intl": false },
+      "regionOverrides": { "intl": { "level": "13", "levelValue": 13.0 } },
+      "hasChart": true }] }],
+  "categories": […], "versions": […], "types": […],
+  "difficulties": […], "regions": […] }
+```
+
+Songs and sheets are in upstream order; songs and sheets upstream no longer
+lists are not served (they keep their rows and come back if upstream does —
+ADR-0026). Absent fields are omitted, not `null`;
+`hasChart` is always present. Inside `noteCounts` a key may be `null`: the
+count is unknown for that note kind, which a screen shows differently from
+`0`. The songs, sheets, reference tables and `ETag` come from one database
+snapshot, so they always agree. Not sent: `songId`, `isNew`, `isSpecial`,
+`updateTime`, and every field the client derives (`imageUrl`, …). No
+`?region=` parameter: region filtering is the client's. `ETag`, `304` and
+`Cache-Control: public, max-age=3600`.
+
+### `GET /api/songs/{id}`
+
+One song with its sheets, shaped exactly as an element of the Catalog's
+`songs` — the song modal opened by a shared link, without the snapshot.
+`400 bad_request` when `{id}` is not a UUID in its canonical spelling —
+lowercase, hyphenated — so a song has one URL; `404 not_found` for an
+unknown song.
+
+The single reads — this one, the sheet and the chart text — send no
+`ETag` or `Cache-Control`: they are fetched once per screen, and the chart
+text is small. Add a validator if one ever shows in the logs.
+
+### `GET /api/songs/{id}/sheets/{type}/{difficulty}`
+
+One sheet: its own fields as in the Catalog, plus its song under `song`
+(the song's fields, without `sheets`):
+
+```jsonc
+{ "type": "utage", "difficulty": "協", "level": "13?", …, "hasChart": true,
+  "song": { "id": "0195f3c2-…", "title": "…", "artist": "…", … } }
+```
+
+`{type}` is `std`, `dx` or `utage`; `{difficulty}` is `difficulties.code`,
+percent-encoded where it is not ASCII (`/sheets/utage/%E5%8D%94`) and
+case-sensitive (`X` is not `x`). The bracketed name (`【協】`) is not an
+address. `400` for a malformed id; `404` for an unknown song, type or code —
+the lookup is the validation.
+
+### `GET /api/songs/{id}/sheets/{type}/{difficulty}/chart`
+
+The sheet's simai text, `200 text/plain; charset=utf-8`, for the engine.
+Errors are **plain text** too — the engine reads this body as text whatever
+the status — but they are the same errors as everywhere else, with the same
+statuses and the same redaction: `400` malformed id, `404` no such sheet
+(`sheet '…' not found`) or no chart for it (`chart '…' not found`), `501` a
+chart row without inline text, `500` with the body `internal error` and
+nothing more. v1's handler put a database error's own text in the body; this
+one cannot. The body is the message alone — no `error` code — so the `501`
+reads `chart for '…' has no inline simai content`. A refusal raised before
+the route runs — a `429` from the rate limiter — is the §6 JSON envelope like
+any other; a client reading this body should take `message` when the
+response says `application/json`.
+
+### `GET /api/sync/manifest`
+
+The freshness probe: `{ "revision": 42 }`, `0` before the first sync. The
+client compares it with the revision its cached Catalog was fetched under;
+nothing else is sent (v1's `updateTime`, `catalogHash` and `counts` had no
+reader). `Cache-Control: no-cache`, `ETag` and `304` as the Catalog. There is no
+`/api/sync/delta`
+([ADR-0026](../adr/0026-v2-api-carries-codes-and-read-fields-only.md)): a
+changed revision means refetching the whole Catalog. **Refetch with
+`cache: 'no-cache'`** (and the reference tables likewise): the Catalog is
+`max-age=3600`, so a plain fetch can be answered from the browser's cache with
+the previous revision's body for up to an hour. The `ETag`'s `304` saves bytes
+only on a repeat visit at an unchanged revision.
+
+The manifest, the Catalog and the reference tables send the same `ETag`
+value — one validator for one Catalog revision. `If-None-Match` is compared
+weakly and may be a list or `*` (RFC 9110 §13.1.2), so a proxy that
+weakens the tag to `W/"…"` still gets its `304`. Caches key by URL, so this is
+not an identity; do not compare it across routes.
+
+Under `/api/…`, a path that matches no route is `404 not_found` and a route
+asked with a method it does not serve is `405 method_not_allowed`, both in
+the §6 envelope; a path or parameter that cannot be parsed is
+`400 bad_request`. `/api/v1/…` is gone: its paths are misses like any other.
 
 ---
 
-## 2. Charts — feeds the visualizer  *(shipped)*
+## 1–3. Removed: `/api/v1`
 
-Fills: `pages/visualizer.vue` + `composables/useEngine.ts`. Without it a user
-must paste simai text by hand. This endpoint lets the engine load a real chart
-for any sheet via `loadChart(chart)`.
-
-### `GET /sheets/{songId}/chart?type={type}&difficulty={difficulty}`
-
-Returns the raw chart source for the engine parser as **`text/plain`** — not a
-JSON envelope. The engine wants the simai text itself, and wrapping it would
-only cost the client a parse and an unwrap.
-
-The path segment is the **`songId` alone**, not the full `sheetExpr`; `type`
-and `difficulty` are query params. The server rebuilds `sheet_expr` from the
-three (`routes/charts.rs:get_chart`), so the cross-tier key is still what is matched —
-it is just not URL-encoded into one segment here.
-
-| status | meaning |
-|--------|---------|
-| `200` | body is the raw simai text |
-| `404` | no chart row for this sheet (`hasChart` is false) |
-| `501` | a chart row exists but holds no inline text (blob-only charts are not served yet) |
-
-Errors from this endpoint are plain text, not the §6 JSON error shape.
-
-> Client wiring: when `sheet.hasChart`, fetch `/chart` → chart text →
-> `loadChart(chart)`. Manual paste in `visualizer.vue` stays as a fallback.
-> No audio endpoint exists or is planned for v1 (ADR-0002); the engine's
-> `loadSong(chart, audioBytes)` audio-slaved path is unused.
-
----
-
-## 3. Sync — revision probe for the client cache  *(shipped)*
-
-Fills the client-side catalog cache: load cache → check manifest → delta sync →
-atomic swap.
-
-The cache is an **IndexedDB blob plus this revision probe**, not a relational
-store. Because the client holds the whole catalog in memory and filters locally
-([ADR-0007](../adr/0007-client-side-filtering.md)), a local SQLite mirror would
-buy no query benefit and would only translate rows back into the JSON shape
-`preprocessData` already wants. The earlier `src-tauri`-driven SQLite design
-went with Tauri ([ADR-0003](../adr/0003-web-pwa-drop-tauri.md)).
-
-### `GET /sync/manifest`
-Cheap freshness probe.
-```jsonc
-{
-  "updateTime": "YYYY-MM-DD", // "0000-00-00" before the first catalog sync
-  "revision": 0,            // monotonic; cache stores last seen; 0 before the first sync
-  "catalogHash": "string", // ETag for GET /catalog
-  "counts": { "songs": 0, "sheets": 0, "charts": 0 }
-}
-```
-Headers: same `ETag`/`If-None-Match`/`304` pairing as `GET /catalog` (§1) —
-including repeating both validators on the `304` — but
-`Cache-Control: no-cache` instead of a `max-age` — this endpoint's whole job
-is telling the client whether the catalog changed, so it always revalidates
-against the server rather than trusting a local cache blindly. The `304`
-still saves the round-trip cost of a full body.
-
-### `GET /sync/delta?since={revision}`
-Rows changed since `revision`. `tombstones` carry rows that vanished upstream
-— populated by `bin/sync_catalog`, not empty placeholders.
-```jsonc
-{
-  "revision": 0,
-  "songs":  [ /* changed Song (with sheets) */ ],
-  "charts": [], // always empty for now — chart-meta delta tracking is a follow-up
-  "tombstones": { "songIds": ["..."], "sheetExprs": ["..."] }
-}
-```
-If `since` is too old to diff, respond `409` with
-`{ "error": "snapshot_required" }` → client refetches `GET /catalog`.
-
-> Precisely: `since` is "too old" when it predates
-> `catalog_meta.last_full_reload_revision` — the revision of the last reload
-> that broke row identity, leaving nothing stable to diff across.
->
-> **In practice that boundary no longer moves.** `bin/sync_catalog` upserts by
-> natural key (`songs.song_id`, `sheets.sheet_expr`) and never deletes, so row
-> identity survives every refresh, and it deliberately never writes
-> `last_full_reload_revision`. The column is frozen at whatever the retired
-> `bin/ingest` left, and `409 snapshot_required` is effectively unreachable.
-> The check stays because it is what a future identity-breaking reload would
-> use to tell clients to resnapshot.
->
-> A row that vanishes upstream is **not** deleted — deleting a sheet would
-> cascade to its chart text. It is left in place, still served by `/catalog`,
-> and logged once to the `deleted_songs` / `deleted_sheets` tables, which is what
-> this response's `tombstones` field reads from (see
-> `docs/work/catalog-sync/spec.md`).
->
-> A `song` is included whenever it or any of its sheets changed since
-> `since`, so a sheet-only edit still surfaces its parent song (the response
-> nests sheets under `songs`, so there's no other way to represent it).
+`/api/v1` — the Catalog keyed by `sheetExpr`, `GET /sheets/search`, the v1
+chart route and `/sync/delta` — was deleted by
+[`api-rewrite` 07](../work/api-rewrite/issues/07-delete-v1.md) on 2026-11-18.
+§0 is the API. The numbering of §4–§7 is kept so references to them stay
+valid; the v1 text is in this file's history.
 
 ---
 
 ## 4. Auth — GitHub OAuth, roles user/moderator/admin  *(phase 2)*
 
-**Not implemented.** No auth route is mounted; the design below is the plan of
-record for `docs/work/server-auth-github-oauth/`. Required to gate §5.
+**Implemented on the v2 branch** (`docs/work/server-auth-github-oauth/`); no
+screen calls it yet (`frontend-redesign` 05). Required to gate §5.
 
-Paths are shown under `/api`, without a version segment — auth is built on the
-v2 branch, which retires `/api/v1` entirely
-([`api-rewrite`](../work/api-rewrite/spec.md)).
-
-v1 has no accounts and holds no PII. v2 ends that deliberately rather than by
+The API before v2 had no accounts and held no PII. v2 ends that deliberately rather than by
 accident: the stored set is `github_id`, `login`, `avatar_url`, `role`, a
-refresh-token **hash**, and timestamps. **No email address**, and adding one
+refresh-token **hash** per signed-in device, and timestamps. **No email address**, and adding one
 later is a decision about privacy obligations rather than a schema convenience.
 
-- `GET /api/auth/github/login` → `302` to GitHub OAuth.
+**Sign-in flow.** GitHub sends the browser back to the frontend, not to this
+API: a JSON body returned to a navigation on the API's origin is unreadable
+by the SPA on another domain.
+
+1. The SPA generates a random `state`, keeps it in `sessionStorage`, and
+   navigates to `GET /api/auth/github/login?state=<state>`.
+2. The API answers `302` to GitHub's consent page, carrying that `state` and
+   the frontend's `/auth/callback` as `redirect_uri`. No scopes are requested.
+3. GitHub sends the browser to `/auth/callback?code=…&state=…` on the
+   frontend, which compares `state` with its stored copy and stops on a
+   mismatch. That check is the login-CSRF defence; the API keeps no OAuth
+   state.
+4. The SPA calls `GET /api/auth/github/callback?code=…`.
+
+- `GET /api/auth/github/login?state=…` → `302` to GitHub. `state` must be
+  16–128 characters from `A–Z a–z 0–9 - . _ ~`; otherwise `400 bad_request`.
 - `GET /api/auth/github/callback?code=...` → exchanges the code and returns
-  `{ "token": "<jwt>", "refreshToken": "<opaque>", "user": { ... } }`.
-  Re-authenticating a deleted account **reactivates** it (see below).
-- `POST /api/auth/refresh` → `{ "refreshToken": "<opaque>" }` in, a new JWT *and*
-  a new refresh token out. Refresh tokens rotate on every use and expire 30 days
-  after issue; a token past its expiry is rejected even if its hash matches.
-- `GET /api/auth/me` → current user:
+  `{ "token": "<jwt>", "refreshToken": "<opaque>", "user": { ... } }`, the
+  user shaped as in `GET /api/auth/me` below. Each call opens a new session:
+  the caller's other devices stay signed in. Re-authenticating a deleted
+  account **reactivates** it (see below), as `user`.
+  `400 bad_request` for a missing code or one GitHub refuses (bad, expired or
+  already used); `502 upstream_error` when GitHub cannot be reached or answers
+  unexpectedly. A failed callback writes nothing.
+- `POST /api/auth/refresh` → `{ "refreshToken": "<opaque>" }` in,
+  `{ "token": "<jwt>", "refreshToken": "<opaque>" }` out. Refresh tokens rotate
+  on every use: the presented one stops working as the new one is issued, and
+  of two concurrent refreshes with one token exactly one succeeds. A token
+  lives 30 days from issue or last rotation. Rotation touches only the
+  caller's own session; the user's other devices are unaffected.
+  `401` (`invalid refresh token`) for a token that is unknown, expired,
+  already rotated, or belongs to a deleted account — one answer for all four;
+  `400 bad_request` for a body that is not `{ "refreshToken": string }`.
+- `GET /api/auth/me` → current user, read from the database, so `role` is
+  current even if the JWT's is not:
 ```jsonc
-{ "id": "string", "login": "string", "avatarUrl": "string",
+{ "id": "string", "login": "string", "avatarUrl": "string|null",
   "role": "user|moderator|admin" }
 ```
-`401` when no/invalid token.
-- `DELETE /api/auth/me` → deletes the caller's account. See below.
+`401` when no/invalid token, or when the account has been deleted — `/me`
+reads the row, so it sees a deletion at once, unlike routes that need only
+the JWT.
+
+- `DELETE /api/auth/me` → `204`, identity removed from the caller's account
+  (see below). Acts on the token's user only. Repeating it while the token
+  still verifies is `204` and changes nothing; once that token expires there
+  is no way to obtain another for a deleted account, so it is `401`. `401`
+  without a valid token.
+
+**401 responses.** Body `{ "error": "unauthorized", "message": … }` with a
+`WWW-Authenticate` challenge (RFC 6750 §3.1): bare `Bearer` and the message
+`missing bearer token` when no credential was sent; `Bearer
+error="invalid_token"` when one was refused, with the message `token expired`
+(refresh and retry; if the refresh is refused too, sign in again),
+`invalid token`, `invalid refresh token` or `account deleted` (sign in
+again).
+**Every `/api/auth/*` response carries `Cache-Control: no-store`** — tokens
+and personal data are not for a browser cache or anything between (RFC 6749
+§5.1). The request log records the path only, never the query string: a
+callback's `code` could still be exchanged by anyone reading it.
 
 **Tokens live in client storage, not a cookie.** The frontend and API are on
 different registrable domains (`pages.dev` and `fly.dev` are both Public Suffix
@@ -317,8 +256,8 @@ List entries), so an API-set cookie is third-party and browsers block it. Hence
 `Authorization: Bearer` and an opaque refresh token the client stores itself.
 
 **Deleting an account strips identity; it does not delete published work.** The
-row is kept with `login` and `avatar_url` nulled, `deleted_at` set and the
-refresh token revoked. `github_id` is retained so a later login reaches the same
+row is kept with `login` and `avatar_url` nulled, `role` reset to `user`,
+`deleted_at` set and every session revoked. `github_id` is retained so a later login reaches the same
 row rather than minting a second one. Community uploads stay published,
 attributed to a deleted user. Describe it to users as identity removal, not
 deletion.
@@ -367,8 +306,9 @@ Propose a new sheet, a chart, or an edit.
 > audio, if it ever returns, needs its own decision record.
 
 ### `GET /contributions?status=&mine=`  *(user sees own; moderator+ sees all)*
-List with `{ id, kind, sheetExpr, status, author, createdAt }[]`, paginated the
-same way as §1.2 — `?page=&pageSize=` with a `total` field in the envelope.
+List with `{ id, kind, sheetExpr, status, author, createdAt }[]`, paginated by
+§6's convention (the v1 search this once pointed at, with a `total` field in
+the envelope, is gone).
 
 ### `GET /contributions/{id}`
 Full record incl. `payload`, `diff`, review history.
@@ -388,16 +328,20 @@ Status enum: `pending | approved | rejected | merged`.
 - **Errors** (non-2xx): `{ "error": "snake_case_code", "message": "human text" }`.
   Codes in use: `database_error`, `internal_error` (both `500`, both with an
   opaque message — the real cause is logged server-side, never returned),
-  `not_found`, `snapshot_required` (§3), `rate_limited`. `bad_request` exists
-  as an `AppError` variant but no shipped endpoint returns it — every query
-  param today either parses or is optional.
-  Exception: `GET /sheets/{songId}/chart` returns plain-text errors (§2).
-- **Pagination**: `?page` (1-based) + `?pageSize` (default 22, max 100). The
-  total is returned as an **`X-Total-Count` response header**
-  ([ADR-0015](../adr/0015-pagination-total-as-a-response-header.md)). It must
-  also be listed in `Access-Control-Expose-Headers`, or a cross-origin browser
-  cannot read it — silently. `GET /sheets/search` still sends a `total` body
-  field as well; v1 is frozen with both, and v2 sends the header only.
+  `not_found`, `bad_request`, `method_not_allowed`, `unauthorized`,
+  `rate_limited`, and `upstream_error` (`502`, opaque, for a failing GitHub —
+  §4).
+  Exception: the chart endpoint (`…/chart`, §0) returns plain-text errors —
+  `AppError`s rendered as text: same status, same redaction, body the message
+  alone.
+  `not_implemented` (`501`) is the code a chart without inline text would
+  carry in the envelope; the chart endpoint's text body omits it.
+- **Pagination**: no route pages today; `community-charts` browse is the
+  first. It takes `?page` (1-based) + `?pageSize` and returns the total as an
+  **`X-Total-Count` response header**
+  ([ADR-0015](../adr/0015-pagination-total-as-a-response-header.md)), which
+  must then be added to `Access-Control-Expose-Headers` — or a cross-origin
+  browser cannot read it, silently. The CORS layer exposes nothing until then.
 - **Rate limits**: per-IP (keyed on the client IP from the configured
   trusted headers — `Fly-Client-IP` on Fly, the socket address elsewhere,
   [ADR-0019](../adr/0019-trusted-ip-headers-are-configuration.md) — not
@@ -405,14 +349,20 @@ Status enum: `pending | approved | rejected | merged`.
   (`server-restructure` issue 08). `429` + `Retry-After` (always at least `1` — the underlying limiter
   reports whole seconds and would otherwise say `0`, i.e. "retry now"), same
   `{ "error": "rate_limited", "message": ... }` shape as every other error.
-  `/healthcheck` is exempt. Phase 2 write endpoints (§5) reuse this same
+  `/healthcheck` is exempt. The two GitHub sign-in routes have their own,
+  tighter bucket (burst 10, then one per 6 s), since each callback is an
+  outbound exchange and a transaction; refresh and `me` share the main one. Phase 2 write endpoints (§5) reuse this same
   limiter: a per-user quota was considered and **deferred**, so the only
   write-specific bound is a 512 KB body limit on the upload route (see
   `production-v2`'s *Accepted, not solved*).
 - **CORS**: allowlist built from `CORS_ALLOWED_ORIGINS` (`Config`, `server-restructure`
   issue 06) — no origin configured means no origin allowed, not a permissive
-  fallback. `.env.example` still names the retired Tauri dev origin (`:1420`);
-  Vite serves on `:5173`, so a local frontend needs that set explicitly.
+  fallback. `.env.example` names the Vite dev origin, `http://localhost:1420`;
+  `apps/host/vite.config.ts` pins that port because it is allowlisted.
+  Methods `GET`, `POST`, `DELETE`; request headers `Authorization` and
+  `Content-Type`, which an authenticated or JSON request needs to pass the
+  browser's preflight. No `Access-Control-Allow-Credentials`: credentials
+  travel in a header the page sets, never in cookies.
   Egress control, not a security control: `curl` ignores CORS entirely, so
   it doesn't gate access to public read-only data — the real cap on abuse is
   `server-restructure` issue 08's rate limiting. There is no native proxy
@@ -427,9 +377,12 @@ Status enum: `pending | approved | rejected | merged`.
 
 | Contract | Frontend touch-point |
 |----------|---------------------|
-| `GET /catalog` | `stores/data.ts:loadData` (replaced `data.json`) |
-| `hasChart` | `pages/songs.vue`, `pages/song.vue`, `MvSheetDialog.vue` (show visualize affordance) |
-| §2 chart | `pages/visualizer.vue`, `composables/useEngine.ts` (auto-load real charts) |
-| §3 sync | IndexedDB catalog cache + manifest revision probe |
-| §4 auth *(phase 2)* | new login UI, token in browser storage |
+| `GET /catalog` | `stores/data.ts:loadData`, behind the IndexedDB cache |
+| `GET /reference` | `stores/data.ts:loadReference`, at boot; names and colours before or without the Catalog |
+| `GET /songs/{id}/sheets/{type}/{code}` | `composables/useEngine.ts:fetchSheetInfo` (the chart page's title block) |
+| `GET /songs/{id}` | `components/dialogs/SongModal.vue` (a shared `?song=` link, before the Catalog loads) |
+| `hasChart` | `components/dialogs/SongModal.vue` (Play is enabled only with a chart) |
+| `GET /songs/{id}/sheets/{type}/{code}/chart` | `composables/useEngine.ts:fetchChart`, through `useChartLoader` (the chart page's deep link) |
+| `GET /sync/manifest` | `stores/data.ts:loadData`: the revision probe before refetching the Catalog |
+| §4 auth | not called yet; the sign-in UI is `frontend-redesign` 05 |
 | §5 contributions *(superseded)* | replaced by the community library — [ADR-0013](../adr/0013-community-charts-beside-the-catalog.md) |

@@ -1,6 +1,6 @@
 # ADR-0010 — Differential catalog sync, never deleting songs or sheets
 
-**Status:** accepted; the lookup-table scope clause is narrowed by [ADR-0022](0022-difficulties-derived-and-referenced.md)
+**Status:** accepted; the lookup-table scope clause is narrowed by [ADR-0022](0022-difficulties-derived-and-referenced.md); tombstones are cleared when a row returns, and hide rows from the v2 API, per [ADR-0026](0026-v2-api-carries-codes-and-read-fields-only.md)
 **Date:** 2026-09-14
 
 ## Context
@@ -63,7 +63,8 @@ only the choice that constrains everything else.
 
 `last_full_reload_revision` is now never written. That is what makes delta sync
 survive a refresh, and it is the single line most likely to be reintroduced by
-accident — `routes/sync.rs:66` carries a comment saying so.
+accident — the `catalog_meta` upsert in `catalog_sync.rs` carries a comment
+saying so (the route comment that once did went with `/api/v1`).
 
 The catalog drifts from upstream over time: a song dropped upstream years ago
 stays visible in `/catalog`, indistinguishable from a current one. Accepted

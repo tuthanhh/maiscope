@@ -6,5 +6,5 @@ export const GAME = {
   dataSourceUrl: "https://dp4p6x0xfi5o9.cloudfront.net/maimai",
   // Global backend (apps/server). Override per-env via VITE_API_BASE_URL.
   apiBaseUrl:
-    import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000/api/v1",
+    import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000/api",
 } as const;

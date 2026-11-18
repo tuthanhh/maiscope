@@ -1,574 +1,306 @@
+use std::collections::HashMap;
+
 use axum::{
     Json, Router,
-    extract::{Query, State},
-    response::IntoResponse,
+    extract::State,
+    http::HeaderMap,
+    response::{IntoResponse, Response},
     routing::get,
 };
-use serde::Deserialize;
-use sqlx::{Pool, Postgres};
+use sqlx::PgPool;
 
 use crate::error::AppError;
 use crate::queries;
-use crate::routes::caching::{CATALOG_CACHE_CONTROL, Freshness};
+use crate::routes::caching::{CATALOG_CACHE_CONTROL, Freshness, snapshot};
 use crate::state::AppState;
-use crate::types::{Catalog, NestedSheet, Song};
+use crate::types::{OfficialCatalog, OfficialSheetFields, OfficialSong};
 
 pub fn router() -> Router<AppState> {
     Router::new().route("/catalog", get(catalog))
 }
 
-// Query params for GET /catalog (contract §1).
-#[derive(Debug, Deserialize)]
-struct CatalogQuery {
-    region: Option<String>,
-}
-
-// GET /catalog — assembles the full Data shape (types/Data.ts) from the DB.
-// Byte-compatible with the old data.json so preprocessData is unchanged.
-// Supports ETag/If-None-Match (contract §1) sharing the sync tier's
-// catalogHash concept (see sync_manifest).
-async fn catalog(
-    Query(CatalogQuery { region }): Query<CatalogQuery>,
-    headers: axum::http::HeaderMap,
-    State(pool): State<Pool<Postgres>>,
-) -> Result<axum::response::Response, AppError> {
-    let freshness = Freshness::load(&pool).await?;
+// GET /api/catalog — the whole official library, nested songs[].sheets[], with
+// the reference tables beside it (ADR-0021). The client builds its flat sheet
+// list with an explicit `sheet.song`; the wire stays nested because flattening
+// repeats every song field per sheet.
+async fn catalog(headers: HeaderMap, State(pool): State<PgPool>) -> Result<Response, AppError> {
+    // ETag, songs, sheets and reference tables from one snapshot: a sync
+    // committing midway would otherwise cache a mixed Catalog for an hour.
+    let mut tx = snapshot(&pool).await?;
+    let freshness = Freshness::load(&mut *tx).await?;
     if freshness.is_current_for(&headers) {
         return Ok(freshness.not_modified(CATALOG_CACHE_CONTROL));
     }
 
-    let song_rows = queries::fetch_all_songs(&pool).await?;
-    let mut sheets_by_song = queries::fetch_all_sheets(&pool, region.as_deref()).await?;
-
-    let songs = song_rows
+    let mut sheets_by_song: HashMap<_, Vec<OfficialSheetFields>> = HashMap::new();
+    for row in queries::fetch_official_sheets(&mut tx, None, None).await? {
+        sheets_by_song
+            .entry(row.song_id)
+            .or_default()
+            .push(row.into());
+    }
+    let songs = queries::fetch_official_songs(&mut tx, None)
+        .await?
         .into_iter()
-        .map(|row| {
-            let sheets = sheets_by_song
-                .remove(&row.id)
-                .unwrap_or_default()
-                .into_iter()
-                .map(|sheet_row| NestedSheet {
-                    sheet: sheet_row.into_meta(),
-                })
-                .collect();
-            Song {
-                meta: row.into_meta(),
-                sheets,
-            }
+        .map(|row| OfficialSong {
+            sheets: sheets_by_song.remove(&row.id).unwrap_or_default(),
+            fields: row.into(),
         })
         .collect();
 
-    let catalog = Catalog {
+    let catalog = OfficialCatalog {
         songs,
-        categories: queries::fetch_categories(&pool).await?,
-        versions: queries::fetch_versions(&pool).await?,
-        types: queries::fetch_types(&pool).await?,
-        difficulties: queries::fetch_difficulties(&pool).await?,
-        regions: queries::fetch_regions(&pool).await?,
-        update_time: queries::fetch_update_time(&pool).await?,
+        reference: queries::fetch_reference(&mut tx).await?,
     };
-
     Ok((freshness.headers(CATALOG_CACHE_CONTROL), Json(catalog)).into_response())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::extract::{Query as AxumQuery, State as AxumState};
-    use axum::http::StatusCode;
-    use serde_json::Value;
+    use axum::body::to_bytes;
+    use axum::http::{StatusCode, header};
+    use serde_json::{Value, json};
 
-    #[sqlx::test]
-    async fn catalog_returns_song_with_empty_sheets_when_region_excludes_all(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
-        crate::test_support::seed_standard_difficulties(&pool).await;
+    use crate::test_support;
+
+    /// One song with a standard sheet and a UTAGE sheet, every optional field
+    /// filled, and a chart for the first. Returns the song's id.
+    async fn seed(pool: &PgPool) -> sqlx::Result<sqlx::types::Uuid> {
+        test_support::seed_difficulties(pool, &["master"]).await;
         sqlx::query!(
-            "INSERT INTO songs (song_id, title, source_index) VALUES ($1, $2, $3)",
-            "maimai_song",
-            "Example Song",
-            0
+            "INSERT INTO difficulties (difficulty, name, code, ordinal)
+             VALUES ('【協】', '【協】', '協', 1)"
         )
-        .execute(&pool)
+        .execute(pool)
+        .await?;
+        let song = sqlx::query_scalar!(
+            "INSERT INTO songs (song_id, category, title, artist, bpm, image_name, version,
+                                release_date, is_new, is_locked, comment, source_index)
+             VALUES ('upstream-key', 'POPS', 'Title', 'Artist', 150, 'img.png', 'MAGiCAL',
+                     '2024-01-02', true, false, 'note', 0)
+             RETURNING id"
+        )
+        .fetch_one(pool)
+        .await?;
+        let master = sqlx::query_scalar!(
+            "INSERT INTO sheets (song_id_fk, sheet_expr, type, difficulty, level, level_value,
+                                 internal_level, internal_level_value, note_designer,
+                                 is_special, source_index)
+             VALUES ($1, 'upstream-key|dx|master', 'dx', 'master', '13+', 13.7, '13.8', 13.8,
+                     'designer', true, 0)
+             RETURNING id",
+            song
+        )
+        .fetch_one(pool)
         .await?;
         sqlx::query!(
             "INSERT INTO sheets (song_id_fk, sheet_expr, type, difficulty, source_index)
-             SELECT id, $1, 'dx', 'master', 0 FROM songs WHERE song_id = $2",
-            "maimai_song|dx|master",
-            "maimai_song"
+             VALUES ($1, 'upstream-key|utage|【協】', 'utage', '【協】', 1)",
+            song
         )
-        .execute(&pool)
+        .execute(pool)
+        .await?;
+        sqlx::query!(
+            "INSERT INTO sheet_note_counts (sheet_id, key, value) VALUES ($1, 'total', 900)",
+            master
+        )
+        .execute(pool)
+        .await?;
+        sqlx::query!(
+            "INSERT INTO sheet_regions (sheet_id, region, available) VALUES ($1, 'jp', true)",
+            master
+        )
+        .execute(pool)
+        .await?;
+        sqlx::query!(
+            "INSERT INTO sheet_region_overrides
+                 (sheet_id, region, level, level_value, internal_level,
+                  internal_level_value, note_designer)
+             VALUES ($1, 'intl', '13', 13.0, '13.2', 13.2, 'intl designer')",
+            master
+        )
+        .execute(pool)
+        .await?;
+        sqlx::query!(
+            "INSERT INTO charts (sheet_id, sheet_expr, format, content, hash)
+             VALUES ($1, 'upstream-key|dx|master', 'maimai-simai', '&title=x', 'h')",
+            master
+        )
+        .execute(pool)
+        .await?;
+        sqlx::query!(
+            "INSERT INTO versions (version, abbr, release_date, ordinal)
+             VALUES ('MAGiCAL', 'MAGiCAL', '2024-01-01', 0)"
+        )
+        .execute(pool)
         .await?;
         sqlx::query!("INSERT INTO catalog_meta (id, update_time) VALUES (true, now())")
-            .execute(&pool)
+            .execute(pool)
             .await?;
-        // No sheet_regions row for "kr" — sheet_a should be filtered out.
+        Ok(song)
+    }
 
-        let response = catalog(
-            AxumQuery(CatalogQuery {
-                region: Some("kr".to_string()),
-            }),
-            axum::http::HeaderMap::new(),
-            AxumState(pool),
-        )
-        .await
-        .unwrap();
+    async fn body(response: Response) -> Value {
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
+    }
 
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        let json: Value = serde_json::from_slice(&body).unwrap();
+    // The mapping check the spec's tripwire asks for: every key the payload
+    // carries is one ADR-0026 lists, each holding its column's value — not a
+    // comparison with v1's bytes.
+    #[sqlx::test]
+    async fn the_catalog_maps_each_column_to_its_v2_key(pool: PgPool) -> sqlx::Result<()> {
+        let song = seed(&pool).await?;
+        let response = catalog(HeaderMap::new(), State(pool)).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let catalog = body(response).await;
 
-        assert_eq!(json["songs"].as_array().unwrap().len(), 1);
-        assert_eq!(json["songs"][0]["sheets"].as_array().unwrap().len(), 0);
+        assert_eq!(
+            catalog["songs"],
+            json!([{
+                "id": song.to_string(),
+                "category": "POPS",
+                "title": "Title",
+                "artist": "Artist",
+                "bpm": 150.0,
+                "imageName": "img.png",
+                "version": "MAGiCAL",
+                "releaseDate": "2024-01-02",
+                "isLocked": false,
+                "comment": "note",
+                "sheets": [
+                    {
+                        "type": "dx",
+                        "difficulty": "master",
+                        "level": "13+",
+                        "levelValue": 13.7,
+                        "internalLevel": "13.8",
+                        "internalLevelValue": 13.8,
+                        "noteDesigner": "designer",
+                        "noteCounts": { "total": 900 },
+                        "regions": { "jp": true },
+                        // All five keys, so a swapped pair in the SQL fails.
+                        "regionOverrides": { "intl": {
+                            "level": "13", "levelValue": 13.0,
+                            "internalLevel": "13.2", "internalLevelValue": 13.2,
+                            "noteDesigner": "intl designer"
+                        } },
+                        "hasChart": true
+                    },
+                    // A UTAGE sheet carries its code, not its bracketed name.
+                    { "type": "utage", "difficulty": "協", "hasChart": false }
+                ]
+            }])
+        );
+        // The reference tables ride beside the songs.
+        let mut keys: Vec<&str> = catalog
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            [
+                "categories",
+                "difficulties",
+                "regions",
+                "songs",
+                "types",
+                "versions"
+            ]
+        );
         Ok(())
     }
 
-    /// Fields the server must never emit. `preprocessData` derives all of them
-    /// client-side (`utils/data.ts`), and the split is a contract convention —
-    /// the server sends raw fields only.
-    const DERIVED_FIELDS: [&str; 6] = [
-        "songNo",
-        "imageUrl",
-        "imageUrlM",
-        "sheetExpr",
-        "notePercents",
-        "$canonicalSheet",
-    ];
-
-    /// Every key in the document, at any depth, with the path that reached it.
-    fn walk_keys(value: &Value, path: &str, out: &mut Vec<(String, String)>) {
+    /// Every key in the document, at any depth.
+    fn keys(value: &Value, out: &mut Vec<String>) {
         match value {
             Value::Object(map) => {
-                for (key, child) in map {
-                    out.push((key.clone(), path.to_string()));
-                    walk_keys(child, &format!("{path}.{key}"), out);
+                for (key, value) in map {
+                    out.push(key.clone());
+                    keys(value, out);
                 }
             }
-            Value::Array(items) => {
-                for (i, child) in items.iter().enumerate() {
-                    walk_keys(child, &format!("{path}[{i}]"), out);
-                }
-            }
+            Value::Array(items) => items.iter().for_each(|item| keys(item, out)),
             _ => {}
         }
     }
 
-    /// A catalog with one song, two sheets and every lookup table populated —
-    /// enough that the snapshot covers each branch of the response assembly
-    /// rather than only the happy path of a bare song.
-    ///
-    /// `update_time` is fixed, not `now()`: the snapshot has to be byte-stable
-    /// across runs.
-    async fn seed_snapshot_catalog(pool: &sqlx::PgPool) {
-        // A literal rather than a bound parameter: binding a timestamp needs a
-        // chrono/time type, and `server` depends on neither directly.
-        sqlx::query!(
-            "INSERT INTO catalog_meta (id, update_time, revision)
-             VALUES (true, TIMESTAMPTZ '2026-01-02T03:04:05Z', 7)"
-        )
-        .execute(pool)
-        .await
-        .unwrap();
-
-        sqlx::query!("INSERT INTO categories (category, ordinal) VALUES ('POPS & ANIME', 0)")
-            .execute(pool)
-            .await
-            .unwrap();
-        sqlx::query!(
-            "INSERT INTO versions (version, abbr, release_date, ordinal)
-             VALUES ('PRiSM', 'PRiSM', DATE '2025-09-11', 0)"
-        )
-        .execute(pool)
-        .await
-        .unwrap();
-        sqlx::query!(
-            "INSERT INTO types (type, name, abbr, icon_url, icon_height, ordinal)
-             VALUES ('dx', 'DX', 'DX', 'dx.png', 32, 0)"
-        )
-        .execute(pool)
-        .await
-        .unwrap();
-        sqlx::query!(
-            "INSERT INTO difficulties (difficulty, name, code, color, icon_url, icon_height, ordinal)
-             VALUES ('master', 'MASTER', 'master', '#9f51dc', 'master.png', 20, 0)"
-        )
-        .execute(pool)
-        .await
-        .unwrap();
-        // A sparse row beside the full one: the optional fields are where a
-        // serde rename or a skip_serializing_if would go unnoticed.
-        sqlx::query!(
-            "INSERT INTO difficulties (difficulty, name, code, ordinal)
-             VALUES ('basic', 'BASIC', 'basic', 1)"
-        )
-        .execute(pool)
-        .await
-        .unwrap();
-        sqlx::query!("INSERT INTO regions (region, name, ordinal) VALUES ('jp', 'Japan', 0)")
-            .execute(pool)
-            .await
-            .unwrap();
-
-        sqlx::query!(
-            "INSERT INTO songs (song_id, category, title, artist, bpm, image_name, version,
-                                release_date, is_new, is_locked, comment, source_index)
-             VALUES ('example', 'POPS & ANIME', 'Example Song', 'Example Artist', 174,
-                     'example.png', 'PRiSM', DATE '2025-09-11', true, false, 'a comment', 0)"
-        )
-        .execute(pool)
-        .await
-        .unwrap();
-
-        // A fully-populated sheet, and a sparse one — the optional fields are
-        // where a serde rename or a skip_serializing_if would go unnoticed.
-        sqlx::query!(
-            "INSERT INTO sheets (song_id_fk, sheet_expr, type, difficulty, level, level_value,
-                                 internal_level, internal_level_value, note_designer, is_special,
-                                 source_index)
-             SELECT id, 'example|dx|master', 'dx', 'master', '14+', 14.5, '14.7', 14.7,
-                    'Example Designer', false, 0
-             FROM songs WHERE song_id = 'example'"
-        )
-        .execute(pool)
-        .await
-        .unwrap();
-        sqlx::query!(
-            "INSERT INTO sheets (song_id_fk, sheet_expr, type, difficulty, source_index)
-             SELECT id, 'example|std|basic', 'std', 'basic', 1
-             FROM songs WHERE song_id = 'example'"
-        )
-        .execute(pool)
-        .await
-        .unwrap();
-
-        sqlx::query!(
-            "INSERT INTO sheet_note_counts (sheet_id, key, value)
-             SELECT id, k.key, k.value
-             FROM sheets, (VALUES ('total', 1000), ('tap', 500), ('hold', 100),
-                                  ('slide', 200), ('touch', 150), ('break', 50))
-                          AS k(key, value)
-             WHERE sheet_expr = 'example|dx|master'"
-        )
-        .execute(pool)
-        .await
-        .unwrap();
-        sqlx::query!(
-            "INSERT INTO sheet_regions (sheet_id, region, available)
-             SELECT id, 'jp', true FROM sheets WHERE sheet_expr = 'example|dx|master'"
-        )
-        .execute(pool)
-        .await
-        .unwrap();
-    }
-
-    /// The response contract, pinned byte-for-byte.
-    ///
-    /// The frontend rebuilds a prototype-linked object graph from this payload
-    /// in `utils/data.ts:preprocessData`, so a dropped or renamed field is not a
-    /// compile error anywhere — it surfaces as a blank column or a crash deep in
-    /// the client. This is the cheap substitute for wiring the `shared` crate,
-    /// which would not help anyway: generated types would describe what the
-    /// server sends, and the risk is that what it sends stops matching what the
-    /// client reads.
-    ///
-    /// Regenerate deliberately:
-    /// `UPDATE_SNAPSHOT=1 cargo test -p server catalog_response_matches_snapshot`
-    /// — then read the diff. A snapshot refreshed without reading is a snapshot
-    /// that asserts nothing.
     #[sqlx::test]
-    async fn catalog_response_matches_snapshot(pool: sqlx::PgPool) -> sqlx::Result<()> {
-        seed_snapshot_catalog(&pool).await;
-
-        let response = catalog(
-            AxumQuery(CatalogQuery { region: None }),
-            axum::http::HeaderMap::new(),
-            AxumState(pool),
-        )
-        .await
-        .unwrap();
-
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        let json: Value = serde_json::from_slice(&body).unwrap();
-        let actual = format!("{}\n", serde_json::to_string_pretty(&json).unwrap());
-
-        let path =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots/catalog.json");
-
-        if std::env::var_os("UPDATE_SNAPSHOT").is_some() {
-            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            std::fs::write(&path, &actual).unwrap();
-            return Ok(());
-        }
-
-        let expected = std::fs::read_to_string(&path).unwrap_or_else(|_| {
-            panic!(
-                "{} is missing — create it with \
-                 UPDATE_SNAPSHOT=1 cargo test -p server catalog_response_matches_snapshot",
-                path.display()
-            )
-        });
-
-        assert_eq!(
-            expected, actual,
-            "\n/catalog's response shape changed. If that is intended:\n  \
-             UPDATE_SNAPSHOT=1 cargo test -p server catalog_response_matches_snapshot\n"
-        );
-        Ok(())
-    }
-
-    /// The server must never emit a field the client derives.
-    ///
-    /// Separate from the snapshot on purpose. The snapshot pins what *is* sent,
-    /// which catches an addition only if someone reads the diff; this asserts
-    /// the absence directly, at any nesting depth, so a derived field appearing
-    /// inside `songs[].sheets[]` fails by name rather than as one line in a
-    /// large diff.
-    #[sqlx::test]
-    async fn catalog_never_emits_derived_fields(pool: sqlx::PgPool) -> sqlx::Result<()> {
-        seed_snapshot_catalog(&pool).await;
-
-        let response = catalog(
-            AxumQuery(CatalogQuery { region: None }),
-            axum::http::HeaderMap::new(),
-            AxumState(pool),
-        )
-        .await
-        .unwrap();
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        let json: Value = serde_json::from_slice(&body).unwrap();
-
-        let mut keys = Vec::new();
-        walk_keys(&json, "$", &mut keys);
-        assert!(!keys.is_empty(), "walked an empty document");
-
-        for (key, path) in &keys {
+    async fn no_derived_or_dropped_field_appears_anywhere(pool: PgPool) -> sqlx::Result<()> {
+        seed(&pool).await?;
+        let catalog = body(catalog(HeaderMap::new(), State(pool)).await.unwrap()).await;
+        let mut found = Vec::new();
+        keys(&catalog, &mut found);
+        for forbidden in [
+            // Derived on the client.
+            "songNo",
+            "imageUrl",
+            "imageUrlM",
+            "sheetExpr",
+            "notePercents",
+            "$canonicalSheet",
+            // Dropped by ADR-0026.
+            "songId",
+            "isNew",
+            "isSpecial",
+            "updateTime",
+            "iconUrl",
+            "iconHeight",
+        ] {
             assert!(
-                !DERIVED_FIELDS.contains(&key.as_str()),
-                "server emitted the client-derived field {key:?} at {path} — \
-                 see api-contract.md's raw-versus-derived rule"
+                !found.iter().any(|k| k == forbidden),
+                "{forbidden} is on the wire"
             );
         }
-
-        // The walk reaches nested sheets, or the assertion above proves nothing.
-        assert!(
-            keys.iter()
-                .any(|(k, p)| k == "type" && p.contains("sheets")),
-            "walk never descended into songs[].sheets[]"
-        );
+        // `releaseDate` is a song field, so it is checked where it is dropped.
+        assert!(!catalog["versions"].as_array().unwrap().is_empty());
+        for version in catalog["versions"].as_array().unwrap() {
+            assert!(version.get("releaseDate").is_none(), "{version}");
+        }
         Ok(())
     }
 
-    async fn seed_minimal_catalog(pool: &sqlx::PgPool) {
-        sqlx::query!(
-            "INSERT INTO songs (song_id, title, source_index) VALUES ($1, $2, $3)",
-            "maimai_song",
-            "Example Song",
-            0
-        )
-        .execute(pool)
-        .await
-        .unwrap();
-        sqlx::query!("INSERT INTO catalog_meta (id, update_time) VALUES (true, now())")
-            .execute(pool)
+    #[sqlx::test]
+    async fn the_catalog_answers_304_while_unchanged(pool: PgPool) -> sqlx::Result<()> {
+        seed(&pool).await?;
+        let first = catalog(HeaderMap::new(), State(pool.clone()))
             .await
             .unwrap();
-    }
-
-    #[sqlx::test]
-    async fn catalog_returns_304_when_if_none_match_matches(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
-        seed_minimal_catalog(&pool).await;
-
-        let first = catalog(
-            AxumQuery(CatalogQuery { region: None }),
-            axum::http::HeaderMap::new(),
-            AxumState(pool.clone()),
-        )
-        .await
-        .unwrap();
-        let etag = first
-            .headers()
-            .get(axum::http::header::ETAG)
-            .unwrap()
-            .clone();
-
-        let mut conditional_headers = axum::http::HeaderMap::new();
-        conditional_headers.insert(axum::http::header::IF_NONE_MATCH, etag);
-
-        let second = catalog(
-            AxumQuery(CatalogQuery { region: None }),
-            conditional_headers,
-            AxumState(pool),
-        )
-        .await
-        .unwrap();
-
+        assert_eq!(
+            first.headers()[header::CACHE_CONTROL],
+            CATALOG_CACHE_CONTROL
+        );
+        let mut conditional = HeaderMap::new();
+        conditional.insert(header::IF_NONE_MATCH, first.headers()[header::ETAG].clone());
+        let second = catalog(conditional, State(pool)).await.unwrap();
         assert_eq!(second.status(), StatusCode::NOT_MODIFIED);
-        let body = axum::body::to_bytes(second.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        assert!(body.is_empty());
-        Ok(())
-    }
-
-    // RFC 7232 §4.1: a 304 must send the same validators the 200 would have,
-    // because the client uses them to refresh what it already has stored.
-    // Dropping Cache-Control here throws away ticket 07's max-age on every
-    // revalidation — the cached copy goes stale again immediately and the
-    // next visit re-revalidates instead of being served locally.
-    #[sqlx::test]
-    async fn catalog_304_repeats_the_etag_and_cache_control(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
-        seed_minimal_catalog(&pool).await;
-
-        let full = catalog(
-            AxumQuery(CatalogQuery { region: None }),
-            axum::http::HeaderMap::new(),
-            AxumState(pool.clone()),
-        )
-        .await
-        .unwrap();
-        let etag = full
-            .headers()
-            .get(axum::http::header::ETAG)
-            .unwrap()
-            .clone();
-        let cache_control = full
-            .headers()
-            .get(axum::http::header::CACHE_CONTROL)
-            .unwrap()
-            .clone();
-
-        let mut conditional_headers = axum::http::HeaderMap::new();
-        conditional_headers.insert(axum::http::header::IF_NONE_MATCH, etag.clone());
-
-        let not_modified = catalog(
-            AxumQuery(CatalogQuery { region: None }),
-            conditional_headers,
-            AxumState(pool),
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(not_modified.status(), StatusCode::NOT_MODIFIED);
+        // RFC 7232 §4.1: the 304 repeats the validators the 200 sent.
         assert_eq!(
-            not_modified.headers().get(axum::http::header::ETAG),
-            Some(&etag)
+            second.headers()[header::ETAG],
+            first.headers()[header::ETAG]
         );
         assert_eq!(
-            not_modified
-                .headers()
-                .get(axum::http::header::CACHE_CONTROL),
-            Some(&cache_control)
+            second.headers()[header::CACHE_CONTROL],
+            CATALOG_CACHE_CONTROL
         );
         Ok(())
     }
 
-    // The negative half of the conditional. Every other 304 test sends a
-    // matching validator, so an `is_current_for` that was inverted or always
-    // true would leave them all green while serving a permanent 304 — every
-    // client stuck on whatever catalog it first fetched, with no way to
-    // learn the catalog had changed.
+    // A database between `migrate` and the first sync — every new
+    // environment's first state — answers an empty Catalog, not a 500
+    // (`prod-data-and-infra` 06, once v1's test; now this one).
     #[sqlx::test]
-    async fn catalog_serves_a_body_when_if_none_match_is_stale(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
-        seed_minimal_catalog(&pool).await;
-
-        let mut stale = axum::http::HeaderMap::new();
-        stale.insert(
-            axum::http::header::IF_NONE_MATCH,
-            axum::http::HeaderValue::from_static("\"not-the-current-hash\""),
-        );
-
-        let response = catalog(
-            AxumQuery(CatalogQuery { region: None }),
-            stale,
-            AxumState(pool),
-        )
-        .await
-        .unwrap();
-
+    async fn an_unsynced_database_answers_an_empty_catalog(pool: PgPool) {
+        let response = catalog(HeaderMap::new(), State(pool)).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        let json: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(json["songs"].as_array().unwrap().len(), 1);
-        Ok(())
-    }
-
-    #[sqlx::test]
-    async fn catalog_etag_changes_when_catalog_meta_changes(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
-        seed_minimal_catalog(&pool).await;
-
-        let first = catalog(
-            AxumQuery(CatalogQuery { region: None }),
-            axum::http::HeaderMap::new(),
-            AxumState(pool.clone()),
-        )
-        .await
-        .unwrap();
-        let etag_before = first
-            .headers()
-            .get(axum::http::header::ETAG)
-            .unwrap()
-            .clone();
-
-        sqlx::query!("UPDATE catalog_meta SET revision = revision + 1")
-            .execute(&pool)
-            .await?;
-
-        let second = catalog(
-            AxumQuery(CatalogQuery { region: None }),
-            axum::http::HeaderMap::new(),
-            AxumState(pool),
-        )
-        .await
-        .unwrap();
-        let etag_after = second
-            .headers()
-            .get(axum::http::header::ETAG)
-            .unwrap()
-            .clone();
-
-        assert_ne!(etag_before, etag_after);
-        Ok(())
-    }
-
-    // No seeding at all: migrations have run, every table is empty. This is
-    // the state every freshly provisioned environment starts in (contract §1,
-    // docs/work/prod-data-and-infra/issues/06-empty-catalog-500.md).
-    #[sqlx::test]
-    async fn catalog_on_an_unseeded_database_is_empty_not_an_error(
-        pool: sqlx::PgPool,
-    ) -> sqlx::Result<()> {
-        let response = catalog(
-            AxumQuery(CatalogQuery { region: None }),
-            axum::http::HeaderMap::new(),
-            AxumState(pool),
-        )
-        .await
-        .expect("an unseeded catalog must not be an error");
-
-        assert_eq!(response.status(), StatusCode::OK);
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        let json: Value = serde_json::from_slice(&body).unwrap();
-
-        assert_eq!(json["updateTime"], "0000-00-00");
-        assert_eq!(json["songs"].as_array().unwrap().len(), 0);
-        assert_eq!(json["categories"].as_array().unwrap().len(), 0);
-        Ok(())
+        assert!(response.headers().contains_key(header::ETAG));
+        let catalog = body(response).await;
+        assert_eq!(catalog["songs"], json!([]));
+        for table in ["categories", "versions", "types", "difficulties", "regions"] {
+            assert!(catalog[table].is_array(), "{table}");
+        }
     }
 }

@@ -1,0 +1,180 @@
+// ─────────────────────────────────────────────────────────────
+// Design tokens — docs/reference/design-direction.md, "Tokens".
+//
+// Three layers. Primitives are raw values and never appear in a component.
+// Semantic tokens are what components read. Component tokens exist only where
+// a component needs a value no semantic token names. Dark mode (the `.dark`
+// class on <html>) swaps the semantic layer and nothing else.
+//
+// Difficulty colour is data, not a token: it comes from the reference
+// table's `difficulties[].color`, set inline as `--diff`, falling back to
+// `--fg` when a difficulty has none.
+// ─────────────────────────────────────────────────────────────
+@use "./breakpoints" as bp;
+
+// The two font families load from index.html (a <link>, not an @import).
+
+:root {
+  // ── primitives ──
+  --n-0: #ffffff;
+  --n-50: #fafafa;
+  --n-100: #f4f4f4;
+  --n-200: #e6e6e6;
+  --n-300: #d4d4d4;
+  --n-500: #8c8c8c;
+  --n-600: #767676;
+  --n-700: #444444;
+  --n-900: #111111;
+  --n-950: #0a0a0a;
+  --n-1000: #000000;
+
+  --f-sans: Inter, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic",
+    "Noto Sans JP", "Noto Sans CJK JP", "Apple SD Gothic Neo", "Malgun Gothic",
+    "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  // The display face: brand, headings, titles, card titles. Latin only; a
+  // Japanese title falls through to the same CJK system faces as the sans.
+  --f-display: "Space Grotesk", "Hiragino Sans", "Hiragino Kaku Gothic ProN",
+    "Yu Gothic", "Noto Sans JP", "Noto Sans CJK JP", "Apple SD Gothic Neo",
+    "Malgun Gothic", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-12: 48px;
+  --s-16: 64px;
+  --r: 4px;
+  --r-round: 50%;
+  --line-w: 1px;
+  --dur: 120ms;
+  --dur-slow: 180ms;
+  --max-w: 1200px;
+  // Breakpoints are documented here; media queries cannot read custom
+  // properties, so components use the SCSS twins in _breakpoints.scss.
+  --bp-md: 768px;
+  --bp-lg: 1100px;
+
+  // ── semantic (light) ──
+  --bg: var(--n-0);
+  --bg-panel: var(--n-50);
+  --bg-sunken: var(--n-100);
+  --fg: var(--n-900);
+  --fg-muted: var(--n-600);
+  --line: var(--n-200);
+  --line-strong: var(--n-300);
+  --inverse-bg: var(--n-900);
+  --inverse-fg: var(--n-0);
+  --inverse-hover: var(--n-700);
+  --scrim: rgb(255 255 255 / 0.7);
+  --focus: var(--fg);
+  --danger-fg: var(--n-900);
+  // Native controls (select popups, checkboxes, scrollbars) follow the mode.
+  color-scheme: light;
+
+  // ── component ──
+  --card-gap: var(--s-4);
+  --control-h: 36px;
+  --control-px: var(--s-3);
+  --modal-w: 540px;
+  --drawer-w: 360px;
+  --nav-h: 52px;
+  --jacket-bar: 3px;
+}
+
+:root.dark {
+  // ── semantic (dark) ──
+  --bg: var(--n-1000);
+  --bg-panel: var(--n-950);
+  --bg-sunken: var(--n-950);
+  --fg: var(--n-100);
+  --fg-muted: var(--n-500);
+  --line: var(--n-900);
+  --line-strong: var(--n-700);
+  --inverse-bg: var(--n-100);
+  --inverse-fg: var(--n-1000);
+  --inverse-hover: var(--n-300);
+  --scrim: rgb(0 0 0 / 0.72);
+  --danger-fg: var(--n-100);
+  color-scheme: dark;
+}
+
+@media (max-width: #{bp.$bp-md - 1px}) {
+  :root {
+    --card-gap: var(--s-3);
+  }
+}
+
+// ── type roles ("Type scale") ──
+// Numbers are always mono, including inside sans lines: wrap a figure in
+// `.t-num`. Japanese text in the sans roles gets proportional kana (`palt`).
+.t-label {
+  font: 500 10px/12px var(--f-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.t-meta {
+  font: 400 12px/16px var(--f-mono);
+}
+.t-body {
+  font: 400 14px/21px var(--f-sans);
+}
+.t-strong {
+  font: 600 14px/21px var(--f-sans);
+}
+.t-heading {
+  font: 600 18px/24px var(--f-display);
+  letter-spacing: -0.01em;
+}
+.t-title {
+  font: 600 24px/28px var(--f-display);
+  letter-spacing: -0.015em;
+}
+.t-display {
+  font: 700 72px/72px var(--f-display);
+  letter-spacing: -0.03em;
+}
+@media (max-width: #{bp.$bp-md - 1px}) {
+  // Only the sizes drop; line heights stay as the type scale sets them.
+  .t-title {
+    font-size: 20px;
+  }
+  .t-display {
+    font-size: 52px;
+    line-height: 56px;
+  }
+}
+.t-num {
+  font-family: var(--f-mono);
+}
+:lang(ja) :is(.t-body, .t-strong, .t-heading, .t-title, .t-display) {
+  font-feature-settings: "palt";
+}
+.t-muted {
+  color: var(--fg-muted);
+}
+
+// ── interaction ("Interaction") ──
+:focus-visible {
+  outline: 1px solid var(--focus);
+  outline-offset: 2px;
+}
+// Reduced motion removes the 8px rise of a modal or drawer entering and
+// nothing else: theme.scss redefines `mv-fade` without the rise under
+// `prefers-reduced-motion`.
+
+// Read by assistive technology, not drawn: a page heading the layout does
+// not show (the chart page before a chart).
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

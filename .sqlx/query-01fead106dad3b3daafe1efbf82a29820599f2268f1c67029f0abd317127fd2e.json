@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO sheet_region_overrides\n                 (sheet_id, region, level, level_value, internal_level,\n                  internal_level_value, note_designer)\n             VALUES ($1, 'intl', '13', 13.0, '13.2', 13.2, 'intl designer')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "01fead106dad3b3daafe1efbf82a29820599f2268f1c67029f0abd317127fd2e"
+}

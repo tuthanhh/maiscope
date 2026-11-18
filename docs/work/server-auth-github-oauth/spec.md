@@ -1,6 +1,6 @@
 # Spec — GitHub OAuth accounts
 
-**Status:** planned
+**Status:** active
 **Milestone:** v2.0
 **Parent:** [`production-v2`](../production-v2/spec.md)
 
@@ -42,6 +42,9 @@ Ticket numbers are creation order; 06 was added after 05 existed.
   that is a decision worth making narrowly rather than by default.
 - **Refresh tokens are opaque and hashed at rest**, never JWTs. A database leak
   must not hand out working credentials.
+- **One session per device.** Refresh tokens live in `user_sessions`, a row
+  each, so signing in on a phone does not sign the desktop out. Chosen over a
+  single column on `users` before any handler existed (issue 01's comments).
 - **They rotate on every use and expire after 30 days.** Rotation makes a stolen
   token single-use and surfaces the theft as an unexpected logout; the expiry is
   what bounds a stolen token that is simply never used.

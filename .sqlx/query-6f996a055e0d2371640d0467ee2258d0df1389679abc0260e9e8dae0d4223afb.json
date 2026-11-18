@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO difficulties (difficulty, name, code, ordinal)\n             VALUES ('【協】', '【協】', '協', 9)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "6f996a055e0d2371640d0467ee2258d0df1389679abc0260e9e8dae0d4223afb"
+}

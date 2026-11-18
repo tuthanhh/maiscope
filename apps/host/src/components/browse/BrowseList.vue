@@ -1,135 +1,160 @@
 <script setup lang="ts">
+import type { RouteLocationRaw } from "vue-router";
 import useGameData from "~/composables/useGameData";
 import type { Sheet } from "~/types";
-import MvIcon from "~/components/ui/MvIcon.vue";
 import MvCover from "~/components/ui/MvCover.vue";
+import MvIcon from "~/components/ui/MvIcon.vue";
+import MvLevelPill from "~/components/ui/MvLevelPill.vue";
 
+// The list view of Browse (frontend-redesign 17): one row per sheet, the
+// same sheets, order and paging as the grid. Like a card, the whole row is
+// one link to the song modal and the bookmark is its own control.
 defineOptions({ name: "BrowseList" });
 
-const props = defineProps<{ sheets: Sheet[]; selectedSet: Set<Sheet> }>();
-const emit = defineEmits<{
-    select: [sheet: Sheet];
-    bookmark: [sheet: Sheet, event: Event];
+defineProps<{
+    sheets: Sheet[];
+    linkTo: (sheet: Sheet) => RouteLocationRaw;
+    isBookmarked: (sheet: Sheet) => boolean;
+    bookmarkLabel: (sheet: Sheet) => string;
+    rowLabel: (sheet: Sheet) => string;
 }>();
+defineEmits<{ bookmark: [sheet: Sheet] }>();
 
-const { getTypeAbbr } = useGameData();
-
-function isBookmarked(sheet: Sheet): boolean {
-    return props.selectedSet.has(sheet);
-}
+const { getTypeAbbr, getDifficultyName, getDifficultyColor } = useGameData();
 </script>
 
 <template>
-    <div class="mv-list">
-        <div
-            v-for="(s, i) in sheets"
-            :key="s.sheetExpr ?? i"
-            class="mv-row mv-btn"
-            @click="emit('select', s)"
-        >
-            <div class="mv-row-art">
-                <MvCover :item="s" />
-            </div>
-            <span class="mv-row-level">{{ s.level }}</span>
-            <div class="mv-row-main">
-                <div class="mv-row-title">{{ s.title }}</div>
-                <div class="mv-row-artist">{{ s.artist }}</div>
-            </div>
-            <span class="mv-row-cat">{{ s.category }}</span>
-            <span class="mv-row-type">{{ getTypeAbbr(s.type) }}</span>
-            <span class="mv-row-bpm">{{ s.bpm }} BPM</span>
+    <ul class="mv-list">
+        <li v-for="s in sheets" :key="s.key" class="mv-list-row">
+            <RouterLink :to="linkTo(s)" class="mv-list-link" :aria-label="rowLabel(s)">
+                <span class="mv-list-jacket" aria-hidden="true"><MvCover :item="s.song" /></span>
+                <span class="mv-list-main">
+                    <span class="mv-list-title t-strong">{{ s.song.title }}</span>
+                    <span class="mv-list-artist t-body t-muted">{{ s.song.artist }}</span>
+                </span>
+                <span class="mv-list-sheet t-meta t-muted">
+                    {{ getTypeAbbr(s.type) }} · {{ getDifficultyName(s.difficulty) }}
+                </span>
+                <MvLevelPill
+                    class="mv-list-level"
+                    :level="s.level"
+                    :diff="getDifficultyColor(s.difficulty)"
+                />
+            </RouterLink>
             <button
                 type="button"
-                class="mv-btn mv-icon-btn mv-row-bm"
-                @click="emit('bookmark', s, $event)"
+                class="mv-list-bookmark"
+                :aria-label="bookmarkLabel(s)"
+                :aria-pressed="isBookmarked(s)"
+                :title="bookmarkLabel(s)"
+                @click="$emit('bookmark', s)"
             >
                 <MvIcon name="bookmark" :size="15" :filled="isBookmarked(s)" />
             </button>
-        </div>
-    </div>
+        </li>
+    </ul>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
+@use "~/assets/styles/breakpoints" as bp;
+
 .mv-list {
-    border: 1px solid var(--mv-bd);
-    border-radius: 4px;
-    overflow: hidden;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border-top: var(--line-w) solid var(--line);
 }
-.mv-row {
+.mv-list-row {
     display: flex;
     align-items: center;
-    gap: 14px;
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--mv-bd2);
+    border-bottom: var(--line-w) solid var(--line);
+    transition: background var(--dur);
 }
-.mv-row:last-child {
-    border-bottom: none;
+.mv-list-row:hover {
+    background: var(--bg-panel);
 }
-.mv-row:hover {
-    background: var(--mv-panel2);
-    opacity: 1;
-}
-.mv-row-art {
-    width: 40px;
-    height: 40px;
-    flex-shrink: 0;
-    border-radius: 3px;
-    overflow: hidden;
-}
-.mv-row-level {
-    width: 48px;
-    text-align: center;
-    font-weight: 700;
-    font-size: 15px;
-    border: 1px solid var(--mv-bd);
-    border-radius: 3px;
-    padding: 5px 0;
-}
-.mv-row-main {
+.mv-list-link {
     flex: 1;
     min-width: 0;
+    // 56, not the table row's 44: the 48px jacket and its padding set it.
+    min-height: 56px;
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr) 11rem 3.5rem;
+    align-items: center;
+    gap: var(--s-4);
+    padding: var(--s-2) var(--s-2) var(--s-2) 0;
+    color: var(--fg);
+    text-decoration: none;
 }
-.mv-row-title {
-    font-size: 13px;
-    font-weight: 500;
-    white-space: nowrap;
+.mv-list-link:hover .mv-list-title {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+.mv-list-jacket {
+    display: block;
+    width: 48px;
+    aspect-ratio: 1;
+    border-radius: var(--r);
     overflow: hidden;
-    text-overflow: ellipsis;
+    background: var(--bg-sunken);
 }
-.mv-row-artist {
-    font-size: 11px;
-    color: var(--mv-mut);
-}
-.mv-row-cat {
-    font-size: 10px;
-    color: var(--mv-mut);
-    letter-spacing: 0.1em;
-    width: 90px;
-    text-align: right;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.mv-row-type {
-    font-size: 10px;
-    color: var(--mv-mut);
-    width: 40px;
-    text-align: right;
-}
-.mv-row-bpm {
-    font-size: 10px;
-    color: var(--mv-mut);
-    width: 70px;
-    text-align: right;
-}
-.mv-icon-btn {
-    background: none;
-    border: none;
-    padding: 0;
+.mv-list-main {
     display: flex;
-    color: var(--mv-mut);
+    flex-direction: column;
+    min-width: 0;
 }
-.mv-row-bm {
-    color: var(--mv-mut);
+.mv-list-title {
+    font-family: var(--f-display);
+}
+.mv-list-title,
+.mv-list-artist,
+.mv-list-sheet {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.mv-list-level {
+    justify-self: end;
+}
+.mv-list-bookmark {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: var(--r);
+    background: none;
+    color: var(--fg);
+    cursor: pointer;
+    transition: opacity var(--dur);
+}
+.mv-list-bookmark:hover {
+    opacity: 0.7;
+}
+
+@media (max-width: #{bp.$bp-md - 1px}) {
+    // Phones: type and difficulty move under the artist; the pill stays right.
+    .mv-list-link {
+        grid-template-columns: 48px minmax(0, 1fr) auto;
+        grid-template-areas:
+            "jacket main level"
+            "jacket sheet level";
+        row-gap: 0;
+        column-gap: var(--s-3);
+    }
+    .mv-list-jacket {
+        grid-area: jacket;
+    }
+    .mv-list-main {
+        grid-area: main;
+    }
+    .mv-list-sheet {
+        grid-area: sheet;
+    }
+    .mv-list-level {
+        grid-area: level;
+    }
 }
 </style>

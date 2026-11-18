@@ -14,6 +14,16 @@ community screens have no code yet; their section is grounded in the
 recorded in [ADR-0021](../adr/0021-catalog-snapshot-plus-reference-tables-no-server-search.md);
 the rest of the decisions below were taken on 2026-11-17 and are reversible.
 
+> **Read as v1 as-built, 2026-11-17.** "Official screens", "Derived fields:
+> where they stand" and their tables describe the screens this document was
+> written against — the song page, the sheet dialog, in-memory bookmarks
+> keyed by `sheetExpr`, a 22-sheet pager. `frontend-redesign` replaced them
+> (2026-11-18): the song modal with a URL, a `sheet.key` of song id, type
+> and difficulty code, bookmarks persisted in `localStorage`, 24 cards a
+> page. "What each screen needs delivered" and "Community screens" are
+> still the current requirements; the ticket files under
+> `docs/work/frontend-redesign/issues/` record what was built.
+
 ## Summary
 
 - Of the five derived fields, **two are rendered** (`imageUrl`, and
@@ -47,9 +57,10 @@ Domain terms follow the root [`CONTEXT.md`](../../CONTEXT.md).
 
 ### App shell
 
-Header, navigation, locale menu, dark-mode toggle, footer. Renders nothing
-from the Catalog. Shows the loading overlay while the Catalog request is in
-flight, so it depends on the load *status*, not the data.
+Navigation, menu, dark-mode toggle. Renders nothing from the Catalog and
+waits on nothing: it fetches the reference tables (`GET /api/reference`)
+and starts the Catalog load at boot. Browse shows its own loading line while
+the Catalog is in flight.
 
 ### Home
 
@@ -81,7 +92,8 @@ populated before any filter is applied:
 on `|`, any part may match), `version`, `type`, `difficulty`, `levelValue`,
 `internalLevelValue`, `bpm`, `noteDesigner`, `regions`. With "use region
 override" on and a region selected, the sheet's `regionOverrides[region]`
-supplies `level`, `internalLevel` and `noteDesigner` values for the checks.
+supplies `level`, `levelValue`, `internalLevel`, `internalLevelValue` and
+`noteDesigner` for the checks (the filter compares the numeric values).
 
 **Each result renders:**
 
@@ -183,6 +195,12 @@ The playback surface (canvas, transport, speed sliders, frame-pacing overlay)
 reads engine state only. It is out of scope for the redesign and for this
 document.
 
+**In v2** ([ADR-0026](../adr/0026-v2-api-carries-codes-and-read-fields-only.md)),
+every `songId` above becomes the song's minted `id`, and the visualizer deep
+link is `?song=<id>&type=<type>&difficulty=<code>`. The sheet dialog's
+`searchUrl` belongs to the client's placeholder sheets (`utils/sheet.ts`);
+the server never sends it.
+
 ## Derived fields: where they stand
 
 For each field the client computes today, where it is read and what the
@@ -193,7 +211,7 @@ next client does with it.
 | `songNo` | Nothing | **Gone** | Never rendered. It encodes Catalog position, which the server already holds as `source_index`; a list that wants newest-first asks for that order |
 | `imageUrl` | Browse, song detail, dialog, visualizer | **Client, one helper** | Needs the asset host, which is client configuration (`GAME.dataSourceUrl`) and would otherwise be a server deploy to change. Today the derivation exists twice (Catalog and visualizer); it moves into one function every entry path calls |
 | `imageUrlM` | Nothing | **Gone** | The medium cover is never requested |
-| `sheetExpr` | Browse list keys; bookmark re-resolution; the dialog's visualizer link; the per-sheet fetch | **Gone as identity** | Title-derived, and the composite is never displayed. Every use is "a stable key for this sheet", which the minted sheet id provides. The last composite use is the deep-link query string, which the new visualizer entry replaces |
+| `sheetExpr` | Browse list keys; bookmark re-resolution; the dialog's visualizer link; the per-sheet fetch | **Gone as identity** | Title-derived, and the composite is never displayed. Every use is "a stable key for this sheet", which the minted song id plus type and difficulty code provides ([ADR-0026](../adr/0026-v2-api-carries-codes-and-read-fields-only.md)); no sheet id is minted |
 | `notePercents` | Nothing | **Gone** | Never rendered. Recomputable from `noteCounts` in one line if a screen ever wants it |
 | `$canonicalSheet` and the prototype chain | Browse (filter, map back to canonical), bookmarks (identity check), dialog (bookmark guard) | **Gone; explicit `song` reference** | Exists so a sheet can show its song's title without a join, and so a region-override object can be swapped in and swapped back. The Catalog keeps nesting `songs[].sheets[]` on the wire (compact: 1.8k songs, 7.3k sheets); the client builds its flat sheet list with `sheet.song` pointing at the Song object. Region overrides stay a map on the sheet; the filter reads the override's values instead of swapping objects. Shipping the Catalog flat, song fields repeated per sheet, was rejected as a roughly fourfold growth of song fields on the wire for no screen that needs it |
 
@@ -221,14 +239,14 @@ it and fetches one thing everywhere else
 | Browse | **Snapshot** | The filter panel is built from aggregates over every sheet (designer counts, distinct levels), and filtering runs in memory. No server search exists |
 | Song modal, opened by URL | **One song** with its sheets | A shared link to a song must not cost the snapshot. The [design direction](design-direction.md) removes the song page; the modal is the shareable surface and this fetch serves it |
 | Song modal, opened from the grid | The song in hand | Siblings come from the snapshot already loaded |
-| Visualizer, Catalog chart | **One sheet** with its song fields, plus the chart text | Entered by `?sheet=<id>` |
+| Visualizer, Catalog chart | **One sheet** with its song fields, plus the chart text | Entered by the song's id, the sheet's type and its difficulty code ([ADR-0026](../adr/0026-v2-api-carries-codes-and-read-fields-only.md)) |
 | Visualizer, community chart | **One community chart** with its song fields, plus the chart text | Entered by `?communityChart=<id>`; the card variant follows the parameter. Two explicit parameters were chosen over one server-disambiguated id because nothing enforces that ids never collide across the two libraries |
 | Community browse | **Page** | Paginated from the first ticket; never part of the Catalog |
 | Community detail | **One community song** with its charts | No chart text |
 | Upload chooser | **Snapshot** | Searches official titles in memory. An uploader is logged in and few; the snapshot is cached after first use. A title-only search endpoint for this one picker was rejected as a second filter path |
 | Reports queue | **Page** | Moderator list, paginated, filtered by resolved |
 
-**Bookmarks persist per browser**, keyed by the minted sheet id, so they
+**Bookmarks persist per browser**, keyed by song id, type and difficulty code, so they
 survive a reload and a Catalog refresh. Per-account bookmarks on the server
 are a later addition that keeps the same client key.
 
@@ -302,7 +320,7 @@ required by the redesign:
 | `versions[].releaseDate` | Only `abbr` and `version` are used |
 | `types[].iconUrl`, `types[].iconHeight` | The helper exists; no component calls it |
 | `difficulties[].iconUrl`, `difficulties[].iconHeight` | Same |
-| `updateTime` | Read only as the "Catalog not loaded yet" sentinel for the filter panel |
+| `updateTime` | Read only as the "Catalog not loaded yet" sentinel for the filter panel; v2 drops it, and the panel reads the store's loading status instead (`frontend-redesign` 04) |
 
 The design direction may add any of these back, which reopens the payload
 for that field only. Whether the server keeps sending them is a question for

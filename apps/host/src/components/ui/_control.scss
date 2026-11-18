@@ -1,0 +1,40 @@
+// Shared by text input, select and textarea: design-direction's state table
+// for "Text input, select, textarea".
+@mixin control {
+  height: var(--control-h);
+  padding: 0 var(--control-px);
+  border-radius: var(--r);
+  border: var(--line-w) solid var(--line);
+  background: var(--bg-sunken);
+  color: var(--fg);
+  font: 400 14px/21px var(--f-sans);
+  box-sizing: border-box;
+  outline: none;
+  transition:
+    border-color var(--dur),
+    background var(--dur);
+
+  &::placeholder {
+    color: var(--fg-muted);
+  }
+  &:hover {
+    border-color: var(--line-strong);
+  }
+  &:focus {
+    background: var(--bg);
+    border-color: var(--line-strong);
+  }
+  &:focus-visible {
+    outline: 1px solid var(--focus);
+    outline-offset: 2px;
+  }
+  &[aria-invalid="true"] {
+    border-color: var(--fg);
+  }
+  &:disabled {
+    background: var(--bg-panel);
+    border-color: var(--line);
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}

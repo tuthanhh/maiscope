@@ -23,6 +23,62 @@ const DEFAULT_DATABASE_MAX_CONNECTIONS: u32 = 4;
 /// Default log directives when `RUST_LOG` is unset.
 const DEFAULT_LOG_FILTER: &str = "info,tower_http=info";
 
+/// Shortest `JWT_SECRET` accepted: RFC 7518 §3.2 requires an HS256 key of at
+/// least SHA-256's output size. This catches an empty or truncated value; it
+/// cannot measure entropy, so a 32-character passphrase passes. Generate the
+/// value (`openssl rand -base64 48`), never choose it.
+const MIN_JWT_SECRET_BYTES: usize = 32;
+
+/// GitHub's OAuth and REST hosts. Constants, not environment: only tests
+/// point them elsewhere, at a local stand-in, by building `Config` directly.
+const GITHUB_OAUTH_BASE: &str = "https://github.com";
+const GITHUB_API_BASE: &str = "https://api.github.com";
+
+/// The OAuth app this server signs users in through
+/// (server-auth-github-oauth 03).
+#[derive(Debug, Clone)]
+pub struct GitHubConfig {
+    pub client_id: String,
+    pub client_secret: Secret,
+    /// The frontend's callback route, which GitHub sends the browser to. It
+    /// must equal the OAuth app's registered callback URL, and it is sent
+    /// again with the code exchange, where GitHub compares it.
+    pub redirect_url: String,
+    /// Origin of `/login/oauth/authorize` and `/login/oauth/access_token`.
+    pub oauth_base: String,
+    /// Origin of the REST API (`/user`).
+    pub api_base: String,
+}
+
+/// A value that must never reach a log line. `Config` derives `Debug`, so a
+/// plain `String` here would print the secret the first time anyone writes
+/// `?config`.
+/// No `PartialEq`: comparing secrets with `==` is not constant-time, and
+/// nothing should compare them at all.
+#[derive(Clone)]
+pub struct Secret(String);
+
+impl Secret {
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
+}
+
+#[cfg(test)]
+impl Secret {
+    /// For tests elsewhere in the crate, which cannot reach the private field
+    /// and should not need a real environment to build a `Config`.
+    pub fn for_test(value: &str) -> Self {
+        Secret(value.to_string())
+    }
+}
+
+impl fmt::Debug for Secret {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Secret(***)")
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub database_url: String,
@@ -38,6 +94,9 @@ pub struct Config {
     /// can smuggle through, such as `x-forwarded-for` behind a proxy that
     /// appends to it (ADR-0019).
     pub trusted_ip_headers: Vec<String>,
+    /// HS256 key for access JWTs (server-auth-github-oauth 02).
+    pub jwt_secret: Secret,
+    pub github: GitHubConfig,
     /// `tracing_subscriber::EnvFilter` directive string (ticket 05).
     pub log_filter: String,
     pub log_json: bool,
@@ -90,6 +149,21 @@ fn optional(var: &'static str) -> Result<Option<String>, ConfigError> {
             reason: "value is not valid UTF-8".to_string(),
         }),
     }
+}
+
+/// A required variable that must also hold something. Fly substitutes an
+/// empty string for a secret that was never set (`bin/migrate.rs`), and
+/// `.env.example` ships these blank, so absence alone is not the failure to
+/// catch.
+fn required_non_empty(var: &'static str) -> Result<String, ConfigError> {
+    let value = required(var)?;
+    if value.trim().is_empty() {
+        return Err(ConfigError::Invalid {
+            var,
+            reason: "is empty".to_string(),
+        });
+    }
+    Ok(value)
 }
 
 /// `None` (unset) defaults to [`DEFAULT_PORT`]; anything present must parse.
@@ -166,6 +240,31 @@ fn parse_trusted_ip_headers(raw: String) -> Result<Vec<String>, ConfigError> {
         .collect()
 }
 
+fn parse_jwt_secret(raw: String) -> Result<Secret, ConfigError> {
+    if raw.len() < MIN_JWT_SECRET_BYTES {
+        return Err(ConfigError::Invalid {
+            var: "JWT_SECRET",
+            reason: format!(
+                "must be at least {MIN_JWT_SECRET_BYTES} bytes, got {}",
+                raw.len()
+            ),
+        });
+    }
+    Ok(Secret(raw))
+}
+
+/// An absolute `http(s)` URL. Checked at startup because GitHub rejects a
+/// mismatched redirect only at login time, as a page the user sees.
+fn parse_redirect_url(raw: String) -> Result<String, ConfigError> {
+    match reqwest::Url::parse(&raw) {
+        Ok(url) if matches!(url.scheme(), "http" | "https") => Ok(raw),
+        _ => Err(ConfigError::Invalid {
+            var: "GITHUB_REDIRECT_URL",
+            reason: format!("{raw:?} is not an absolute http(s) URL"),
+        }),
+    }
+}
+
 fn parse_log_json(raw: Option<String>) -> bool {
     match raw {
         Some(raw) => raw.eq_ignore_ascii_case("true"),
@@ -187,6 +286,14 @@ impl Config {
             parse_cors_origins(optional("CORS_ALLOWED_ORIGINS")?.unwrap_or_default());
         let trusted_ip_headers =
             parse_trusted_ip_headers(optional("TRUSTED_IP_HEADERS")?.unwrap_or_default())?;
+        let jwt_secret = parse_jwt_secret(required("JWT_SECRET")?)?;
+        let github = GitHubConfig {
+            client_id: required_non_empty("GITHUB_CLIENT_ID")?,
+            client_secret: Secret(required_non_empty("GITHUB_CLIENT_SECRET")?),
+            redirect_url: parse_redirect_url(required("GITHUB_REDIRECT_URL")?)?,
+            oauth_base: GITHUB_OAUTH_BASE.to_string(),
+            api_base: GITHUB_API_BASE.to_string(),
+        };
 
         Ok(Config {
             database_url,
@@ -194,6 +301,8 @@ impl Config {
             port,
             cors_allowed_origins,
             trusted_ip_headers,
+            jwt_secret,
+            github,
             log_filter,
             log_json,
         })
@@ -319,6 +428,63 @@ mod tests {
     }
 
     #[test]
+    fn parse_jwt_secret_rejects_a_short_or_empty_value() {
+        for raw in ["", "too-short"] {
+            assert!(matches!(
+                parse_jwt_secret(raw.to_string()),
+                Err(ConfigError::Invalid {
+                    var: "JWT_SECRET",
+                    ..
+                })
+            ));
+        }
+        assert!(parse_jwt_secret("k".repeat(MIN_JWT_SECRET_BYTES)).is_ok());
+    }
+
+    #[test]
+    fn secret_debug_never_prints_the_value() {
+        let secret = Secret("hunter2-hunter2-hunter2-hunter2-hunter2".to_string());
+        assert_eq!(format!("{secret:?}"), "Secret(***)");
+
+        // And through the struct that holds it, which is what a log line
+        // would format.
+        let config = Config {
+            database_url: String::new(),
+            database_max_connections: 1,
+            port: 0,
+            cors_allowed_origins: vec![],
+            trusted_ip_headers: vec![],
+            jwt_secret: secret,
+            github: GitHubConfig {
+                client_id: String::new(),
+                client_secret: Secret::for_test("hunter2-client-secret"),
+                redirect_url: String::new(),
+                oauth_base: String::new(),
+                api_base: String::new(),
+            },
+            log_filter: String::new(),
+            log_json: false,
+        };
+        assert!(!format!("{config:?}").contains("hunter2"));
+    }
+
+    #[test]
+    fn parse_redirect_url_wants_an_absolute_http_url() {
+        assert!(parse_redirect_url("http://localhost:1420/auth/callback".to_string()).is_ok());
+        for raw in [
+            "/auth/callback",
+            "localhost:1420",
+            "javascript:alert(1)",
+            "",
+        ] {
+            assert!(
+                parse_redirect_url(raw.to_string()).is_err(),
+                "{raw:?} was accepted"
+            );
+        }
+    }
+
+    #[test]
     fn parse_cors_origins_empty_string_yields_empty_vec() {
         assert!(parse_cors_origins(String::new()).is_empty());
     }
@@ -336,6 +502,21 @@ mod tests {
         let _guard = ENV_LOCK.lock().unwrap();
         unsafe { std::env::set_var(TEST_VAR, "value") };
         assert_eq!(required(TEST_VAR).as_deref(), Ok("value"));
+        unsafe { std::env::remove_var(TEST_VAR) };
+    }
+
+    #[test]
+    fn required_non_empty_refuses_a_blank_value() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        for blank in ["", "   "] {
+            unsafe { std::env::set_var(TEST_VAR, blank) };
+            assert!(matches!(
+                required_non_empty(TEST_VAR),
+                Err(ConfigError::Invalid { .. })
+            ));
+        }
+        unsafe { std::env::set_var(TEST_VAR, "id") };
+        assert_eq!(required_non_empty(TEST_VAR).as_deref(), Ok("id"));
         unsafe { std::env::remove_var(TEST_VAR) };
     }
 

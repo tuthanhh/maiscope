@@ -65,7 +65,8 @@ revision-probe design is working and is not what is broken.
    to song ids, and to any identifier community charts acquire.
 
    The mint is **UUID v7 in a native `uuid` column, canonical hyphenated in
-   URLs**, and it **is the primary key** — `songs.id`, `community_songs.id`,
+   URLs**, and it **is the primary key** — `songs.id`, `users.id`,
+   `user_sessions.id`, `community_songs.id`,
    `community_charts.id`. One scheme across both libraries, and one id per row
    rather than a bigserial with a `public_id` beside it. Two ids for one row is
    two things to keep in step, two things to pick the wrong one of in a query,
@@ -96,8 +97,8 @@ revision-probe design is working and is not what is broken.
    not by omission. It returns the moment anything but this project's own
    frontend consumes the API.
 6. **Deleting an account strips identity; it does not delete published work.**
-   A deletion nulls `login` and `avatar_url`, sets `deleted_at` and revokes
-   `refresh_token_hash`, keeping the row so uploads stay attributed and a
+   A deletion nulls `login` and `avatar_url`, sets `deleted_at` and deletes
+   every `user_sessions` row, keeping the row so uploads stay attributed and a
    moderator still has a target. `github_id` is *retained* — without it a
    re-login mints a second account and the tombstone is unreachable — so
    re-authenticating with the same GitHub account reactivates the tombstone.
@@ -200,6 +201,46 @@ What does not:
   email — and deletion is settled by cross-cutting rule 6. What is not settled
   is whether that set obliges a privacy policy anywhere it has users.
 
+## Before the first v2 deploy
+
+The branch merges and deploys as one. These are not code, so no test catches
+them; the machine refuses to start without the first two, which surfaces as a
+crash loop. **The previous release does not keep serving this time**: the
+song-id migration replaces `songs.id` under it, so once the release command
+has run the v1 machine cannot join songs to sheets. Rollback for this deploy
+is restoring the backup below, not the previous release (`fly.toml` says so
+beside `release_command`).
+
+- [ ] Neon runs Postgres 18 — two migrations call `uuidv7()`
+- [ ] Rehearse on real data: restore the backup into the local Postgres 18,
+      run `cargo run --bin migrate`, start the server against it, and check
+      `/api/catalog`'s song count and that no sheet has a NULL `type` or
+      `difficulty` (the read path skips such a sheet — it has no address —
+      so a NULL would be a silently missing sheet)
+
+- [ ] Create the production GitHub OAuth app with the callback
+      `https://maiscope.pages.dev/auth/callback`; put its client id in
+      `fly.toml` (`GITHUB_CLIENT_ID`, commented out until then)
+- [ ] Set `GITHUB_CLIENT_SECRET` and `JWT_SECRET` as Fly secrets in the
+      dashboard (`openssl rand -base64 48` for the latter)
+- [ ] The frontend's `/auth/callback` route exists and fails closed on
+      `state` (`frontend-redesign` 05)
+- [ ] `backup-database.yml` before `deploy.yml`, per ADR-0024. Its runbook
+      covers the song-id migration; the deploy also runs the difficulty,
+      `users`, revision-bump and sheet-address migrations, all additive. The
+      sheet-address `UNIQUE` aborts the release command if production ever
+      held two sheets at one (song, type, difficulty) — impossible while
+      `sheet_expr` is unique, but that is the failure to recognise
+- [ ] Order: `deploy.yml` (server and migrations) first — `deploy.yml`'s
+      schema check reads the manifest — then `deploy-web.yml`. Between the
+      two, the v1 frontend gets JSON 404s; keep the gap short. Not within
+      minutes of the 19:00 UTC `sync-catalog` cron, and no `seed-charts`
+      during it
+- [ ] After the deploy: `/api/reference`, `/api/catalog` and
+      `/api/sync/manifest` answer, and the manifest's revision moved by one;
+      one song modal and one chart page load in a browser; dispatch
+      `sync-catalog.yml` once and see it succeed against the new schema
+
 ## Accepted, not solved
 
 Each of these was put as a decision and deferred on purpose. They are listed so
@@ -238,7 +279,7 @@ a later reader does not mistake a choice for an oversight.
   A custom domain would make same-site cookies possible and stays **optional** —
   `CORS_ALLOWED_ORIGINS` is already config-driven, so adopting one needs no code
   change. Until then XSS on the frontend origin is credential theft, bounded by
-  a 30-day `refresh_token_expires_at` and rotation on every use.
+  a 30-day `user_sessions.expires_at` and rotation on every use.
 
 ## Child features
 
@@ -266,7 +307,7 @@ current app, and each removes a dependency from the branch-bound work.
 |---|---|---|
 | 6 | [`server-auth-github-oauth`](../server-auth-github-oauth/spec.md) | Hard prerequisite for any write endpoint. |
 | 7 | [`api-rewrite`](../api-rewrite/spec.md) | Needs 1, 2 and 3. |
-| 8 | [`frontend-redesign`](../frontend-redesign/spec.md) tickets 02–05 | Cuts over with 7, against the direction written in ticket 06. |
+| 8 | [`frontend-redesign`](../frontend-redesign/spec.md) tickets 02–14 | Cuts over with 7, against the direction written in ticket 06. |
 | 9 | [`community-charts`](../community-charts/spec.md) | Needs 4, 6, and 7's conventions. |
 
 Auth moved onto the branch rather than ahead of it: nothing on master consumes

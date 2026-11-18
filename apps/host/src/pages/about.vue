@@ -71,21 +71,21 @@ usePageTitle(() => ({ title: t("page-title.about") as string }));
         <ul class="mv-about-list">
             <li>
                 <a
-                    href="https://github.com/tuthanhh/maiscope-frontend"
+                    href="https://github.com/tuthanhh/maiscope"
                     target="_blank"
                     rel="noopener"
-                    >tuthanhh/maiscope-frontend</a
+                    >tuthanhh/maiscope</a
                 >
                 － this project.
                 <a
-                    href="https://github.com/tuthanhh/maiscope-frontend/issues/new?labels=bug"
+                    href="https://github.com/tuthanhh/maiscope/issues/new?labels=bug"
                     target="_blank"
                     rel="noopener"
                     >Report a bug</a
                 >
                 ·
                 <a
-                    href="https://github.com/tuthanhh/maiscope-frontend/issues/new?labels=enhancement"
+                    href="https://github.com/tuthanhh/maiscope/issues/new?labels=enhancement"
                     target="_blank"
                     rel="noopener"
                     >Request a feature</a
@@ -161,14 +161,14 @@ usePageTitle(() => ({ title: t("page-title.about") as string }));
 }
 .mv-hr {
     height: 1px;
-    background: var(--mv-bd);
+    background: var(--line);
     margin: 12px 0 20px;
 }
 .mv-about-h3 {
     font-size: 12px;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: var(--mv-mut);
+    color: var(--fg-muted);
     margin: 24px 0 8px;
 }
 .mv-about-p {
@@ -181,7 +181,7 @@ usePageTitle(() => ({ title: t("page-title.about") as string }));
     margin-bottom: 6px;
 }
 .mv-about a {
-    color: var(--mv-fg);
+    color: var(--fg);
     text-underline-offset: 2px;
 }
 .mv-about a:hover {

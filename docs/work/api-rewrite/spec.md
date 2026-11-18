@@ -1,6 +1,6 @@
 # Spec — API rewrite
 
-**Status:** planned
+**Status:** active
 **Milestone:** v2.0
 **Parent:** [`production-v2`](../production-v2/spec.md)
 
@@ -124,7 +124,7 @@ must name a difficulty that exists in that table.
 - **The chart endpoints keep plain-text errors, routed through `AppError`.** The
   original justification stands — the success body is simai for the engine, so a
   JSON error beside it is arguably *less* consistent. What does not stand is the
-  bespoke error path it grew: `routes/charts.rs:51` returns a raw `sqlx::Error`
+  bespoke error path it grew: `routes/v1/charts.rs:51` returns a raw `sqlx::Error`
   string to the client, so the documented exception to the error envelope
   quietly became an exception to error redaction too. `AppError` gains a
   plain-text rendering; the wire format is unchanged, the leak closes by
@@ -139,15 +139,41 @@ must name a difficulty that exists in that table.
   in paths, and it is `songs.id` itself rather than a second column beside a
   bigserial. See [`song-public-id`](../song-public-id/spec.md) issue 01.
 
-## Open questions
+## Settled 2026-11-17
 
-- **Payload: raw versus derived.** Blocked on the frontend's data requirements —
-  "should the server send what the client renders?" has no answer until the
-  client is specified. Today's answer is knowable; a redesigned frontend's is not.
-  This is the only one left, and it is blocked on purpose:
-  [`frontend-redesign`](../frontend-redesign/spec.md) issue 01 is item 1 of the
-  build order precisely so this can be answered from a written list rather than
-  from the API someone already had in mind.
+The payload question was blocked on the frontend's data requirements; with
+[`screen-data-requirements.md`](../../reference/screen-data-requirements.md)
+written, the maintainer picked from options. Recorded in
+[ADR-0026](../../adr/0026-v2-api-carries-codes-and-read-fields-only.md):
+
+- **Raw, not derived, and only what a screen reads.** The client derives
+  `imageUrl`; `songNo`, `imageUrlM`, `notePercents` and `sheetExpr` disappear.
+  Fields no screen reads are not sent, `songId` included.
+- **A sheet is its song id, type and difficulty code.** No sheet id is minted;
+  the data-requirements document's `?sheet=<id>` is corrected to match.
+- **Difficulty travels as its `code`**, in payloads as in URLs.
+- **`/sync/delta` is dropped**, as `/sheets/search` was by ADR-0021. The
+  manifest shrinks to its `revision`.
+- **The five reference tables** are `GET /api/reference` and also ride inside
+  the Catalog, per ADR-0021.
+- **Vanished rows are hidden.** A song or sheet with a standing tombstone is
+  not served; the sync clears the tombstone if the row returns. Picked after
+  the feature review found delta's removal left no other signal.
+
+## Tickets
+
+| # | Ticket | Note |
+|---|---|---|
+| 01 | [v1 routes move under `routes/v1/`](issues/01-v1-routes-move-aside.md) | Mechanical; makes room |
+| 02 | [Health and reference tables](issues/02-health-and-reference.md) | First `/api` read routes |
+| 03 | [The Catalog](issues/03-catalog.md) | The snapshot, reshaped |
+| 04 | [One song, one sheet](issues/04-song-and-sheet.md) | The addressed reads |
+| 05 | [Chart text](issues/05-chart-text.md) | Plain-text errors through `AppError` |
+| 06 | [Sync manifest](issues/06-sync-manifest.md) | Revision probe only |
+| 07 | [Delete `/api/v1`](issues/07-delete-v1.md) | Last; blocked on the frontend cutover |
+
+Each ticket updates `api-contract.md` for the routes it adds. Until 07, the
+contract describes both trees.
 
 ## Blocked by
 
@@ -159,3 +185,22 @@ requirements for the payload.
 
 The frontend calls only `/api/...`, the old routes are deleted, and no URL in
 the system contains a percent-encoded title.
+
+**2026-11-18 — whole-feature review.** Applied: the chart route now hides
+a sheet whose *song* is tombstoned, as the song and sheet routes already
+did, and both sheet queries skip a sheet with no type or difficulty (it has
+no address); tests pin both. `If-None-Match` is compared weakly across a
+list, so a proxy that weakens the tag still gets 304s. New router tests
+cover the Catalog's revalidation through compression, the chart route's
+plain-text 400, and a blob-only chart (`hasChart: false`, 501). `deploy.yml`
+gains a schema check on `/api/sync/manifest` — the healthcheck never
+touches the database. `fly.toml` and `production-v2`'s pre-deploy list now
+say that the first v2 deploy cannot fall back to the previous release (the
+song-id migration replaces `songs.id` under it): its rollback is the backup,
+and the list adds a rehearsal on restored data, the Postgres 18 check and
+the cutover order. The frontend fetches the reference tables `no-cache` as
+the contract says, and reads a JSON error from the chart route. Not done,
+offered as a choice: views (`visible_songs`, `visible_sheets`) giving one
+definition of "served" in place of three predicates kept in step by hand.
+Noted: `isLocked` and `comment` are on the wire though no screen reads them
+since the redesign.

@@ -17,15 +17,23 @@ const routes: RouteRecordRaw[] = [
     name: "songs",
     component: () => import("~/pages/songs.vue"),
   },
+  // The song page is gone; its links open the song modal over Songs.
   {
     path: "/song",
-    name: "song",
-    component: () => import("~/pages/song.vue"),
+    redirect: (to) => ({
+      name: "songs",
+      query: typeof to.query.id === "string" ? { song: to.query.id } : {},
+    }),
   },
   {
     path: "/visualizer",
     name: "visualizer",
     component: () => import("~/pages/visualizer.vue"),
+  },
+  {
+    path: "/community",
+    name: "community",
+    component: () => import("~/pages/community.vue"),
   },
   {
     path: "/about",
@@ -39,6 +47,14 @@ const routes: RouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHashHistory(),
   routes,
+  // Back and Forward return to where the page was; a query change on the same
+  // page (the song modal opening or switching sheet) leaves the scroll alone;
+  // any other navigation starts at the top.
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) return savedPosition;
+    if (to.name === from.name) return false;
+    return { top: 0 };
+  },
 });
 
 export default router;

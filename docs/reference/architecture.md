@@ -21,15 +21,16 @@ on its `bevy` feature, so the server never links Bevy
 crates together with `--workspace` would undo that.
 
 There is no shared-types crate: the server emits raw fields the client
-reshapes, and a snapshot test guards the wire contract instead
+reshapes, and the Catalog's mapping and forbidden-keys tests
+(`apps/server/src/routes/catalog.rs`) guard the wire contract instead
 ([ADR-0018](../adr/0018-no-shared-types-crate.md)).
 
 ## Data flow
 
 ```
 apps/host (browser)                    apps/server (Fly.io)
-   │  GET /api/v1/catalog       ──────▶  song/sheet metadata (Neon Postgres)
-   │  GET /api/v1/sheets/{s}/chart ───▶  raw simai chart text
+   │  GET /api/catalog          ──────▶  song/sheet metadata (Neon Postgres)
+   │  GET /api/songs/{id}/sheets/{type}/{code}/chart ─▶ raw simai chart text
    ▼
 visualizer page
    │  load_chart(text) via wasm-bindgen
@@ -40,17 +41,23 @@ engine (Bevy, wasm)
 
 ## Cross-tier identity
 
-`sheetExpr` = `` `${songId}|${type}|${difficulty}` ``. Computed client-side in
-`apps/host/src/utils/sheet.ts:computeSheetExpr`; stored as the `sheet_expr` column
-server-side. Almost every per-sheet endpoint keys on it, URL-encoded (`|` → `%7C`).
+A song is its minted UUID (`songs.id`); a sheet is that id plus its type and
+difficulty code — `/api/songs/{id}/sheets/{type}/{code}` on the server,
+`sheet.key = ${id}/${type}/${code}` in the client (`utils/data.ts:sheetKey`)
+([ADR-0026](../adr/0026-v2-api-carries-codes-and-read-fields-only.md)).
+`sheet_expr` survives as the sync's upstream match key and as the join the
+read queries use to hide tombstoned sheets (`queries/official.rs`); no route
+takes or sends it.
 
 ## Raw versus derived fields
 
-The server returns **raw fields only**. It never sends `songNo`, `imageUrl`,
-`imageUrlM`, `sheetExpr`, `notePercents`, or `$canonicalSheet` — the frontend
-computes those in `apps/host/src/utils/data.ts:preprocessData`, which rehydrates
-the catalog JSON into a frozen, prototype-linked object graph inherited from the
-upstream arcade-songs data model. Keep new endpoints on this split.
+The server returns **raw fields a screen reads, nothing else**. The client
+derives `imageUrl` and builds the explicit `sheet.song` reference and
+`sheet.key` — `utils/data.ts:preprocessData` for the Catalog, `attachSong`
+for a single song or sheet — then freezes the Catalog graph, which is
+replaced wholesale on a refresh. Names and colours come from the reference
+tables (`GET /api/reference`, fetched at boot), never per row. Keep new
+endpoints on this split.
 
 ## Client caching
 
@@ -65,11 +72,13 @@ staleness in one minute and three.
 
 The launch flow (`stores/data.ts:loadData`): read IndexedDB → paint if hit →
 `GET /sync/manifest` → refetch `/catalog` only when the revision changed →
-swap the graph wholesale, re-resolving selected sheets by `sheetExpr`. A
-probe or refetch that fails after a cache hit is logged and the cached
-catalog stays; on a miss it is the user-visible error it always was. The
-store is `utils/catalogCache.ts`: database `maiscope`, object store
-`catalog`, one key `current`, every failure a cache miss.
+swap the graph wholesale, re-resolving bookmarks by sheet key (a key no
+Catalog has resolved yet stays persisted, in `localStorage` `mv:bookmarks`).
+A probe or refetch that fails after a cache hit is logged and the cached
+catalog stays; on a miss Browse shows its error state with Retry. The store
+is `utils/catalogCache.ts`: database `maiscope-catalog-v2` (the v1 `maiscope`
+database is deleted on launch), object store `catalog`, one key `current`,
+every failure a cache miss.
 
 ## Engine boundary
 

@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO charts (sheet_id, sheet_expr, format, content)\n             SELECT id, sheet_expr, 'maimai-simai', '&title=B' FROM sheets\n             WHERE sheet_expr = 'b|dx|master'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "0968edbdb913f8416239c07e06bd19d279e9cb07a8f63bc00112462a12d76431"
+}

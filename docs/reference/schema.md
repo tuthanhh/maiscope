@@ -2,20 +2,23 @@
 
 Postgres schema for the maiscope global backend. Two concerns:
 
-1. **Canonical** — the catalog served to clients. Mirrors the frontend `Data`
-   shape (`apps/host/src/types/{Data,Song,Sheet}.ts`) so the client can rehydrate
-   its frozen, prototype-linked object graph (`utils/data.ts:preprocessData`)
-   unchanged. **Built now** — migration `20260624091738_canonical.sql`.
+1. **Canonical** — the catalog served to clients. Its fields are the raw ones
+   the frontend `Data` shape reads (`apps/host/src/types/{Data,Song,Sheet}.ts`);
+   the client builds its graph from them (`utils/data.ts:preprocessData`).
+   **Built now** — migration `20260624091738_canonical.sql`.
 2. **Charts / assets / contributions** — chart storage + open contribution &
-   moderation flow. **Later migrations** (see `docs/api-contract.md` §2, §5).
+   moderation flow. **Later migrations** (see [`api-contract.md`](api-contract.md) §0 for the chart route, §5 for the superseded contribution design).
 
-Cross-tier key everywhere: **`sheet_expr = songId|type|difficulty`**
-(`utils/sheet.ts:computeSheetExpr`).
+A sheet is addressed by its song's id, its type and its difficulty code
+([ADR-0026](../adr/0026-v2-api-carries-codes-and-read-fields-only.md)).
+**`sheet_expr = songId|type|difficulty`** was v1's cross-tier key; the sync
+still matches upstream on it, and the read queries join `deleted_sheets` on
+it to hide tombstoned sheets. No route takes or sends it since `api-rewrite`
+07 deleted `/api/v1`; the client never computes it.
 
-The server stores **raw fields only**. Derived fields the client computes
-(`songNo`*, `imageUrl`, `imageUrlM`, `sheetExpr`*, `notePercents`,
-`$canonicalSheet`) are not authoritative here. (*`song_no`/`sheet_expr` are
-denormalized as a convenience/cache, but the client recomputes them.)
+The server stores **raw fields only**; the client derives `imageUrl` and its
+graph references. `song_no` and `sheet_expr` are denormalized columns no
+route sends.
 
 ---
 
@@ -27,24 +30,27 @@ of `Data` (`apps/host/src/types/Data.ts`).
 
 ### `catalog_meta`
 Singleton (one row, pinned by a `CHECK (id)` on a boolean PK). Holds
-`Data.updateTime` — the catalog freshness stamp and ETag source (contract §1).
+`Data.updateTime` — the catalog freshness stamp and ETag source (contract §0).
 The only top-level scalar in `Data`.
 - `revision` — monotonic counter shared by every table that participates in
   sync. `bin/sync_catalog` draws `previous + 1` per run and stamps it onto the
   rows it actually changed; `apply_chart_revision` bumps it the same way for a
-  single chart. `GET /sync/delta?since=N` compares row revisions against this
-  one sequence, so a writer that invents its own counter breaks delta polling.
+  single chart. Row revisions sit in this one sequence so a change feed can
+  ask for rows above `N`; v1's `GET /sync/delta?since=N` did, and none does
+  since `api-rewrite` 07, but a writer that invents its own counter would
+  break the next one.
   **A run that changed nothing does not advance it** — this value feeds the
   `/catalog` ETag, so advancing it daily on a no-op would make every client
   refetch the whole payload. Writers must read it under the singleton's row
   lock (`bin/sync_catalog` takes it with its opening upsert) rather than with a
   bare `SELECT`, or a read-then-write can regress a concurrent bump.
 - `last_full_reload_revision` — the revision of the last reload that broke row
-  identity. A `since` older than this cannot be diffed, so `/sync/delta`
-  answers `409 snapshot_required` (contract §3). **Nothing writes it any more.**
+  identity. A `since` older than this could not be diffed; v1's `/sync/delta`
+  answered `409 snapshot_required` then. That route is gone (`api-rewrite`
+  07) and **nothing writes or reads this column any more.**
   `bin/sync_catalog` upserts by natural key and never deletes, so row identity
   survives every refresh; the column is frozen at whatever the retired
-  `bin/ingest` left. That is exactly what makes delta sync work across daily
+  `bin/ingest` left. That is what let v1's delta sync work across daily
   refreshes.
 
 Both feed the `ETag` on `GET /catalog` and `GET /sync/manifest`, which is
@@ -89,7 +95,7 @@ One row per song. Mirrors `Song.ts` raw fields (`song_id`, `category`, `title`,
   key is identity-bearing, so nothing may re-insert a song under a fresh id;
   the sync upserts on `song_id` and never names `id`, so an existing song
   keeps its own.
-- `song_no` — derived display order (client also recomputes in `preprocessData`).
+- `song_no` — derived display order; no route sends it since `/api/v1` went.
 - `source_index` — position in the upstream `data.json`, so a sync is
   reproducible and stable ordering survives re-imports.
 - `song_id UNIQUE`: upstream's natural key and the sync's conflict target
@@ -101,9 +107,12 @@ type×difficulty). Mirrors `Sheet.ts` raw fields (`type`, `difficulty`, `level`,
 `level_value`, `internal_level`, `internal_level_value`, `note_designer`,
 `is_special`). Key columns:
 - `song_id_fk UUID`: the real link to `songs.id` (source of truth).
-- `sheet_expr` — denormalized cross-tier key, `UNIQUE`; the lookup key for
-  `GET /sheets/{sheetExpr}` and charts.
+- `sheet_expr` — denormalized v1 cross-tier key, `UNIQUE`; now only the sync's
+  upstream match key and the seed tools' (`seed_songs`, `seed_chart`).
 - `source_index` — upstream ordering, as on `songs`.
+- `UNIQUE (song_id_fk, type, difficulty)` — the v2 address
+  (`/api/songs/{id}/sheets/{type}/{difficulty}`); implied by `sheet_expr`,
+  made explicit because the v2 lookups take the first row they find.
 
 > Note: this is **catalog metadata about a chart**, not the chart notes
 > themselves. The actual simai/ma2 data lives in the `charts` table, written
@@ -126,7 +135,7 @@ Normalized out of the `Sheet` object's `Record<...>` maps:
 > payload, not only sheets whose scalar columns changed — they move upstream
 > independently (note counts backfilled after release, a region flipping to
 > available). A sheet whose sub-tables alone changed still gets a fresh
-> `revision`, so `/sync/delta` reports it. The per-sheet `DELETE`s that do the
+> `revision`, so a change feed would report it. The per-sheet `DELETE`s that do the
 > replacing are scoped to a single `sheet_id` and must stay that way.
 
 ### `deleted_songs` / `deleted_sheets`
@@ -136,11 +145,13 @@ as of `bin/sync_catalog`; they were empty placeholders under `bin/ingest`.
 A row that disappears from the upstream payload is **not** deleted. Deleting a
 song cascades through `sheets` into `charts` and destroys chart text, which
 Postgres is the only copy of ([ADR-0001](../adr/0001-postgres-source-of-truth-for-charts.md)).
-The row stays in `songs`/`sheets`, stays visible in `/catalog`, and gets one
-tombstone row recording the revision it went missing at. `/sync/delta` serves
-those under `tombstones` (contract §3). A row is logged **once**, not on every
-subsequent sync — the PK is `(key, revision)`, so `ON CONFLICT DO NOTHING`
-would still write a fresh entry under each new revision.
+The row stays in `songs`/`sheets` and gets one tombstone row recording the
+revision it went missing at. The API hides any row with a standing
+tombstone ([ADR-0026](../adr/0026-v2-api-carries-codes-and-read-fields-only.md)).
+A row is logged **once** while it stays missing — the PK is `(key, revision)`,
+so `ON CONFLICT DO NOTHING` would still write a fresh entry under each new
+revision. When upstream lists it again, the sync deletes its tombstone, so the
+tables hold exactly what is missing now.
 
 Accepted cost: the catalog drifts from upstream over time, with no way to tell
 a current song from one dropped years ago. See `docs/work/catalog-sync/spec.md`
@@ -165,6 +176,41 @@ Append-only history — every applied revision adds a row (`chart_id`,
 > bumps `catalog_meta.revision` in one transaction. `bin/seed_songs` calls it
 > today; phase 2's contribution-approve handler will call the same function.
 > Contributor/contribution FKs are still nullable placeholders until §5 lands.
+
+## Account tables (built)
+
+Not part of `Data`: nothing here reaches `/catalog`, and no catalog table
+references these. Migration `20261117120000_users`; written only by
+`routes/auth.rs` (sign-in, refresh, deletion) through `queries/users.rs`. The
+constraints below hold regardless of which path writes.
+
+### `users`
+One row per GitHub identity that has ever signed in (contract §4). Stores no
+email and no password.
+- `id UUID` primary key, minted by `uuidv7()` like `songs.id`. It is the JWT
+  `sub` and what community uploads will be attributed to.
+- `github_id BIGINT UNIQUE NOT NULL` — GitHub's numeric user id, the login's
+  match key. Never cleared, not even by deletion.
+- `login`, `avatar_url` — GitHub profile fields, written on each login.
+  Nullable only for a deleted account: `users_tombstone_shape` requires a
+  `login` while `deleted_at` is null.
+- `role` — `user | moderator | admin`, enforced by a `CHECK`, default `user`.
+- `deleted_at` — set by account deletion, which is a tombstone, not a row
+  removal: `login` and `avatar_url` are nulled, `role` drops to `user`, the
+  user's sessions are deleted, and the row stays, keeping uploads attributed.
+  `users_tombstone_shape` enforces that shape. Signing in again with the same
+  GitHub account reactivates the row, without its former role.
+- `updated_at` — no trigger; every `UPDATE` sets it, as on `sheets`.
+
+### `user_sessions`
+One row per signed-in device, so each holds its own refresh token.
+- `user_id` → `users(id)` `ON DELETE CASCADE`, indexed.
+- `refresh_token_hash UNIQUE NOT NULL` — SHA-256 of the refresh token, never
+  the token itself, so a leaked row is not a working credential. A refresh
+  presents only the token, so the hash is the lookup key; rotation replaces it
+  in place.
+- `expires_at NOT NULL` — 30 days from issue or last rotation. It bounds a
+  stolen token that is never used, which rotation alone does not.
 
 ## Relationships
 
@@ -197,13 +243,12 @@ convention. See `deleted_songs`/`deleted_sheets` above.
 
 | Table | Purpose | Contract |
 |-------|---------|----------|
-| `users` | GitHub-OAuth identities + role | §4 |
 | `contributions` | open submission queue (`payload` JSONB, `status`) → merge on approve | §5 |
 | `audit_log` | moderator/admin action trail | §5 |
 
 ## Conventions
 
-- `id UUID DEFAULT uuidv7()` PK on `songs`; `id BIGSERIAL` surrogate PK on
+- `id UUID DEFAULT uuidv7()` PK on `songs`, `users` and `user_sessions`; `id BIGSERIAL` surrogate PK on
   `sheets` and `charts`; natural composite PKs on lookups and sub-tables.
 - Timestamps `TIMESTAMPTZ DEFAULT now()`; dates `DATE`.
 - Numerics `DOUBLE PRECISION` (`bpm`, `*_value`); counts `INTEGER`.

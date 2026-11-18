@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO charts (sheet_id, sheet_expr, format, content, hash)\n             SELECT id, sheet_expr, 'maimai-simai', $2, 'h'\n             FROM sheets WHERE song_id_fk = $1 AND difficulty = '【協】'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0bfcb905c13141b5eee553c2d7d94812b27f2e8977d3f14e734d5bfb1da2dae1"
+}

@@ -1,7 +1,10 @@
 import type { Sheet } from './Sheet';
 
+// A song as the v2 API sends it (contract §0), plus `imageUrl`, which the
+// client derives because the asset host is client configuration.
 export type Song = {
-  songId: string | null;
+  /** The minted UUID: the only song key, and what links carry. */
+  id: string;
 
   category?: string;
   title?: string;
@@ -13,15 +16,10 @@ export type Song = {
   version?: string;
   releaseDate?: string;
 
-  isNew?: boolean;
-  isLocked?: boolean;
 
-  comment?: string;
 
   sheets: Sheet[];
 } & {
-  // added by preprocessing
-  songNo: number;
+  // derived on the client (utils/data.ts)
   imageUrl?: string;
-  imageUrlM?: string;
 };

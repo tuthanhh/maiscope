@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO users (github_id, login, avatar_url, role)\n             VALUES ($1, 'alice', 'https://avatars.example/alice', 'moderator') RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "faa3258650db3d1e7f9dea66fafdd80f81ca8bd8d3411ba9c0a7cec3a00e4f04"
+}

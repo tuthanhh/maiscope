@@ -1,12 +1,12 @@
-//! Conditional-request handling shared by the two endpoints that report
-//! catalog freshness: `GET /catalog` (contract §1) and `GET /sync/manifest`
-//! (§3). Both read the same `catalog_meta` row and derive the same validator
-//! from it, so the query, the hash, and the `304` path live here once rather
-//! than being kept in step by hand in two handlers.
+//! Conditional-request handling shared by the routes that report catalog
+//! freshness — `GET /catalog`, `GET /reference` and `GET /sync/manifest`
+//! (contract §0). All read the same `catalog_meta` row and derive the same
+//! validator from it, so the query, the hash, and the `304` path live here
+//! once rather than being kept in step by hand in three handlers.
 
 use axum::http::{HeaderMap, HeaderName, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use sqlx::PgPool;
+use sqlx::{PgPool, Postgres, Transaction};
 
 use crate::error::AppError;
 
@@ -14,36 +14,34 @@ use crate::error::AppError;
 /// `bin/sync_catalog` run, and only when that run found a real difference —
 /// a no-op sync deliberately leaves `catalog_meta.revision` alone, so this
 /// ETag holds still. An hour of unconditional client-side caching is safe
-/// (contract §1).
+/// (contract §0).
 pub(crate) const CATALOG_CACHE_CONTROL: &str = "public, max-age=3600";
 
-/// `GET /sync/manifest`: this endpoint's whole job is telling the client
-/// whether the catalog changed, so it always revalidates (contract §3).
+/// The manifest: its whole job is telling the client whether the
+/// Catalog changed, so it always revalidates (contract §0).
 pub(crate) const MANIFEST_CACHE_CONTROL: &str = "no-cache";
 
-/// The `catalog_meta` row both endpoints need, plus the validator derived
+/// The `catalog_meta` row these routes need, plus the validator derived
 /// from it.
 pub(crate) struct Freshness {
-    /// sha256 over `revision:updateTime`. `GET /sync/manifest` reports this
-    /// bare as `catalogHash`; both endpoints send it quoted as their `ETag`.
+    /// sha256 over `revision:updateTime`, sent quoted as the `ETag` of every
+    /// route that reads it.
     pub hash: String,
-    pub update_time: String,
     pub revision: i64,
 }
 
 impl Freshness {
     /// `catalog_meta` is a singleton written only by the catalog sync, so it
     /// is empty between `migrate` and the first sync — the state every new
-    /// environment starts in. Both callers (`GET /catalog`, `GET
-    /// /sync/manifest`) need a validator even then, so fall back to the same
-    /// `0000-00-00` / revision-0 sentinel `queries::fetch_update_time` uses
-    /// rather than erroring.
-    pub(crate) async fn load(pool: &PgPool) -> Result<Self, AppError> {
+    /// environment starts in. Every caller (`GET /catalog`, `GET /reference`,
+    /// `GET /sync/manifest`) needs a validator even then, so fall back to the same
+    /// `0000-00-00` / revision-0 sentinel rather than erroring.
+    pub(crate) async fn load<'e>(executor: impl sqlx::PgExecutor<'e>) -> Result<Self, AppError> {
         let row = sqlx::query!(
             r#"SELECT to_char(update_time, 'YYYY-MM-DD') AS "update_time!", revision AS "revision!"
                FROM catalog_meta LIMIT 1"#
         )
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await?;
 
         let (update_time, revision) = match row {
@@ -53,7 +51,6 @@ impl Freshness {
 
         Ok(Self {
             hash: catalog_hash(revision, &update_time),
-            update_time,
             revision,
         })
     }
@@ -63,11 +60,22 @@ impl Freshness {
     }
 
     /// True when the client's `If-None-Match` already names this version.
+    /// RFC 9110 §13.1.2: a list of tags, compared weakly, or `*`. A browser
+    /// echoes back the tag it was given, but a proxy in front (Cloudflare)
+    /// may have weakened it to `W/"…"` — an exact match would then never
+    /// answer 304 again, silently.
     pub(crate) fn is_current_for(&self, headers: &HeaderMap) -> bool {
-        headers
+        let Some(value) = headers
             .get(header::IF_NONE_MATCH)
             .and_then(|v| v.to_str().ok())
-            == Some(self.etag().as_str())
+        else {
+            return false;
+        };
+        let etag = self.etag();
+        value
+            .split(',')
+            .map(str::trim)
+            .any(|tag| tag == "*" || tag.strip_prefix("W/").unwrap_or(tag) == etag)
     }
 
     /// The validator headers every response carries — the `200` and the
@@ -89,9 +97,53 @@ impl Freshness {
     }
 }
 
+/// A read-only transaction that sees one snapshot for every statement in it.
+/// The v2 reads that take several queries — a validator and a body, or songs,
+/// sheets and reference tables — run in one, so a sync committing midway
+/// cannot produce a mixed body, or a body cached for an hour under an ETag it
+/// does not match.
+pub(crate) async fn snapshot(pool: &PgPool) -> Result<Transaction<'static, Postgres>, AppError> {
+    let mut tx = pool.begin().await?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        .execute(&mut *tx)
+        .await?;
+    Ok(tx)
+}
+
 fn catalog_hash(revision: i64, update_time: &str) -> String {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(format!("{revision}:{update_time}").as_bytes());
     format!("{:x}", hasher.finalize())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::HeaderValue;
+
+    fn freshness() -> Freshness {
+        Freshness {
+            hash: "abc".into(),
+            revision: 1,
+        }
+    }
+
+    fn if_none_match(value: &str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::IF_NONE_MATCH, HeaderValue::from_str(value).unwrap());
+        headers
+    }
+
+    #[test]
+    fn if_none_match_is_compared_weakly_across_a_list() {
+        let f = freshness();
+        for current in ["\"abc\"", "W/\"abc\"", "\"old\", W/\"abc\"", "*"] {
+            assert!(f.is_current_for(&if_none_match(current)), "{current}");
+        }
+        for stale in ["\"old\"", "abc", "W/\"old\", \"other\""] {
+            assert!(!f.is_current_for(&if_none_match(stale)), "{stale}");
+        }
+        assert!(!f.is_current_for(&HeaderMap::new()));
+    }
 }

@@ -33,9 +33,14 @@ pub struct SyncStats {
     /// Rows this run logged as vanished for the first time.
     pub songs_vanished: i64,
     pub sheets_vanished: i64,
-    /// Every row ever logged as vanished. Without this the log reads
-    /// "vanished 0" forever after the first miss, which reads as "nothing is
-    /// missing" when the truth is "nothing newly went missing".
+    /// Rows upstream lists again after having vanished: their tombstones are
+    /// cleared, so the v2 API serves them again (ADR-0026).
+    pub songs_returned: i64,
+    pub sheets_returned: i64,
+    /// Rows missing upstream right now — every tombstone still standing.
+    /// Without this the log reads "vanished 0" forever after the first miss,
+    /// which reads as "nothing is missing" when the truth is "nothing newly
+    /// went missing".
     pub songs_vanished_total: i64,
     pub sheets_vanished_total: i64,
     pub songs_skipped_no_id: i64,
@@ -49,6 +54,8 @@ pub struct SyncStats {
     /// so a report can name the candidate pairing of a rename.
     pub songs_vanished_ids: Vec<String>,
     pub songs_inserted_ids: Vec<String>,
+    /// The `song_id`s behind `songs_returned`, sorted.
+    pub songs_returned_ids: Vec<String>,
 }
 
 impl SyncStats {
@@ -58,8 +65,12 @@ impl SyncStats {
     /// and nothing here pairs, merges or repoints anything (`api-rewrite`
     /// rejected rematching). A vanished song is logged once, so a rename
     /// trips this on exactly one run.
+    ///
+    /// A song "appears" by being inserted or by returning: a title corrected
+    /// back to one upstream used before brings its old `song_id` back rather
+    /// than inserting a new one.
     pub fn rename_signature(&self) -> bool {
-        self.songs_vanished > 0 && self.songs_inserted > 0
+        self.songs_vanished > 0 && (self.songs_inserted > 0 || self.songs_returned > 0)
     }
 
     /// The run's counts as a GitHub job-summary block, naming the songs
@@ -67,10 +78,10 @@ impl SyncStats {
     pub fn summary_markdown(&self) -> String {
         let mut out = format!(
             "### Catalog sync: revision {} ({})\n\n\
-             | | inserted | updated | vanished (new) | vanished (all time) |\n\
-             |---|---|---|---|---|\n\
-             | songs | {} | {} | {} | {} |\n\
-             | sheets | {} | {} | {} | {} |\n",
+             | | inserted | updated | vanished (new) | returned | missing now |\n\
+             |---|---|---|---|---|---|\n\
+             | songs | {} | {} | {} | {} | {} |\n\
+             | sheets | {} | {} | {} | {} | {} |\n",
             self.revision,
             if self.revision_advanced {
                 "advanced"
@@ -80,10 +91,12 @@ impl SyncStats {
             self.songs_inserted,
             self.songs_updated,
             self.songs_vanished,
+            self.songs_returned,
             self.songs_vanished_total,
             self.sheets_inserted,
             self.sheets_updated,
             self.sheets_vanished,
+            self.sheets_returned,
             self.sheets_vanished_total,
         );
         if self.rename_signature() {
@@ -96,6 +109,9 @@ impl SyncStats {
             }
             for id in &self.songs_inserted_ids {
                 out.push_str(&format!("- appeared: `{id}`\n"));
+            }
+            for id in &self.songs_returned_ids {
+                out.push_str(&format!("- returned: `{id}`\n"));
             }
         }
         out
@@ -110,6 +126,8 @@ impl SyncStats {
             || self.sheets_updated > 0
             || self.songs_vanished > 0
             || self.sheets_vanished > 0
+            || self.songs_returned > 0
+            || self.sheets_returned > 0
     }
 }
 
@@ -159,8 +177,10 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
     // Songs and sheets are matched on their natural keys — songs.song_id and
     // sheets.sheet_expr, both UNIQUE. The `WHERE ... IS DISTINCT FROM` guard on
     // DO UPDATE is what keeps `revision` still for untouched rows: without it
-    // every sync would mark every row changed and /sync/delta would return the
-    // entire catalog every time.
+    // every sync would mark every row changed and a delta reader would see the
+    // entire catalog every time. (No route reads row revisions since
+    // `api-rewrite` 07 removed `/sync/delta`; they are kept exact for the
+    // next change feed rather than left to rot.)
     let songs = dedupe_songs(data, &mut stats);
     let changed_songs = upsert_songs(&mut tx, &songs, revision).await?;
     for (song_id, inserted) in &changed_songs {
@@ -211,8 +231,8 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
 
     let mut dirty: Vec<i64> = Vec::new();
     // Sheets whose sub-tables changed but whose scalar columns did not. A change
-    // the client cannot see is only half applied: without a revision bump
-    // /sync/delta would never report the sheet.
+    // a delta reader cannot see is only half applied: without a revision bump
+    // it would never report the sheet.
     let mut needs_revision_bump: Vec<i64> = Vec::new();
     let mut sub = SubTableColumns::default();
 
@@ -240,11 +260,43 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
         stats.sheets_updated += needs_revision_bump.len() as i64;
     }
 
-    // Rows the database holds that upstream no longer lists. They are logged for
-    // /sync/delta and left in place — deleting a sheet would cascade to its
-    // chart text. Rows already logged are not logged again: the deletion tables
-    // are keyed (song_id, revision), so ON CONFLICT DO NOTHING would still write
-    // a second entry under a new revision.
+    // Rows upstream lists again after vanishing: their tombstones go, so the
+    // v2 reads (which hide tombstoned rows, ADR-0026) serve them again, and the
+    // return counts as a change so clients refetch.
+    stats.songs_returned_ids = sqlx::query_scalar::<_, String>(
+        "DELETE FROM deleted_songs WHERE song_id = ANY($1) RETURNING song_id",
+    )
+    .bind(&song_ids)
+    .fetch_all(&mut *tx)
+    .await?;
+    stats.songs_returned_ids.sort();
+    stats.songs_returned = stats.songs_returned_ids.len() as i64;
+    let returned_sheets = sqlx::query_scalar::<_, String>(
+        "DELETE FROM deleted_sheets WHERE sheet_expr = ANY($1) RETURNING sheet_expr",
+    )
+    .bind(&sheet_exprs)
+    .fetch_all(&mut *tx)
+    .await?;
+    stats.sheets_returned = returned_sheets.len() as i64;
+    // A returned row unchanged since it left keeps its old `revision`, and a
+    // delta reader would then announce neither the row nor a tombstone to a
+    // client that saw it go. Stamping it re-announces it.
+    sqlx::query("UPDATE songs SET revision = $1, updated_at = now() WHERE song_id = ANY($2)")
+        .bind(revision)
+        .bind(&stats.songs_returned_ids)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("UPDATE sheets SET revision = $1, updated_at = now() WHERE sheet_expr = ANY($2)")
+        .bind(revision)
+        .bind(&returned_sheets)
+        .execute(&mut *tx)
+        .await?;
+
+    // Rows the database holds that upstream no longer lists. They are logged
+    // and left in place — deleting a sheet would cascade to its chart text —
+    // and the v2 reads hide them. Rows already logged are not logged again:
+    // the deletion tables are keyed (song_id, revision), so ON CONFLICT DO
+    // NOTHING would still write a second entry under a new revision.
     stats.songs_vanished_ids = sqlx::query_scalar::<_, String>(
         "INSERT INTO deleted_songs (song_id, revision) \
          SELECT s.song_id, $2 FROM songs s \
@@ -1104,7 +1156,7 @@ mod tests {
                 .fetch_one(&pool)
                 .await?;
         assert_eq!(revision, 1);
-        // Never advanced — this is what keeps /sync/delta working across syncs.
+        // Never advanced — this is what keeps row revisions meaningful across syncs.
         assert_eq!(last_full, 0);
 
         Ok(())
@@ -1370,7 +1422,7 @@ mod tests {
                 ("touch".to_string(), None),
             ]
         );
-        // Applied but not visible to /sync/delta would be a half-fix.
+        // Applied but not visible in the row revisions would be a half-fix.
         assert_eq!(sheet_revision(&pool).await, 2);
         assert_eq!(catalog_meta_revision(&pool).await, 2);
         Ok(())
@@ -1509,6 +1561,36 @@ mod tests {
             "but one row is still missing upstream"
         );
         assert_eq!(second_miss.sheets_vanished_total, 1);
+        Ok(())
+    }
+
+    // A song that vanishes and comes back must not stay hidden: the v2 reads
+    // hide tombstoned rows, so the return clears the tombstone and moves the
+    // revision for clients to refetch.
+    #[sqlx::test]
+    async fn a_returning_song_clears_its_tombstone(pool: PgPool) -> sqlx::Result<()> {
+        apply(&pool, &payload(ONE_SONG)).await?;
+        apply(&pool, &payload(r#"{ "songs": [] }"#)).await?;
+
+        let back = apply(&pool, &payload(ONE_SONG)).await?;
+        assert_eq!(back.songs_returned, 1);
+        assert_eq!(back.sheets_returned, 1);
+        assert_eq!(back.songs_vanished_total, 0, "nothing is missing now");
+        assert!(
+            back.revision_advanced,
+            "a return is a change clients must see"
+        );
+
+        // Stamped with this run's revision, so a delta reader sees it again.
+        let stamped: i64 =
+            sqlx::query_scalar("SELECT revision FROM songs WHERE song_id = 'Example'")
+                .fetch_one(&pool)
+                .await?;
+        assert_eq!(stamped, back.revision);
+
+        // And it can vanish again, logged afresh.
+        let again = apply(&pool, &payload(r#"{ "songs": [] }"#)).await?;
+        assert_eq!(again.songs_vanished, 1);
         Ok(())
     }
 
@@ -1940,7 +2022,7 @@ mod tests {
     // rather than one statement per sheet. Widening that list to every sheet in
     // the payload would still leave correct *content* behind — it is rewritten
     // immediately — so the observable damage would be revision churn on sheets
-    // that never changed, which is exactly what /sync/delta keys off.
+    // that never changed, which is exactly what a delta reader keys off.
     #[sqlx::test]
     async fn a_sub_table_change_bumps_only_its_own_sheet(pool: PgPool) -> sqlx::Result<()> {
         apply(&pool, &payload(TWO_SONGS)).await?;
@@ -2398,11 +2480,25 @@ mod tests {
     }
 
     #[test]
+    fn a_song_returning_while_another_vanishes_is_a_rename_signature() {
+        let stats = SyncStats {
+            songs_vanished: 1,
+            songs_returned: 1,
+            songs_vanished_ids: vec!["New Title".into()],
+            songs_returned_ids: vec!["Old Title".into()],
+            ..SyncStats::default()
+        };
+        assert!(stats.rename_signature());
+        assert!(stats.summary_markdown().contains("- returned: `Old Title`"));
+    }
+
+    #[test]
     fn the_summary_reports_every_count_and_names_a_rename() {
         let stats = SyncStats {
             songs_inserted: 1,
             songs_updated: 2,
             songs_vanished: 1,
+            songs_returned: 7,
             songs_vanished_total: 4,
             sheets_inserted: 5,
             sheets_updated: 6,
@@ -2419,10 +2515,10 @@ mod tests {
             stats.summary_markdown(),
             "### Catalog sync: revision 9 (advanced)\n\
              \n\
-             | | inserted | updated | vanished (new) | vanished (all time) |\n\
-             |---|---|---|---|---|\n\
-             | songs | 1 | 2 | 1 | 4 |\n\
-             | sheets | 5 | 6 | 0 | 3 |\n\
+             | | inserted | updated | vanished (new) | returned | missing now |\n\
+             |---|---|---|---|---|---|\n\
+             | songs | 1 | 2 | 1 | 7 | 4 |\n\
+             | sheets | 5 | 6 | 0 | 0 | 3 |\n\
              \n\
              **Rename signature:** a song vanished and a song appeared in one run. \
              The run committed; check by hand whether these are one song renamed.\n\

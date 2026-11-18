@@ -1,0 +1,5 @@
+// SCSS twins of --bp-md and --bp-lg (tokens.scss): media queries cannot read
+// custom properties. Below $bp-md is the phone layout; from $bp-lg the chart
+// page gains its side column. Nothing else changes between.
+$bp-md: 768px;
+$bp-lg: 1100px;

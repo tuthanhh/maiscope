@@ -31,7 +31,7 @@ The frontend is a port of [zetaraku/arcade-songs](https://github.com/zetaraku/ar
 docker compose up -d               # Postgres on :5432 — from the repo root
 sqlx migrate run                   # the rest from apps/server
 cargo run --bin sync_catalog       # fetch upstream and apply the diff
-cargo run                          # API on :3000
+cargo run                          # API on :3000; needs JWT_SECRET + GITHUB_* (local-setup.md)
 cargo run --bin seed_songs         # load chart text, keyed by sheet_expr
 ```
 
@@ -73,7 +73,7 @@ docker build -f apps/server/Dockerfile -t maiscope-server:dev .
 #### Offline sqlx cache
 
 `.cargo/config.toml` sets `SQLX_OFFLINE=true` for the whole workspace, so builds
-type-check the 64 `sqlx::query!` call sites against the committed `.sqlx/` cache
+type-check every `sqlx::query!` call site against the committed `.sqlx/` cache
 instead of a live Postgres. **Any change to SQL — including test fixture queries
 inside `#[cfg(test)]` — breaks the next build until the cache is regenerated:**
 
@@ -144,7 +144,11 @@ Tests live per-module next to the code they cover, not centralized in
 `main.rs`: `#[sqlx::test]` for anything touching the DB
 (`apps/server/src/routes/*.rs`, `apps/server/src/queries/*.rs`,
 `chart_revision.rs`), plain `#[test]`/`#[tokio::test]` for the rest
-(`config.rs`, `error.rs`, `rate_limit.rs`, `bin/seed_songs.rs`). Middleware
+(`config.rs`, `error.rs`, `rate_limit.rs`, `auth.rs`, `bin/seed_songs.rs`).
+Shared fixtures — a `Config` and `AppState` that need no environment — are in
+`test_support.rs`. The auth tests run GitHub's side against a local stand-in
+(`routes/auth.rs`), never the network. `routes/mod.rs` installs one global
+tracing subscriber for the test binary, to capture logs; nothing else may. Middleware
 behaviour is tested through an assembled `Router` via `tower::ServiceExt::oneshot`
 (`routes/mod.rs`) — handler tests call handlers directly and never exercise a
 layer. The one exception to per-module placement is
@@ -189,13 +193,19 @@ DATABASE_URL=postgres://postgres:postgres@localhost:5432/maiscope_test cargo tes
 
 ## Conventions
 
-**Cross-tier key.** `sheetExpr = ${songId}|${type}|${difficulty}`. Frontend:
-`utils/sheet.ts:computeSheetExpr`. Backend: the `sheet_expr` column. URL-encoded
-in paths (`|` → `%7C`).
+**Identity.** A song is its minted UUID (`songs.id`); a sheet is that id plus
+its type and difficulty *code* — `/api/songs/{id}/sheets/{type}/{code}` on the
+server, `sheet.key = ${id}/${type}/${code}` in the client
+(`utils/data.ts:sheetKey`). Nothing is keyed on a title
+([ADR-0026](docs/adr/0026-v2-api-carries-codes-and-read-fields-only.md)).
+`sheet_expr` survives as the sync's upstream match key and the read
+queries' tombstone join; no route takes or sends it.
 
-**Raw versus derived.** The server returns raw fields only; the frontend computes
-`songNo`, `imageUrl`, `sheetExpr`, `notePercents`, `$canonicalSheet` in
-`utils/data.ts:preprocessData`. Keep new endpoints on this split.
+**Raw versus derived.** The server returns raw fields a screen reads, nothing
+else; the client derives `imageUrl` and builds the explicit `sheet.song`
+reference and `sheet.key` in `utils/data.ts:preprocessData`. Names and colours
+are resolved through the reference tables, never sent per row. Keep new
+endpoints on this split.
 
 **Engine boundary.** JS↔Bevy goes through the mailbox in `engine/src/wasm_bridge.rs`,
 drained once per frame by `apply_commands`. Never call into Bevy synchronously.

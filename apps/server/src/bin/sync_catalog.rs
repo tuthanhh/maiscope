@@ -146,8 +146,8 @@ async fn run() -> Result<SyncStats, Box<dyn Error>> {
     println!("sync_catalog: applying (one transaction, rolled back on any failure)");
     let stats = apply(&pool, &data).await?;
     println!(
-        "sync_catalog: revision {} ({}) — songs +{} ~{} vanished {} (+{} new) skipped {}, \
-         sheets +{} ~{} vanished {} (+{} new)",
+        "sync_catalog: revision {} ({}) — songs +{} ~{} missing {} (+{} new, {} returned) \
+         skipped {}, sheets +{} ~{} missing {} (+{} new, {} returned)",
         stats.revision,
         if stats.revision_advanced {
             "advanced"
@@ -158,11 +158,13 @@ async fn run() -> Result<SyncStats, Box<dyn Error>> {
         stats.songs_updated,
         stats.songs_vanished_total,
         stats.songs_vanished,
+        stats.songs_returned,
         stats.songs_skipped_no_id,
         stats.sheets_inserted,
         stats.sheets_updated,
         stats.sheets_vanished_total,
         stats.sheets_vanished,
+        stats.sheets_returned,
     );
 
     Ok(stats)

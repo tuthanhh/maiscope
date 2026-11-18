@@ -60,3 +60,12 @@ Three documents and one CI job stop describing a tier that does not exist.
 If a future change needs a Rust type on both sides of the wire — the v2 API
 with a Rust-generated TypeScript client, say — that is the moment to add a
 crate, under `crates/` per ADR-0014, named for what it holds.
+
+## Update 2026-11-18
+
+`api-rewrite` 07 deleted `/api/v1` and with it the contract snapshot
+(`tests/snapshots/catalog.json`). The cross-tier check is now the v2
+Catalog's field-by-field mapping test and its forbidden-keys walk
+(`apps/server/src/routes/catalog.rs`, `api-rewrite` 03), against the shape
+[`api-contract.md`](../reference/api-contract.md) §0 states. The decision
+stands: still no shared types crate.

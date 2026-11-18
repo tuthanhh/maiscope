@@ -8,6 +8,11 @@
 # DATABASE_URL is NOT here. It is a secret:
 #   flyctl secrets set DATABASE_URL='postgres://...@...neon.tech/maiscope?sslmode=require'
 #
+# So are JWT_SECRET (v2, server-auth-github-oauth 02) and GITHUB_CLIENT_SECRET
+# (03); the machine fails at startup without either. Set them in the Fly
+# dashboard (Secrets); flyctl is not used locally. JWT_SECRET is at least 32
+# bytes, from `openssl rand -base64 48`.
+#
 # Neon requires TLS on every connection; `sqlx` gained it via
 # `tls-rustls-ring-webpki`. Omitting `?sslmode=require` fails at connect time.
 
@@ -25,6 +30,13 @@ dockerfile = "apps/server/Dockerfile"
 # Expand-and-contract: additive migrations may ride a deploy. DROP COLUMN and
 # DROP TABLE are a separate, deliberate, manual step — Postgres holds the only
 # copy of chart text. See docs/work/build-and-deploy/spec.md.
+#
+# The first v2 deploy is the exception, by decision: song-public-id replaces
+# `songs.id` and its foreign keys. Once its release command has run, the v1
+# machine still serving cannot join songs to sheets, so "the old version keeps
+# serving" is no protection for that one deploy — its rollback is restoring
+# the backup taken just before it (production-v2, "Before the first v2
+# deploy").
 release_command = "/app/migrate"
 
 [env]
@@ -38,8 +50,9 @@ LOG_JSON = "true"
 #
 # Production is the Cloudflare Pages origin (`web-delivery` 03). The Vite dev
 # server stays listed so the local frontend can be pointed at the deployed API.
-# Low risk: the API is public read-only with no cookies or auth, so an origin
-# entry grants a browser nothing curl could not already do.
+# Low risk: the API sets no cookies and credentials travel only in an
+# `Authorization` header the page itself sets, so an origin entry grants a
+# browser nothing curl could not already do. (With accounts, v2.)
 #
 # Preview deployments get a distinct origin each and must NOT be added casually —
 # matching is exact, with no wildcard support.
@@ -52,6 +65,14 @@ CORS_ALLOWED_ORIGINS = "https://maiscope.pages.dev,http://localhost:1420"
 # to, so its first value is whatever the client wrote. Unset locally, where
 # the socket address is the client.
 TRUSTED_IP_HEADERS = "fly-client-ip"
+
+# The production GitHub OAuth app (server-auth-github-oauth 03). The client id
+# is public by design; its secret is a Fly secret, above. The redirect is the
+# frontend's callback route, and must equal the app's registered callback URL
+# exactly. Fill in the id once the app exists on GitHub; the machine refuses
+# to start while it is unset.
+# GITHUB_CLIENT_ID = ""
+GITHUB_REDIRECT_URL = "https://maiscope.pages.dev/auth/callback"
 
 [http_service]
 internal_port = 3000
@@ -68,7 +89,7 @@ interval = "30s"
 timeout = "5s"
 grace_period = "10s"
 method = "GET"
-path = "/api/v1/healthcheck"
+path = "/api/healthcheck"
 
 [[vm]]
 # Deliberately small; raise only with evidence from real traffic.

@@ -1,0 +1,142 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n            s.song_id_fk AS song_id,\n            s.type,\n            d.code AS \"difficulty?\",\n            s.level,\n            s.level_value,\n            s.internal_level,\n            s.internal_level_value,\n            s.note_designer,\n            EXISTS (\n                SELECT 1 FROM charts c\n                WHERE c.sheet_id = s.id AND c.format = 'maimai-simai' AND c.content IS NOT NULL\n            ) AS \"has_chart!\",\n            (SELECT json_object_agg(key, value) FROM sheet_note_counts WHERE sheet_id = s.id)\n                AS \"note_counts: NoteCountsJson\",\n            (SELECT json_object_agg(region, available) FROM sheet_regions WHERE sheet_id = s.id)\n                AS \"regions: RegionsJson\",\n            (SELECT json_object_agg(region, json_build_object(\n                'level', level, 'levelValue', level_value,\n                'internalLevel', internal_level, 'internalLevelValue', internal_level_value,\n                'noteDesigner', note_designer\n            )) FROM sheet_region_overrides WHERE sheet_id = s.id)\n                AS \"region_overrides: RegionOverridesJson\"\n           FROM sheets s\n           JOIN difficulties d ON d.difficulty = s.difficulty\n           WHERE s.type IS NOT NULL\n             AND ($1::uuid IS NULL OR s.song_id_fk = $1)\n             AND ($2::text IS NULL OR (s.type = $2 AND d.code = $3))\n             AND NOT EXISTS (SELECT 1 FROM deleted_sheets t WHERE t.sheet_expr = s.sheet_expr)\n             AND NOT EXISTS (\n                 SELECT 1 FROM songs so JOIN deleted_songs d ON d.song_id = so.song_id\n                 WHERE so.id = s.song_id_fk\n             )\n           ORDER BY s.song_id_fk, s.source_index",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "song_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "song_id_fk"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "type"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "difficulty?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "difficulties",
+            "name": "code"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "level",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "level"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "level_value",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "level_value"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "internal_level",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "internal_level"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "internal_level_value",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "internal_level_value"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "note_designer",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "sheets",
+            "name": "note_designer"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "has_chart!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "note_counts: NoteCountsJson",
+        "type_info": "Json",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "regions: RegionsJson",
+        "type_info": "Json",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "region_overrides: RegionOverridesJson",
+        "type_info": "Json",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "d5c3e10c7dcf0083f0cf206819bca5548caec9d297ecc43877220f9cc8c30095"
+}

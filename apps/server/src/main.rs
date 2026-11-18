@@ -1,5 +1,5 @@
+mod auth;
 mod config;
-mod domain;
 mod error;
 mod queries;
 mod rate_limit;
@@ -46,6 +46,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let state = AppState {
         pool,
         config: Arc::new(config),
+        http: state::http_client(),
     };
 
     // AppState::clone is cheap (PgPool and Arc<Config> both just bump a

@@ -12,14 +12,14 @@ client reads, and a snapshot catches exactly that.
 
 **Blocked by:** `server-restructure/issues/04-split-modules.md`, `server-restructure/issues/07-etag-caching.md`
 
-**Status:** in-progress
+**Status:** done
 
 - [x] Coverage for all eight routes — `/sheets/{sheet}/chart` had **zero** tests
       and now has four; every other route already had some
-- [ ] `/sync/delta` `409 snapshot_required` path tested (`since` predating
-      `last_full_reload_revision`) — **not done, see below**
-- [ ] `/sheets/search` pagination boundary — **not done**. The `X-Total-Count`
-      half is covered by `api-pagination-header` 01
+- ~~`/sync/delta` `409 snapshot_required` path tested~~ — **moot**: the route
+      went with `/api/v1` (`api-rewrite` 07); v2 has no delta
+- ~~`/sheets/search` pagination boundary~~ — **moot**: the route went with
+      `/api/v1`; the first paginated route is `community-charts` browse
 - [x] Snapshot test asserting `/catalog`'s top-level shape and one full `Song`
       with nested sheets
 - [x] Snapshot asserts the **absence** of derived fields, at any nesting depth
@@ -75,3 +75,7 @@ by smuggling an API change into a test ticket.
 `/sync/delta`'s `409` (needs `last_full_reload_revision` seeded directly, since
 `sync_catalog` never writes it) and a `/sheets/search` page-boundary test. Both
 should be written against v2, not v1.
+**2026-11-18 — closed as moot by `api-rewrite` 07.** Both open items tested
+routes that no longer exist, and the `/catalog` snapshot went with v1; the
+v2 Catalog's mapping and forbidden-keys tests (`routes/catalog.rs`) replace
+it. A page-boundary test belongs to the first paginated route.

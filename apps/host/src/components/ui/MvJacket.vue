@@ -10,10 +10,7 @@ type Shape =
   | { kind: "circle"; cx: number; cy: number; r: number; sw: number; op: number }
   | { kind: "line"; x1: number; y1: number; x2: number; y2: number; sw: number; op: number };
 
-const props = withDefaults(
-  defineProps<{ seed: string; size?: string; round?: number }>(),
-  { size: "100%", round: 0 },
-);
+const props = defineProps<{ seed: string }>();
 
 function makeRng(seed: string): () => number {
   let s = 0;
@@ -71,12 +68,11 @@ const shapes = computed<Shape[]>(() => {
     viewBox="0 0 100 100"
     preserveAspectRatio="xMidYMid slice"
     :style="{
-      width: size,
-      height: size,
+      width: '100%',
+      height: '100%',
       display: 'block',
-      background: 'var(--mv-jacket-bg)',
-      color: 'var(--mv-fg)',
-      borderRadius: `${round}px`,
+      background: 'var(--bg-sunken)',
+      color: 'var(--fg)',
     }"
   >
     <template v-for="(s, i) in shapes" :key="i">

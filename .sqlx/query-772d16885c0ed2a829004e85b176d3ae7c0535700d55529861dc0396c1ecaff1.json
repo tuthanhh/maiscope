@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO sheet_note_counts (sheet_id, key, value) VALUES ($1, 'total', 900)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "772d16885c0ed2a829004e85b176d3ae7c0535700d55529861dc0396c1ecaff1"
+}
