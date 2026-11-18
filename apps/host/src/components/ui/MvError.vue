@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import MvButton from "./MvButton.vue";
 
-// design-direction "Error state": inline, never a toast, framed not coloured.
+// design-direction "Error state": inline, never a toast, framed not coloured
+// — a 1px `--fg` border, no danger colour.
 // The short form is a label, a sentence and an optional retry; the upload
 // rejection fills the default slot with its full form.
 defineProps<{ label: string; message?: string; retryLabel?: string }>();
@@ -19,10 +20,10 @@ defineEmits<{ retry: [] }>();
 
 <style scoped>
 .mv-error {
-  border: var(--line-w) solid var(--danger-fg);
+  border: 1px solid var(--fg);
   border-radius: var(--r);
   padding: var(--s-4);
-  color: var(--danger-fg);
+  color: var(--fg);
 }
 .mv-error-message {
   margin: var(--s-2) 0 0;

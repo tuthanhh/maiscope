@@ -41,3 +41,17 @@ Departures:
   `MvTextInput`/`MvSelect`), so two inputs never share the field's id.
 - **The catalog's error state** is `MvError` with Retry; `loadData` now runs
   again from `ERROR`.
+
+**2026-11-18 — review.** Applied: the drawer's focus handling moved into
+`composables/useDialogFocus.ts` (the song modal shares it), and Tab or
+Shift+Tab from the panel itself now lands inside rather than behind the
+scrim. The bookmark mark keeps one name ("Bookmark") and lets
+`aria-pressed` carry the state. BPM text that is not a number filters
+nothing instead of emptying the list, and the BPM inputs ask for a decimal
+keypad. `MvError` is framed in `--fg`, not the danger colour, as the spec
+says. The Filters button declares `aria-haspopup="dialog"` and
+`aria-expanded`. Kept: the level selects offer the same thresholds with
+internal level on — they are numeric bounds, and `14+` as a lower bound
+still reads right against an internal `14.7`. Open: the changed English copy
+(`myListEmpty`, `filterResultEmpty`, `myList`, `drawRandom`,
+`searchPlaceholder`) is stale in the eight other locales until 13.

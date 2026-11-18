@@ -140,6 +140,7 @@ function toggleType(type: string): void {
                 v-model="form.bpmMin"
                 :placeholder="t('page.songs.min')"
                 :label="t('page.songs.min')"
+                inputmode="decimal"
                 :width="96"
             />
             <span class="t-muted" aria-hidden="true">–</span>
@@ -147,6 +148,7 @@ function toggleType(type: string): void {
                 v-model="form.bpmMax"
                 :placeholder="t('page.songs.max')"
                 :label="t('page.songs.max')"
+                inputmode="decimal"
                 :width="96"
             />
         </span>

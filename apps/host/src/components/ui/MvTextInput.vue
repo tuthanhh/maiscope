@@ -9,6 +9,7 @@ defineProps<{
   placeholder?: string;
   /** The accessible name when no Field labels this control. */
   label?: string;
+  inputmode?: "text" | "decimal" | "numeric" | "search";
   width?: number;
   /** A leading icon in `--fg-muted`, e.g. search. */
   icon?: IconName;
@@ -36,6 +37,7 @@ const field = inject(fieldKey, null);
       :class="{ 'mv-input--icon': icon }"
       :value="modelValue"
       :placeholder="placeholder"
+      :inputmode="inputmode"
       :aria-invalid="invalid || field?.invalid() || undefined"
       :disabled="disabled"
       @input="onInput"

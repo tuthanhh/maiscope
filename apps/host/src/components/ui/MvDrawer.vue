@@ -1,55 +1,19 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, useId, watch } from "vue";
+import { ref, useId } from "vue";
+import useDialogFocus from "~/composables/useDialogFocus";
 import MvButton from "./MvButton.vue";
 
 // design-direction "Drawer": filters, from the right on desktop and from the
 // bottom on phones, over the scrim. A heading, an action slot (Reset), the
 // fields, no footer: whatever it holds applies live. A modal dialog while
-// open — focus moves in, Tab stays in, Escape or the scrim closes it, and
-// focus returns to whatever opened it.
+// open (`useDialogFocus`).
 defineProps<{ title: string; closeLabel: string }>();
 const open = defineModel<boolean>({ required: true });
 
 const titleId = useId();
 const panel = ref<HTMLElement | null>(null);
-let opener: HTMLElement | null = null;
-
-const FOCUSABLE =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-function onKeyDown(event: KeyboardEvent): void {
-  if (event.key === "Escape") {
-    open.value = false;
-    return;
-  }
-  if (event.key !== "Tab" || !panel.value) return;
-  const items = [...panel.value.querySelectorAll<HTMLElement>(FOCUSABLE)];
-  if (items.length === 0) return;
-  const first = items[0];
-  const last = items[items.length - 1];
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  }
-}
-
-watch(open, async (isOpen) => {
-  if (isOpen) {
-    opener = document.activeElement as HTMLElement | null;
-    document.documentElement.style.overflow = "hidden";
-    await nextTick();
-    panel.value?.focus();
-  } else {
-    document.documentElement.style.overflow = "";
-    opener?.focus();
-    opener = null;
-  }
-});
-onBeforeUnmount(() => {
-  document.documentElement.style.overflow = "";
+const { onKeyDown } = useDialogFocus(open, panel, () => {
+  open.value = false;
 });
 </script>
 

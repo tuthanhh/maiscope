@@ -119,14 +119,13 @@ page:
     drawRandom: Draw
     reset: Reset
     myList: My list
-    addToList: Add to my list
-    removeFromList: Remove from my list
     filters: Filters
     pages: Pages
     previousPage: Previous page
     nextPage: Next page
     range: '{from} – {to} of {total}'
     loadFailed: The song list could not be loaded
+    bookmark: Bookmark
     min: min
     max: max
     openInVisualizer: Open in Visualizer

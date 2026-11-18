@@ -13,7 +13,7 @@ import {
     groupThousands,
     pickItem,
 } from "~/utils";
-import type { Filters, FilterOption, Sheet } from "~/types";
+import type { Filters, FilterOption } from "~/types";
 import MvButton from "~/components/ui/MvButton.vue";
 import MvCard from "~/components/ui/MvCard.vue";
 import MvChip from "~/components/ui/MvChip.vue";
@@ -108,6 +108,13 @@ function toggleDifficulty(code: string): void {
 }
 
 // ── build Filters from UI state, then run the engine ──────────
+// Typed BPM text that is not a number filters nothing, rather than everything
+// (`bpm >= NaN` is false for every song).
+function toNumber(text: string): number | null {
+    const n = Number(text);
+    return text.trim() !== "" && Number.isFinite(n) ? n : null;
+}
+
 const filters = computed<Filters>(() => {
     const f = buildEmptyFilters();
     f.title = form.title || null;
@@ -122,8 +129,8 @@ const filters = computed<Filters>(() => {
     f.minLevelValue = form.levelMin ? Number(form.levelMin) : null;
     f.maxLevelValue = form.levelMax ? Number(form.levelMax) : null;
     f.useInternalLevel = form.useInternalLevel;
-    f.minBPM = form.bpmMin ? Number(form.bpmMin) : null;
-    f.maxBPM = form.bpmMax ? Number(form.bpmMax) : null;
+    f.minBPM = toNumber(form.bpmMin);
+    f.maxBPM = toNumber(form.bpmMax);
     f.region = form.region || null;
     f.useRegionOverride = form.useRegionOverride;
     return f;
@@ -169,13 +176,6 @@ function goToPage(page: number): void {
 }
 
 // ── actions ───────────────────────────────────────────────────
-function bookmarkLabel(sheet: Sheet): string {
-    return (
-        selectedSet.value.has(sheet.key)
-            ? t("page.songs.removeFromList")
-            : t("page.songs.addToList")
-    ) as string;
-}
 function drawRandom(): void {
     if (results.value.length === 0) return;
     viewSheet(pickItem(results.value));
@@ -210,7 +210,12 @@ function retry(): void {
                     :label="t('ui.search') as string"
                     :placeholder="t('page.songs.searchPlaceholder') as string"
                 />
-                <MvButton icon="sliders" @click="drawerOpen = true">
+                <MvButton
+                    icon="sliders"
+                    aria-haspopup="dialog"
+                    :aria-expanded="drawerOpen"
+                    @click="drawerOpen = true"
+                >
                     {{ t("page.songs.filters") }}
                 </MvButton>
             </div>
@@ -291,7 +296,7 @@ function retry(): void {
                         :level="s.level"
                         :diff="difficultyColors.get(s.difficulty) ?? null"
                         :bookmarked="selectedSet.has(s.key)"
-                        :bookmark-label="bookmarkLabel(s)"
+                        :bookmark-label="t('page.songs.bookmark') as string"
                         :label="`${s.song.title} — ${getTypeAbbr(s.type)} ${getDifficultyName(s.difficulty)} ${s.level ?? ''}`"
                         @open="viewSheet(s)"
                         @bookmark="toggleSheetSelection(s)"
