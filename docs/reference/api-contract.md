@@ -1,46 +1,38 @@
-# maiscope API Contract (v1)
+# maiscope API Contract
 
-Defines the HTTP surface the global backend (`apps/server`, Rust/Axum/Postgres)
-exposes so the frontend (`apps/host/src/`) can drop its static `data.json`
-dependency: live catalog, per-sheet chart text for the visualizer, and a
-revision-probe sync tier. Auth (§4) is phase 2; §5 is superseded by
+The HTTP surface `apps/server` (Rust/Axum/Postgres) exposes to the frontend
+(`apps/host/src/`): the official Catalog and its reference tables, one song,
+one sheet, a sheet's chart text, the freshness probe (§0), and accounts (§4).
+§5 is superseded by
 [ADR-0013](../adr/0013-community-charts-beside-the-catalog.md).
-
-> **This document describes `/api/v1`, which is frozen.** A from-scratch
-> replacement is planned — see [`api-rewrite`](../work/api-rewrite/spec.md).
-> It is developed on a branch and replaces this API at merge; the two never
-> serve simultaneously, and it drops the version segment entirely (`/api/...`).
-> No further behaviour lands here.
->
-> **On the `v2` branch the replacement is being built** and is described in
-> §0, under `/api`. §1–3 keep describing `/api/v1` until `api-rewrite` 07
-> deletes it; §4 (auth) is already v2-only.
 
 Each section carries its implementation status:
 
-- **shipped** — routed in `apps/server/src/routes/v1/` (v2: `routes/`) and covered by handler tests
+- **shipped** — routed in `apps/server/src/routes/` and covered by handler tests
 - **phase 2** — designed, not built; no route exists. See
   [ROADMAP](../ROADMAP.md).
 
 No audio crosses this API. Audio hosting was cut by
-[ADR-0002](../adr/0002-chart-data-only-no-audio-hosting.md); v1 plays charts on the
-engine's silent, wall-clock-driven path.
+[ADR-0002](../adr/0002-chart-data-only-no-audio-hosting.md); the engine plays
+charts on its silent, wall-clock-driven path.
 
-- Base URL: `/api/v1`
-- Content type: `application/json; charset=utf-8` unless noted (binary endpoints).
-- Cross-tier identity key: **`sheetExpr`** = `` `${songId}|${type}|${difficulty}` ``
-  (see `utils/sheet.ts:computeSheetExpr`). Path-encode it; `|` → `%7C`.
+- Base URL: `/api`, with no version segment (`api-rewrite`; §6 *Versioning*).
+- Content type: `application/json; charset=utf-8` unless noted (the chart text
+  is `text/plain`).
+- Identity: a song is its minted UUID; a sheet is that id plus its type and
+  difficulty code — `/api/songs/{id}/sheets/{type}/{code}`
+  ([ADR-0026](../adr/0026-v2-api-carries-codes-and-read-fields-only.md)).
+  Nothing is addressed by a title.
 - Timestamps: RFC 3339 / ISO 8601 UTC.
 - Auth: `Authorization: Bearer <jwt>` where required. Public reads need no token.
 
-The frontend rehydrates a frozen, prototype-linked object graph in
-`utils/data.ts:preprocessData`. **The server returns raw fields only** — it does
-NOT send derived fields (`songNo`, `imageUrl`, `imageUrlM`, `sheetExpr`,
-`notePercents`, `$canonicalSheet`). The client computes those, as it does today.
+**The server returns raw fields a screen reads, nothing else.** The client
+derives `imageUrl` and its graph references (`sheet.song`, `sheet.key`) in
+`utils/data.ts`, and resolves names and colours through the reference tables.
 
 ---
 
-## 0. v2 reads — `/api`  *(v2 branch)*
+## 0. Reads — `/api`  *(shipped)*
 
 Authored from scratch (`api-rewrite`). Payloads carry raw fields that a
 screen reads and nothing else, and name a difficulty by its `code`
@@ -105,7 +97,7 @@ count is unknown for that note kind, which a screen shows differently from
 snapshot, so they always agree. Not sent: `songId`, `isNew`, `isSpecial`,
 `updateTime`, and every field the client derives (`imageUrl`, …). No
 `?region=` parameter: region filtering is the client's. `ETag`, `304` and
-`Cache-Control: public, max-age=3600` as v1's Catalog.
+`Cache-Control: public, max-age=3600`.
 
 ### `GET /api/songs/{id}`
 
@@ -148,7 +140,7 @@ reads `chart for '…' has no inline simai content`.
 The freshness probe: `{ "revision": 42 }`, `0` before the first sync. The
 client compares it with the revision its cached Catalog was fetched under;
 nothing else is sent (v1's `updateTime`, `catalogHash` and `counts` had no
-reader). `Cache-Control: no-cache`, `ETag`, `304` as v1. There is no
+reader). `Cache-Control: no-cache`, `ETag` and `304` as the Catalog. There is no
 `/api/sync/delta`
 ([ADR-0026](../adr/0026-v2-api-carries-codes-and-read-fields-only.md)): a
 changed revision means refetching the whole Catalog. **Refetch with
@@ -164,269 +156,26 @@ not an identity; do not compare it across routes.
 Under `/api/…`, a path that matches no route is `404 not_found` and a route
 asked with a method it does not serve is `405 method_not_allowed`, both in
 the §6 envelope; a path or parameter that cannot be parsed is
-`400 bad_request`. `/api/v1/…` misses keep v1's empty `404`.
+`400 bad_request`. `/api/v1/…` is gone: its paths are misses like any other.
 
 ---
 
-## 1. Catalog — replaces static `data.json`  *(shipped)*
+## 1–3. Removed: `/api/v1`
 
-Fills: `stores/data.ts:loadData`, which previously fetched a flat `data.json`
-from CloudFront.
-
-### `GET /catalog`
-
-Full snapshot. Shape is **byte-identical to today's `data.json`** so
-`preprocessData` is unchanged. Drives the offline-first first paint.
-
-Query params (all optional):
-| param | type | meaning |
-|-------|------|---------|
-| `region` | string | filter sheets to a region (else all) |
-
-Freshness is negotiated with `If-None-Match`, not a `since` param — see Headers
-below.
-
-Response `200`:
-```jsonc
-{
-  "songs": [ /* Song[] — see §1.1 */ ],
-  "categories": [{ "category": "string" }],
-  "versions":   [{ "version": "string", "abbr?": "string", "releaseDate?": "YYYY-MM-DD" }],
-  "types":      [{ "type": "string", "name": "string", "abbr?": "string", "iconUrl?": "string", "iconHeight?": 0 }],
-  "difficulties": [{ "difficulty": "string", "name": "string", "color?": "string", "iconUrl?": "string", "iconHeight?": 0 }],
-  "regions":    [{ "region": "string", "name": "string" }],
-  "updateTime": "YYYY-MM-DD"   // bumped whenever any canonical row changes;
-                               // "0000-00-00" before the first catalog sync
-}
-```
-> `difficulties` covers every value a sheet's `difficulty` holds: the five
-> standard rows first, then one row per UTAGE tag (`【協】`, no `color` or icon),
-> ordered by byte value.
-
-> `sheets` is intentionally absent — `preprocessData` derives it from
-> `songs[].sheets`. Keep it that way.
-
-Headers: `ETag: "<sha256(revision:updateTime)>"` — the same value
-`GET /sync/manifest` reports as `catalogHash` (§3). A matching `If-None-Match`
-returns `304 Not Modified` with an empty body, repeating the `ETag` and
-`Cache-Control` (RFC 7232 §4.1 — the client needs them to refresh the
-freshness of the copy it already holds). `Cache-Control: public,
-max-age=3600` — the catalog changes at most once a day, on the scheduled
-`bin/sync_catalog` run, and only when that run found a real difference, so
-an hour of unconditional client-side caching trades a small staleness window
-for skipping the network round-trip entirely within it (`server-restructure`
-issue 07).
-
-### 1.1 `Song` / `Sheet` payload shape
-
-Matches `types/Song.ts` and `types/Sheet.ts` (raw fields, no derived):
-```jsonc
-// Song
-{
-  "songId": "string|null",
-  "category?": "string",
-  "title?": "string",
-  "artist?": "string",
-  "bpm?": 0,
-  "imageName?": "string",        // client resolves to imageUrl via dataSourceUrl
-  "version?": "string",
-  "releaseDate?": "YYYY-MM-DD",
-  "isNew?": false,
-  "isLocked?": false,
-  "comment?": "string",
-  "sheets": [ /* Sheet[] */ ]
-}
-// Sheet
-{
-  "type?": "string",
-  "difficulty?": "string",
-  "level?": "string",
-  "levelValue?": 0,
-  "internalLevel?": "string",
-  "internalLevelValue?": 0,
-  "noteDesigner?": "string",
-  "noteCounts?": { "total": 0, "tap": 0, "hold": 0, "slide": 0, "touch": 0, "break": 0 },
-  "regions?": { "intl": true, "jp": true },
-  "regionOverrides?": { "<region>": { /* partial Sheet */ } },
-  "isSpecial?": false,
-  "hasChart": false    // true if a chart row exists for this sheetExpr
-}
-```
-`hasChart` is the only addition vs. today — it lets `songs.vue`/`song.vue` show a
-"visualize" affordance without a probe request. It is server truth, not derived,
-so it belongs in the payload.
-
-### `GET /songs/{songId}`
-Single song with its sheets (same shape as §1.1). `404` if unknown.
-
-### `GET /sheets/{sheetExpr}`
-Single sheet, `sheetExpr` URL-encoded. `404` if no match — mirrors the client's
-`makeDummySheet` fallback path in `utils/sheet.ts`.
-
-### 1.2 `GET /sheets/search`
-
-Filtered, paginated sheet list — powers the browse page's search/filter UI.
-Unlike `GET /catalog` (full snapshot for the offline-first cache), this
-endpoint does the filtering in SQL and returns only a page of results.
-
-Query params (all optional — omitting all returns the full unfiltered,
-paginated sheet list):
-
-| param | type | meaning |
-|-------|------|---------|
-| `title` | string | substring match on song title (case-insensitive), or exact match if `matchExactTitle` is set |
-| `matchExactTitle` | boolean | see above |
-| `artist` | string | same substring/exact behavior as `title`, on artist |
-| `matchExactArtist` | boolean | see above |
-| `categories` | string[] | matches if any of `sheet.category`'s `\|`-delimited parts is in this list |
-| `versions` | string[] | exact match |
-| `types` | string[] | exact match |
-| `difficulties` | string[] | exact match |
-| `minLevelValue` / `maxLevelValue` | number | inclusive range on level value (or internal level value if `useInternalLevel`) |
-| `useInternalLevel` | boolean | see above |
-| `minBPM` / `maxBPM` | number | inclusive range |
-| `noteDesigners` | string[] | exact match |
-| `region` | string | prefix `!` excludes; otherwise includes. When combined with `useRegionOverride`, the region's override values (level/internalLevel/noteDesigner) substitute for the base sheet's before other filters evaluate. A sheet with a region-specific override counts as belonging to that region even without a separate availability row |
-| `useRegionOverride` | boolean | see above |
-| `page` | integer | 1-indexed, default 1 |
-| `pageSize` | integer | default 22, max 100 |
-
-Response `200`:
-```jsonc
-{
-  "sheets": [ /* Sheet[] — same shape as GET /sheets/{sheetExpr}, see §1.1 */ ],
-  "total": 0   // DEPRECATED, see below
-}
-```
-
-Headers: `X-Total-Count: <n>` — total matches before pagination, for computing
-page count.
-
-> **Both are sent, permanently.** The header is the convention going forward
-> ([ADR-0015](../adr/0015-pagination-total-as-a-response-header.md)), but v1 is
-> frozen, so the body's `total` stays until v1 is deleted wholesale rather than
-> being removed from a version nobody is evolving. Read the header.
->
-> The header is listed in `Access-Control-Expose-Headers` — it has to be, or a
-> cross-origin browser client cannot read it at all.
-
-No `superFilter` equivalent — the client-side arbitrary-JS filter was removed
-from the app (never had UI wiring); revisit if/when the app needs it again.
-
----
-
-## 2. Charts — feeds the visualizer  *(shipped)*
-
-Fills: `pages/visualizer.vue` + `composables/useEngine.ts`. Without it a user
-must paste simai text by hand. This endpoint lets the engine load a real chart
-for any sheet via `loadChart(chart)`.
-
-### `GET /sheets/{songId}/chart?type={type}&difficulty={difficulty}`
-
-Returns the raw chart source for the engine parser as **`text/plain`** — not a
-JSON envelope. The engine wants the simai text itself, and wrapping it would
-only cost the client a parse and an unwrap.
-
-The path segment is the **`songId` alone**, not the full `sheetExpr`; `type`
-and `difficulty` are query params. The server rebuilds `sheet_expr` from the
-three (`routes/v1/charts.rs:get_chart`), so the cross-tier key is still what is matched —
-it is just not URL-encoded into one segment here.
-
-| status | meaning |
-|--------|---------|
-| `200` | body is the raw simai text |
-| `404` | no chart row for this sheet (`hasChart` is false) |
-| `501` | a chart row exists but holds no inline text (blob-only charts are not served yet) |
-
-Errors from this endpoint are plain text, not the §6 JSON error shape.
-
-> Client wiring: when `sheet.hasChart`, fetch `/chart` → chart text →
-> `loadChart(chart)`. Manual paste in `visualizer.vue` stays as a fallback.
-> No audio endpoint exists or is planned for v1 (ADR-0002); the engine's
-> `loadSong(chart, audioBytes)` audio-slaved path is unused.
-
----
-
-## 3. Sync — revision probe for the client cache  *(shipped)*
-
-> v2 carries the manifest over as `GET /api/sync/manifest` (§0), cut to
-> `revision`, and does not carry `/sync/delta`.
-
-Fills the client-side catalog cache: load cache → check manifest → delta sync →
-atomic swap.
-
-The cache is an **IndexedDB blob plus this revision probe**, not a relational
-store. Because the client holds the whole catalog in memory and filters locally
-([ADR-0007](../adr/0007-client-side-filtering.md)), a local SQLite mirror would
-buy no query benefit and would only translate rows back into the JSON shape
-`preprocessData` already wants. The earlier `src-tauri`-driven SQLite design
-went with Tauri ([ADR-0003](../adr/0003-web-pwa-drop-tauri.md)).
-
-### `GET /sync/manifest`
-Cheap freshness probe.
-```jsonc
-{
-  "updateTime": "YYYY-MM-DD", // "0000-00-00" before the first catalog sync
-  "revision": 0,            // monotonic; cache stores last seen; 0 before the first sync
-  "catalogHash": "string", // ETag for GET /catalog
-  "counts": { "songs": 0, "sheets": 0, "charts": 0 }
-}
-```
-Headers: same `ETag`/`If-None-Match`/`304` pairing as `GET /catalog` (§1) —
-including repeating both validators on the `304` — but
-`Cache-Control: no-cache` instead of a `max-age` — this endpoint's whole job
-is telling the client whether the catalog changed, so it always revalidates
-against the server rather than trusting a local cache blindly. The `304`
-still saves the round-trip cost of a full body.
-
-### `GET /sync/delta?since={revision}`
-Rows changed since `revision`. `tombstones` carry rows that vanished upstream
-— populated by `bin/sync_catalog`, not empty placeholders.
-```jsonc
-{
-  "revision": 0,
-  "songs":  [ /* changed Song (with sheets) */ ],
-  "charts": [], // always empty for now — chart-meta delta tracking is a follow-up
-  "tombstones": { "songIds": ["..."], "sheetExprs": ["..."] }
-}
-```
-If `since` is too old to diff, respond `409` with
-`{ "error": "snapshot_required" }` → client refetches `GET /catalog`.
-
-> Precisely: `since` is "too old" when it predates
-> `catalog_meta.last_full_reload_revision` — the revision of the last reload
-> that broke row identity, leaving nothing stable to diff across.
->
-> **In practice that boundary no longer moves.** `bin/sync_catalog` upserts by
-> natural key (`songs.song_id`, `sheets.sheet_expr`) and never deletes, so row
-> identity survives every refresh, and it deliberately never writes
-> `last_full_reload_revision`. The column is frozen at whatever the retired
-> `bin/ingest` left, and `409 snapshot_required` is effectively unreachable.
-> The check stays because it is what a future identity-breaking reload would
-> use to tell clients to resnapshot.
->
-> A row that vanishes upstream is **not** deleted — deleting a sheet would
-> cascade to its chart text. It is left in place, still served by `/catalog`,
-> and logged once to the `deleted_songs` / `deleted_sheets` tables, which is what
-> this response's `tombstones` field reads from (see
-> `docs/work/catalog-sync/spec.md`).
->
-> A `song` is included whenever it or any of its sheets changed since
-> `since`, so a sheet-only edit still surfaces its parent song (the response
-> nests sheets under `songs`, so there's no other way to represent it).
+`/api/v1` — the Catalog keyed by `sheetExpr`, `GET /sheets/search`, the v1
+chart route and `/sync/delta` — was deleted by
+[`api-rewrite` 07](../work/api-rewrite/issues/07-delete-v1.md) on 2026-11-18.
+§0 is the API. The numbering of §4–§7 is kept so references to them stay
+valid; the v1 text is in this file's history.
 
 ---
 
 ## 4. Auth — GitHub OAuth, roles user/moderator/admin  *(phase 2)*
 
-**Implemented on the v2 branch** (`docs/work/server-auth-github-oauth/`).
-Required to gate §5.
+**Implemented on the v2 branch** (`docs/work/server-auth-github-oauth/`); no
+screen calls it yet (`frontend-redesign` 05). Required to gate §5.
 
-Paths are shown under `/api`, without a version segment — auth is built on the
-v2 branch, which retires `/api/v1` entirely
-([`api-rewrite`](../work/api-rewrite/spec.md)).
-
-v1 has no accounts and holds no PII. v2 ends that deliberately rather than by
+The API before v2 had no accounts and held no PII. v2 ends that deliberately rather than by
 accident: the stored set is `github_id`, `login`, `avatar_url`, `role`, a
 refresh-token **hash** per signed-in device, and timestamps. **No email address**, and adding one
 later is a decision about privacy obligations rather than a schema convenience.
@@ -569,20 +318,20 @@ Status enum: `pending | approved | rejected | merged`.
 - **Errors** (non-2xx): `{ "error": "snake_case_code", "message": "human text" }`.
   Codes in use: `database_error`, `internal_error` (both `500`, both with an
   opaque message — the real cause is logged server-side, never returned),
-  `not_found`, `snapshot_required` (§3), `rate_limited`, and on the v2 branch
-  `bad_request` and `upstream_error` (`502`, opaque, for a failing GitHub —
+  `not_found`, `bad_request`, `method_not_allowed`, `unauthorized`,
+  `rate_limited`, and `upstream_error` (`502`, opaque, for a failing GitHub —
   §4).
-  Exception: the chart endpoints — v1's `GET /sheets/{songId}/chart` (§2) and
-  v2's `…/chart` (§0) — return plain-text errors. v2's are `AppError`s
-  rendered as text: same status, same redaction, body the message alone.
+  Exception: the chart endpoint (`…/chart`, §0) returns plain-text errors —
+  `AppError`s rendered as text: same status, same redaction, body the message
+  alone.
   `not_implemented` (`501`) is the code a chart without inline text would
   carry in the envelope; the chart endpoint's text body omits it.
-- **Pagination**: `?page` (1-based) + `?pageSize` (default 22, max 100). The
-  total is returned as an **`X-Total-Count` response header**
-  ([ADR-0015](../adr/0015-pagination-total-as-a-response-header.md)). It must
-  also be listed in `Access-Control-Expose-Headers`, or a cross-origin browser
-  cannot read it — silently. `GET /sheets/search` still sends a `total` body
-  field as well; v1 is frozen with both, and v2 sends the header only.
+- **Pagination**: no route pages today; `community-charts` browse is the
+  first. It takes `?page` (1-based) + `?pageSize` and returns the total as an
+  **`X-Total-Count` response header**
+  ([ADR-0015](../adr/0015-pagination-total-as-a-response-header.md)), which
+  must then be added to `Access-Control-Expose-Headers` — or a cross-origin
+  browser cannot read it, silently. The CORS layer exposes nothing until then.
 - **Rate limits**: per-IP (keyed on the client IP from the configured
   trusted headers — `Fly-Client-IP` on Fly, the socket address elsewhere,
   [ADR-0019](../adr/0019-trusted-ip-headers-are-configuration.md) — not
@@ -618,12 +367,12 @@ Status enum: `pending | approved | rejected | merged`.
 
 | Contract | Frontend touch-point |
 |----------|---------------------|
-| `GET /catalog` | `stores/data.ts:loadData` (replaced `data.json`) |
+| `GET /catalog` | `stores/data.ts:loadData`, behind the IndexedDB cache |
 | `GET /reference` | `stores/data.ts:loadReference`, at boot; names and colours before or without the Catalog |
 | `GET /songs/{id}/sheets/{type}/{code}` | `composables/useEngine.ts:fetchSheetInfo` (the chart page's title block) |
 | `GET /songs/{id}` | `components/dialogs/SongModal.vue` (a shared `?song=` link, before the Catalog loads) |
 | `hasChart` | `components/dialogs/SongModal.vue` (Play is enabled only with a chart) |
-| §2 chart | `pages/visualizer.vue`, `composables/useEngine.ts` (auto-load real charts) |
-| §3 sync | IndexedDB catalog cache + manifest revision probe |
-| §4 auth *(phase 2)* | new login UI, token in browser storage |
+| `GET /songs/{id}/sheets/{type}/{code}/chart` | `composables/useEngine.ts:fetchChart`, through `useChartLoader` (the chart page's deep link) |
+| `GET /sync/manifest` | `stores/data.ts:loadData`: the revision probe before refetching the Catalog |
+| §4 auth | not called yet; the sign-in UI is `frontend-redesign` 05 |
 | §5 contributions *(superseded)* | replaced by the community library — [ADR-0013](../adr/0013-community-charts-beside-the-catalog.md) |

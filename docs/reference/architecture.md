@@ -28,8 +28,8 @@ reshapes, and a snapshot test guards the wire contract instead
 
 ```
 apps/host (browser)                    apps/server (Fly.io)
-   │  GET /api/v1/catalog       ──────▶  song/sheet metadata (Neon Postgres)
-   │  GET /api/v1/sheets/{s}/chart ───▶  raw simai chart text
+   │  GET /api/catalog          ──────▶  song/sheet metadata (Neon Postgres)
+   │  GET /api/songs/{id}/sheets/{type}/{code}/chart ─▶ raw simai chart text
    ▼
 visualizer page
    │  load_chart(text) via wasm-bindgen
@@ -44,8 +44,7 @@ A song is its minted UUID (`songs.id`); a sheet is that id plus its type and
 difficulty code — `/api/songs/{id}/sheets/{type}/{code}` on the server,
 `sheet.key = ${id}/${type}/${code}` in the client (`utils/data.ts:sheetKey`)
 ([ADR-0026](../adr/0026-v2-api-carries-codes-and-read-fields-only.md)).
-`sheet_expr` survives only as the sync's upstream match key and in `/api/v1`,
-which `api-rewrite` 07 deletes.
+`sheet_expr` survives only as the sync's upstream match key.
 
 ## Raw versus derived fields
 

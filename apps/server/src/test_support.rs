@@ -55,8 +55,3 @@ pub async fn seed_difficulties(pool: &PgPool, difficulties: &[&str]) {
     .await
     .unwrap();
 }
-
-/// The five rows upstream lists.
-pub async fn seed_standard_difficulties(pool: &PgPool) {
-    seed_difficulties(pool, &["basic", "advanced", "expert", "master", "remaster"]).await;
-}

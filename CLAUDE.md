@@ -142,8 +142,7 @@ its web UI.
 
 Tests live per-module next to the code they cover, not centralized in
 `main.rs`: `#[sqlx::test]` for anything touching the DB
-(`apps/server/src/routes/*.rs` and, until `api-rewrite` 07 deletes it, the v1
-tree in `routes/v1/`; `apps/server/src/queries/*.rs`,
+(`apps/server/src/routes/*.rs`, `apps/server/src/queries/*.rs`,
 `chart_revision.rs`), plain `#[test]`/`#[tokio::test]` for the rest
 (`config.rs`, `error.rs`, `rate_limit.rs`, `auth.rs`, `bin/seed_songs.rs`).
 Shared fixtures — a `Config` and `AppState` that need no environment — are in
@@ -199,8 +198,7 @@ its type and difficulty *code* — `/api/songs/{id}/sheets/{type}/{code}` on the
 server, `sheet.key = ${id}/${type}/${code}` in the client
 (`utils/data.ts:sheetKey`). Nothing is keyed on a title
 ([ADR-0026](docs/adr/0026-v2-api-carries-codes-and-read-fields-only.md)).
-`sheet_expr` survives only as the sync's upstream match key and in `/api/v1`
-until `api-rewrite` 07 deletes it.
+`sheet_expr` survives only as the sync's upstream match key.
 
 **Raw versus derived.** The server returns raw fields a screen reads, nothing
 else; the client derives `imageUrl` and builds the explicit `sheet.song`

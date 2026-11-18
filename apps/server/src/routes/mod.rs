@@ -6,13 +6,11 @@ mod health;
 mod reference;
 mod songs;
 mod sync;
-mod v1;
 
 use std::time::Duration;
 
 use axum::Router;
 use axum::extract::OriginalUri;
-use axum::http::StatusCode;
 use axum::http::{HeaderValue, Method, header};
 use tower_http::cors::CorsLayer;
 use tower_http::trace::{DefaultOnResponse, TraceLayer};
@@ -70,8 +68,6 @@ pub fn router(state: AppState) -> Router {
     );
     rate_limit::spawn_reaper(limiter, RATE_LIMIT_CLEANUP_INTERVAL);
 
-    let limited = v1::limited_router().layer(limit_layer.clone());
-
     let (github_limit_layer, github_limiter) = rate_limit::layer(
         &state.config.trusted_ip_headers,
         GITHUB_RATE_LIMIT_BURST_SIZE,
@@ -79,8 +75,9 @@ pub fn router(state: AppState) -> Router {
     );
     rate_limit::spawn_reaper(github_limiter, RATE_LIMIT_CLEANUP_INTERVAL);
 
-    // v2 routes live under `/api` with no version segment. Refresh and me
-    // share the reads' bucket, so one IP has one budget for ordinary traffic.
+    // The routes live under `/api` with no version segment (`api-rewrite`).
+    // Refresh and me share the reads' bucket, so one IP has one budget for
+    // ordinary traffic.
     //
     // `no_store` wraps the auth routes only, not the `/api` nest: the Catalog
     // and reference tables beside them are cacheable.
@@ -110,15 +107,6 @@ pub fn router(state: AppState) -> Router {
         .method_not_allowed_fallback(|| async { AppError::MethodNotAllowed });
 
     Router::new()
-        .nest(
-            "/api/v1",
-            Router::new()
-                .merge(v1::health_router())
-                .merge(limited)
-                // Kept as on master — an empty 404 — rather than falling
-                // through to the v2 fallback: v1 answers as it always has.
-                .fallback(|| async { StatusCode::NOT_FOUND }),
-        )
         .nest("/api", api)
         // Both default to DEBUG; DEFAULT_LOG_FILTER (config.rs) is
         // "info,tower_http=info", so both need bumping to INFO or they're
@@ -157,12 +145,11 @@ pub fn router(state: AppState) -> Router {
             CorsLayer::new()
                 .allow_origin(cors_origins)
                 .allow_methods([Method::GET, Method::POST, Method::DELETE])
-                .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
-                // Without this the browser hides `X-Total-Count` from JS —
-                // `headers.get()` returns null, no error is raised, and it only
-                // happens cross-origin. A same-origin test cannot catch it, so
-                // `v1::sheets::tests` exercises it through the assembled router.
-                .expose_headers([v1::sheets::TOTAL_COUNT_HEADER]),
+                // No `expose_headers` until a route sends a header the page
+                // must read: `community-charts` browse will, with
+                // `X-Total-Count` — and without exposing it the browser hides
+                // it from JS cross-origin, silently.
+                .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE]),
         )
         .with_state(state)
 }
@@ -212,7 +199,7 @@ mod tests {
         for _ in 0..RATE_LIMIT_BURST_SIZE + 5 {
             let response = app
                 .clone()
-                .oneshot(get_from("/api/v1/sync/manifest", ip))
+                .oneshot(get_from("/api/sync/manifest", ip))
                 .await
                 .unwrap();
             if response.status() == StatusCode::TOO_MANY_REQUESTS {
@@ -222,7 +209,7 @@ mod tests {
         }
         assert!(throttled, "rate-limit layer is not wired to /sync/manifest");
 
-        // The v2 reads share that bucket, so they are throttled too.
+        // The other reads share that bucket, so they are throttled too.
         let response = app
             .clone()
             .oneshot(get_from("/api/reference", ip))
@@ -230,53 +217,19 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 
-        // Same IP, now throttled — both healthchecks must still answer.
-        for path in ["/api/v1/healthcheck", "/api/healthcheck"] {
-            for _ in 0..RATE_LIMIT_BURST_SIZE + 5 {
-                let response = app.clone().oneshot(get_from(path, ip)).await.unwrap();
-                assert_eq!(
-                    response.status(),
-                    StatusCode::OK,
-                    "{path} must never be rate limited"
-                );
-            }
+        // Same IP, now throttled — the healthcheck must still answer.
+        for _ in 0..RATE_LIMIT_BURST_SIZE + 5 {
+            let response = app
+                .clone()
+                .oneshot(get_from("/api/healthcheck", ip))
+                .await
+                .unwrap();
+            assert_eq!(
+                response.status(),
+                StatusCode::OK,
+                "the healthcheck must never be rate limited"
+            );
         }
-        Ok(())
-    }
-
-    // The header is useless to the frontend unless CORS exposes it, and the
-    // failure is invisible: the browser drops it, `headers.get()` returns null,
-    // nothing is logged, and it only happens cross-origin. Neither a handler
-    // test nor a same-origin request can catch that, so this goes through the
-    // assembled router with an Origin the config allows.
-    #[sqlx::test]
-    async fn x_total_count_is_exposed_to_cross_origin_callers(pool: PgPool) -> sqlx::Result<()> {
-        let origin = "https://maiscope.pages.dev";
-        let mut state = test_state(pool);
-        Arc::make_mut(&mut state.config).cors_allowed_origins = vec![origin.to_string()];
-
-        let request = Request::builder()
-            .uri("/api/v1/sheets/search")
-            .header("fly-client-ip", "203.0.113.90")
-            .header("origin", origin)
-            .body(Body::empty())
-            .unwrap();
-
-        let response = router(state).oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let exposed = response
-            .headers()
-            .get("access-control-expose-headers")
-            .expect("CORS must expose headers, or the browser hides X-Total-Count")
-            .to_str()
-            .unwrap()
-            .to_ascii_lowercase();
-        assert!(
-            exposed.contains("x-total-count"),
-            "expose-headers was {exposed:?}"
-        );
-        assert!(response.headers().contains_key("x-total-count"));
         Ok(())
     }
 
@@ -346,7 +299,7 @@ mod tests {
         // Same IP: the session routes and health answer from other buckets.
         for (path, expected) in [
             ("/api/auth/me", StatusCode::UNAUTHORIZED),
-            ("/api/v1/healthcheck", StatusCode::OK),
+            ("/api/healthcheck", StatusCode::OK),
         ] {
             let response = app.clone().oneshot(get_from(path, ip)).await.unwrap();
             assert_eq!(response.status(), expected, "{path}");
@@ -507,9 +460,10 @@ mod tests {
     }
 
     // Through the real stack: axum's own rejections and misses would answer
-    // in plain text or with an empty body; v2 answers in the contract's shape.
+    // in plain text or with an empty body; the API answers in the contract's
+    // shape.
     #[sqlx::test]
-    async fn v2_path_errors_and_misses_are_json(pool: PgPool) {
+    async fn path_errors_and_misses_are_json(pool: PgPool) {
         let app = router(test_state(pool));
         for (path, status, code) in [
             // Not UTF-8 once decoded: axum's `Path` rejection.
@@ -522,6 +476,8 @@ mod tests {
             ),
             ("/api/songs/x/sheets/dx", StatusCode::NOT_FOUND, "not_found"),
             ("/api/nothing-here", StatusCode::NOT_FOUND, "not_found"),
+            // `/api/v1` is gone (api-rewrite 07): a miss like any other.
+            ("/api/v1/healthcheck", StatusCode::NOT_FOUND, "not_found"),
         ] {
             let response = app
                 .clone()
@@ -539,7 +495,7 @@ mod tests {
     }
 
     #[sqlx::test]
-    async fn misses_name_the_full_path_and_v1_keeps_its_empty_404(pool: PgPool) {
+    async fn misses_name_the_full_path(pool: PgPool) {
         let app = router(test_state(pool));
         let response = app
             .clone()
@@ -551,17 +507,6 @@ mod tests {
             .unwrap();
         let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(body["message"], "route '/api/nothing-here' not found");
-
-        let response = app
-            .clone()
-            .oneshot(get_from("/api/v1/nothing-here", "203.0.113.100"))
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
-        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        assert!(bytes.is_empty(), "v1 misses stay as they were on master");
 
         // A preflight never reaches the 405 fallback: the outer CORS layer
         // answers every OPTIONS itself.

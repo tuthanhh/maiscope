@@ -1,6 +1,6 @@
 //! Conditional-request handling shared by the two endpoints that report
-//! catalog freshness: `GET /catalog` (contract §1) and `GET /sync/manifest`
-//! (§3). Both read the same `catalog_meta` row and derive the same validator
+//! catalog freshness: `GET /catalog` and `GET /sync/manifest` (contract §0),
+//! and `GET /reference` beside them. All read the same `catalog_meta` row and derive the same validator
 //! from it, so the query, the hash, and the `304` path live here once rather
 //! than being kept in step by hand in two handlers.
 
@@ -14,21 +14,19 @@ use crate::error::AppError;
 /// `bin/sync_catalog` run, and only when that run found a real difference —
 /// a no-op sync deliberately leaves `catalog_meta.revision` alone, so this
 /// ETag holds still. An hour of unconditional client-side caching is safe
-/// (contract §1).
+/// (contract §0).
 pub(crate) const CATALOG_CACHE_CONTROL: &str = "public, max-age=3600";
 
-/// The manifest (v1 and v2): its whole job is telling the client whether the
-/// Catalog changed, so it always revalidates (contract §3, §0).
+/// The manifest: its whole job is telling the client whether the
+/// Catalog changed, so it always revalidates (contract §0).
 pub(crate) const MANIFEST_CACHE_CONTROL: &str = "no-cache";
 
 /// The `catalog_meta` row both endpoints need, plus the validator derived
 /// from it.
 pub(crate) struct Freshness {
     /// sha256 over `revision:updateTime`, sent quoted as the `ETag` of every
-    /// route that reads it. v1's manifest also reports it bare as
-    /// `catalogHash`; v2's does not.
+    /// route that reads it.
     pub hash: String,
-    pub update_time: String,
     pub revision: i64,
 }
 
@@ -37,8 +35,7 @@ impl Freshness {
     /// is empty between `migrate` and the first sync — the state every new
     /// environment starts in. Both callers (`GET /catalog`, `GET
     /// /sync/manifest`) need a validator even then, so fall back to the same
-    /// `0000-00-00` / revision-0 sentinel `queries::fetch_update_time` uses
-    /// rather than erroring.
+    /// `0000-00-00` / revision-0 sentinel rather than erroring.
     pub(crate) async fn load<'e>(executor: impl sqlx::PgExecutor<'e>) -> Result<Self, AppError> {
         let row = sqlx::query!(
             r#"SELECT to_char(update_time, 'YYYY-MM-DD') AS "update_time!", revision AS "revision!"
@@ -54,7 +51,6 @@ impl Freshness {
 
         Ok(Self {
             hash: catalog_hash(revision, &update_time),
-            update_time,
             revision,
         })
     }

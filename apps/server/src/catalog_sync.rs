@@ -177,8 +177,10 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
     // Songs and sheets are matched on their natural keys — songs.song_id and
     // sheets.sheet_expr, both UNIQUE. The `WHERE ... IS DISTINCT FROM` guard on
     // DO UPDATE is what keeps `revision` still for untouched rows: without it
-    // every sync would mark every row changed and /sync/delta would return the
-    // entire catalog every time.
+    // every sync would mark every row changed and a delta reader would see the
+    // entire catalog every time. (No route reads row revisions since
+    // `api-rewrite` 07 removed `/sync/delta`; they are kept exact for the
+    // next change feed rather than left to rot.)
     let songs = dedupe_songs(data, &mut stats);
     let changed_songs = upsert_songs(&mut tx, &songs, revision).await?;
     for (song_id, inserted) in &changed_songs {
@@ -229,8 +231,8 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
 
     let mut dirty: Vec<i64> = Vec::new();
     // Sheets whose sub-tables changed but whose scalar columns did not. A change
-    // the client cannot see is only half applied: without a revision bump
-    // /sync/delta would never report the sheet.
+    // a delta reader cannot see is only half applied: without a revision bump
+    // it would never report the sheet.
     let mut needs_revision_bump: Vec<i64> = Vec::new();
     let mut sub = SubTableColumns::default();
 
@@ -276,9 +278,9 @@ pub async fn apply(pool: &PgPool, data: &RawData) -> Result<SyncStats, sqlx::Err
     .fetch_all(&mut *tx)
     .await?;
     stats.sheets_returned = returned_sheets.len() as i64;
-    // A returned row unchanged since it left keeps its old `revision`, and
-    // v1's `/sync/delta` would then announce neither the row nor a tombstone
-    // to a client that saw it go. Stamping it re-announces it.
+    // A returned row unchanged since it left keeps its old `revision`, and a
+    // delta reader would then announce neither the row nor a tombstone to a
+    // client that saw it go. Stamping it re-announces it.
     sqlx::query("UPDATE songs SET revision = $1, updated_at = now() WHERE song_id = ANY($2)")
         .bind(revision)
         .bind(&stats.songs_returned_ids)
@@ -1154,7 +1156,7 @@ mod tests {
                 .fetch_one(&pool)
                 .await?;
         assert_eq!(revision, 1);
-        // Never advanced — this is what keeps /sync/delta working across syncs.
+        // Never advanced — this is what keeps row revisions meaningful across syncs.
         assert_eq!(last_full, 0);
 
         Ok(())
@@ -1420,7 +1422,7 @@ mod tests {
                 ("touch".to_string(), None),
             ]
         );
-        // Applied but not visible to /sync/delta would be a half-fix.
+        // Applied but not visible in the row revisions would be a half-fix.
         assert_eq!(sheet_revision(&pool).await, 2);
         assert_eq!(catalog_meta_revision(&pool).await, 2);
         Ok(())
@@ -1579,7 +1581,7 @@ mod tests {
             "a return is a change clients must see"
         );
 
-        // Stamped with this run's revision, so v1's delta re-announces it.
+        // Stamped with this run's revision, so a delta reader sees it again.
         let stamped: i64 =
             sqlx::query_scalar("SELECT revision FROM songs WHERE song_id = 'Example'")
                 .fetch_one(&pool)
@@ -2020,7 +2022,7 @@ mod tests {
     // rather than one statement per sheet. Widening that list to every sheet in
     // the payload would still leave correct *content* behind — it is rewritten
     // immediately — so the observable damage would be revision churn on sheets
-    // that never changed, which is exactly what /sync/delta keys off.
+    // that never changed, which is exactly what a delta reader keys off.
     #[sqlx::test]
     async fn a_sub_table_change_bumps_only_its_own_sheet(pool: PgPool) -> sqlx::Result<()> {
         apply(&pool, &payload(TWO_SONGS)).await?;

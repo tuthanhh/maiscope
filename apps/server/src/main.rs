@@ -1,6 +1,5 @@
 mod auth;
 mod config;
-mod domain;
 mod error;
 mod queries;
 mod rate_limit;

@@ -34,7 +34,7 @@ pub enum ChartRevisionOutcome {
 /// Revision numbers are a shared sequence, not an independent per-row
 /// counter: `bin/sync_catalog` draws a fresh `catalog_meta.revision` on every
 /// run that changed something and stamps every changed row with that same
-/// number. A client doing `GET /sync/delta?since=N` compares against that
+/// number. A delta reader asking for changes since `N` compares against that
 /// shared sequence (`sheets.revision > $1`), so `sheets.revision` has to advance *within*
 /// the same numbering space `catalog_meta.revision` uses — an independent
 /// `sheets.revision = sheets.revision + 1` would put it in a different
@@ -44,7 +44,7 @@ pub enum ChartRevisionOutcome {
 /// Returns [`ChartRevisionOutcome::Unchanged`] without writing (no rows, no
 /// revision bump) when `content` hashes to what's already stored —
 /// re-seeding unchanged bytes shouldn't churn the revision counter or the
-/// client-visible ETag (`GET /catalog`, contract §1) on every run.
+/// client-visible ETag (`GET /catalog`, contract §0) on every run.
 ///
 /// The content hash is computed here rather than taken as a parameter:
 /// it is derived entirely from `content`, and letting callers supply it
@@ -641,7 +641,7 @@ mod tests {
         assert_eq!(outcome.applied, 1);
         assert_eq!(outcome.unchanged, 2);
 
-        // Only the changed sheet advances — that is what /sync/delta reports on.
+        // Only the changed sheet advances — that is what a delta reader reports on.
         let bumped: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM sheets WHERE revision = (SELECT revision FROM catalog_meta LIMIT 1)",
         )

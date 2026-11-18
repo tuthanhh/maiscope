@@ -1,7 +1,6 @@
 //! Single error type for the API (ticket 02). Every handler returns
-//! `Result<_, AppError>` except the chart endpoints: v1's `get_chart`, which
-//! predates this and returns its own plain-text errors, and v2's, which
-//! returns [`PlainText`] — the same errors, rendered as text.
+//! `Result<_, AppError>` except the chart endpoint, which returns
+//! [`PlainText`] — the same errors, rendered as text.
 
 use axum::{
     Json,
@@ -21,13 +20,10 @@ pub enum AppError {
     },
 
     BadRequest(String),
-    /// `/sync/delta`'s `since` predates the last full reload (contract §3).
-    /// v1 only; goes with it (`api-rewrite` 07).
-    SnapshotRequired,
     /// A route asked with a method it does not serve.
     MethodNotAllowed,
     /// The request is valid but this server cannot serve it yet: a chart row
-    /// holding no inline text (contract §2).
+    /// holding no inline text (contract §0, the chart route).
     NotImplemented(String),
     /// No credential presented (contract §4).
     Unauthorized(&'static str),
@@ -58,8 +54,7 @@ pub enum AppError {
 struct Rendered {
     status: StatusCode,
     code: &'static str,
-    /// `None` only for `snapshot_required`, whose JSON body has no message.
-    message: Option<String>,
+    message: String,
     header: Option<(HeaderName, String)>,
 }
 
@@ -68,7 +63,7 @@ impl AppError {
         let plain = |status, code, message: String| Rendered {
             status,
             code,
-            message: Some(message),
+            message,
             header: None,
         };
         match self {
@@ -99,12 +94,6 @@ impl AppError {
                     r#"Bearer error="invalid_token""#.into(),
                 )),
                 ..plain(StatusCode::UNAUTHORIZED, "unauthorized", message.into())
-            },
-            AppError::SnapshotRequired => Rendered {
-                status: StatusCode::CONFLICT,
-                code: "snapshot_required",
-                message: None,
-                header: None,
             },
             AppError::MethodNotAllowed => plain(
                 StatusCode::METHOD_NOT_ALLOWED,
@@ -158,17 +147,13 @@ impl Rendered {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let rendered = self.render();
-        let body = match &rendered.message {
-            Some(message) => json!({ "error": rendered.code, "message": message }),
-            None => json!({ "error": rendered.code }),
-        };
+        let body = json!({ "error": rendered.code, "message": &rendered.message });
         rendered.into_response_with(Json(body))
     }
 }
 
 /// An [`AppError`] rendered as `text/plain`: the message alone, with the same
-/// status, headers and redaction as the JSON form. The one variant without a
-/// message, `SnapshotRequired`, falls back to its code. For the chart endpoint,
+/// status, headers and redaction as the JSON form. For the chart endpoint,
 /// whose success body is simai text the engine reads as text whatever the
 /// status (`api-rewrite` 05). Built from an `AppError`, so a handler cannot
 /// put a raw database error in front of the client by returning one.
@@ -178,10 +163,7 @@ pub struct PlainText(pub AppError);
 impl IntoResponse for PlainText {
     fn into_response(self) -> Response {
         let rendered = self.0.render();
-        let body = rendered
-            .message
-            .clone()
-            .unwrap_or_else(|| rendered.code.to_string());
+        let body = rendered.message.clone();
         rendered.into_response_with(body)
     }
 }
@@ -305,15 +287,6 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn snapshot_required_is_409_with_no_message_field() {
-        let response = AppError::SnapshotRequired.into_response();
-        assert_eq!(response.status(), StatusCode::CONFLICT);
-        assert_eq!(
-            body_json(response).await,
-            json!({ "error": "snapshot_required" })
-        );
-    }
 
     #[tokio::test]
     async fn rate_limited_is_429_with_retry_after_header_and_body() {
@@ -375,9 +348,6 @@ mod tests {
         })
         .into_response();
         assert_eq!(response.headers()[header::RETRY_AFTER], "7");
-
-        let response = PlainText(AppError::SnapshotRequired).into_response();
-        assert_eq!(body_text(response).await, "snapshot_required");
     }
 
     #[tokio::test]
