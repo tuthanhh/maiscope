@@ -28,16 +28,18 @@
   --n-950: #0a0a0a;
   --n-1000: #000000;
 
-  --f-sans: Inter, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic",
-    "Noto Sans JP", "Noto Sans CJK JP", "Apple SD Gothic Neo", "Malgun Gothic",
-    "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
-  --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  // The display face: brand, headings, titles, card titles — JetBrains Mono,
-  // the face maiscope began with (frontend-redesign 21; Space Grotesk in 15).
-  // Latin only; a Japanese title falls through to the CJK system faces.
-  --f-display: "JetBrains Mono", "Hiragino Sans", "Hiragino Kaku Gothic ProN",
-    "Yu Gothic", "Noto Sans JP", "Noto Sans CJK JP", "Apple SD Gothic Neo",
-    "Malgun Gothic", "PingFang SC", "Microsoft YaHei", ui-monospace, monospace;
+  // One face everywhere: JetBrains Mono, as maiscope began (frontend-redesign
+  // 22). The Nerd Font build comes first, for machines that have it
+  // installed; everyone else gets the webfont. Latin only: Japanese, Chinese
+  // and Korean fall through to the CJK system faces.
+  --f-mono: "JetBrainsMono Nerd Font", "JetBrainsMono NF", "JetBrains Mono",
+    "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP",
+    "Noto Sans CJK JP", "Apple SD Gothic Neo", "Malgun Gothic", "PingFang SC",
+    "Microsoft YaHei", ui-monospace, "SF Mono", Menlo, monospace;
+  // The sans and display roles keep their own names, so a later split costs
+  // one line here.
+  --f-sans: var(--f-mono);
+  --f-display: var(--f-mono);
 
   --s-1: 4px;
   --s-2: 8px;

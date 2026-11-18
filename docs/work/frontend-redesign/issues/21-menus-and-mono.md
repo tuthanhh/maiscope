@@ -24,4 +24,12 @@ half moved to `MvAccountMenu`, with the delete dialog. The top-bar
 "Sign in" button now shows on phones too — it is the account's only
 control while signed out — so "Sign in with GitHub" in the menu went, with
 `nav.menu`. Body text stays Inter; only the display roles changed. The
-sign-in flow test passes against the new structure.
+sign-in flow passes against the new structure in the session's
+Playwright browser checks (scratchpad scripts, not a committed test —
+`apps/host` still has none).
+
+**2026-11-18 — review.** Applied: focus goes to the Sign in button after
+Sign out, and back to the gear after choosing About, instead of falling to
+`<body>`. A stored session that could not be checked (offline, server
+down) is `unverified` in the store, and the account slot shows nothing
+rather than a "Sign in" that would start a needless OAuth round trip.

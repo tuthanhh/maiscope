@@ -19,6 +19,8 @@ const { root, open, panelId, onFocusOut, focusTrigger } = useDisclosure();
 function signOut(): void {
   open.value = false;
   session.signOut();
+  // The avatar is gone; the Sign in button replacing it takes focus.
+  requestAnimationFrame(focusTrigger);
 }
 
 // Deleting asks first, in a dialog that says what it does (contract §4:
@@ -58,8 +60,9 @@ function closeConfirm(): void {
 <template>
   <div ref="root" class="mv-account" @focusout="onFocusOut">
     <!-- Hidden until a stored session is checked, so a signed-in reload does
-         not flash "Sign in". -->
-    <template v-if="session.ready && !session.user">
+         not flash "Sign in" — and while a stored session cannot be checked
+         (offline), since it is not signed out. -->
+    <template v-if="session.ready && !session.user && !session.unverified">
       <MvButton kind="ghost" class="mv-menu-trigger" @click="session.signIn(route.fullPath)">
         {{ t("auth.signIn") }}
       </MvButton>
